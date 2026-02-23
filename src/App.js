@@ -764,6 +764,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
+      setIsAdmin(user?.email === ADMIN_EMAIL);
       setAuthLoading(false);
       if (user) {
         // Load user preferences from Firestore
@@ -2038,7 +2039,7 @@ Respond ONLY with valid JSON:
               ['scanner',      'Scanner'],
               ['journal',      'Journal'],
             ].map(([tab,label])=>(
-              <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}} style={{padding:'0.35rem 0.4rem',fontSize:'0.75rem',whiteSpace:'nowrap',cursor:'pointer',fontWeight:activeTab===tab?700:500,color:activeTab===tab?'var(--accent)':' var(--text-dim)',borderBottom:activeTab===tab?'2px solid var(--accent)':' 2px solid transparent'}}>
+              <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}} style={{padding:'0.4rem 0.6rem',fontSize:'0.85rem',whiteSpace:'nowrap',cursor:'pointer',fontWeight:activeTab===tab?700:500,color:activeTab===tab?'var(--accent)':'var(--text-dim)',borderBottom:activeTab===tab?'2px solid var(--accent)':'2px solid transparent'}}>
                 {label}
               </span>
             ))}
@@ -4388,6 +4389,10 @@ Respond ONLY with valid JSON:
           }
 
           /* ── MOBILE RESPONSIVE ─────────────────────────── */
+          /* Desktop base */
+          body { font-size: 14px; }
+          .main-content { max-width: 1400px; margin: 0 auto; }
+
           @media (max-width: 768px) {
             /* Navbar */
             .nav-links { 
