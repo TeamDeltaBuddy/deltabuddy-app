@@ -1436,7 +1436,7 @@ Respond ONLY with valid JSON:
     try {
       const query = 'business OR economy OR markets OR companies OR earnings OR IPO';
       const response = await fetch(
-        `https://newsapi.org/v2/everything?q=${query}&language=en&sortBy=publishedAt&pageSize=20&apiKey=${NEWS_API_KEY}`
+`${BACKEND_URL}/api/news?q=${encodeURIComponent(query)}&pageSize=20&apiKey=c14ca467b8574c3b8091d20368031139`
       );
       const data = await response.json();
       if (data.articles) {
@@ -1553,7 +1553,7 @@ Respond ONLY with valid JSON:
     setIsLoadingNews(true);
     try {
       const query = 'nifty OR sensex OR "bank nifty" OR "india market" OR RBI OR "crude oil" OR "india pakistan" OR geopolitical OR "fed rate"';
-      const response = await fetch(`https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=10&apiKey=${NEWS_API_KEY}`);
+      const response = await fetch(`${BACKEND_URL}/api/news?q=${encodeURIComponent(query)}&pageSize=10&apiKey=c14ca467b8574c3b8091d20368031139`);
       const data = await response.json();
       if (!data.articles) throw new Error('No articles');
       const analyzed = await Promise.all(data.articles.map(async (article) => {
@@ -4503,6 +4503,9 @@ Respond ONLY with valid JSON:
           /* Desktop base */
           body { font-size: 15px; }
           #root, .App { width: 100% !important; max-width: 100% !important; padding: 0 !important; }
+          .container { max-width: 100% !important; width: 100% !important; padding-left: 1.5rem !important; padding-right: 1.5rem !important; }
+          .main-content { max-width: 100% !important; width: 100% !important; }
+          header, nav, .navbar { max-width: 100% !important; width: 100% !important; }
 
           @media (max-width: 768px) {
             /* Navbar */
