@@ -555,7 +555,7 @@ function App() {
 PCR: ${pcr} (${pcrSentiment}). Top CE OI strikes (resistance): ${ceTop.map(r=>r.strike).join(', ')}. Top PE OI strikes (support): ${peTop.map(r=>r.strike).join(', ')}.
 Suggest ONE specific options strategy for a retail trader. Respond ONLY in this JSON:
 {"strategy":"strategy name","action":"exact trade eg Buy 25500CE","reasoning":"2 sentences max","risk":"Low/Medium/High","timeframe":"intraday/weekly/monthly","sentiment":"Bullish/Bearish/Neutral"}`;
-        const r = await fetch(`${BACKEND_URL}/api/groq`,{method:'POST',headers:{'Content-Type':'application/json','x-groq-key':groqApiKey.trim()},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],max_tokens:200,temperature:0.3})});
+        const r = await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+groqApiKey.trim()},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],max_tokens:200,temperature:0.3})});
         const j = await r.json();
         const text = j?.choices?.[0]?.message?.content||'';
         const clean = text.replace(/```json|```/g,'').trim();
@@ -1096,20 +1096,22 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const testGroq = async () => {
     setGroqStatus('testing');
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 40000);
-      const res = await fetch(`${BACKEND_URL}/api/groq`, {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
-        headers: {'Content-Type':'application/json','x-groq-key':groqApiKey.trim()},
-        body: JSON.stringify({model:'llama-3.1-8b-instant',messages:[{role:'user',content:'Reply: OK'}],max_tokens:5}),
-        signal: controller.signal
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + groqApiKey.trim()
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages: [{role:'user', content:'Reply OK'}],
+          max_tokens: 5
+        })
       });
-      clearTimeout(timeout);
       const d = await res.json();
-      setGroqStatus(d.choices ? 'ok' : 'error');
+      setGroqStatus(d.choices && d.choices.length > 0 ? 'ok' : 'error');
     } catch(e) {
-      if (e.name === 'AbortError') setGroqStatus('timeout');
-      else setGroqStatus('error');
+      setGroqStatus('error');
     }
   };
   // Trade Journal helpers
@@ -1148,7 +1150,7 @@ Description: ${article.description||'N/A'}
 Respond ONLY with valid JSON:
 {"sentiment":"bullish"|"bearish"|"neutral","impact":"high"|"medium"|"low","impactReason":"one line","affectedIndex":"Nifty 50"|"Bank Nifty"|"Nifty IT"|"Nifty Pharma"|"Nifty Auto"|"Nifty FMCG"|"Nifty Metal"|"Nifty Energy","affectedStocks":["SYM1","SYM2"],"keyInsight":"one professional sentence for Indian traders","tradingStrategy":{"name":"Bull Call Spread"|"Bear Put Spread"|"Long Straddle"|"Iron Condor"|"Sell Strangle"|"Wait and Watch","reasoning":"2 sentences with specific NSE market impact","timeframe":"Intraday"|"1-3 Days"|"Weekly","risk":"Low"|"Medium"|"High"}}`;
     try {
-      const res = await fetch(`${BACKEND_URL}/api/groq`,{method:'POST',headers:{'Content-Type':'application/json','x-groq-key':groqApiKey.trim()},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],max_tokens:400,temperature:0.3})});
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+groqApiKey.trim()},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],max_tokens:400,temperature:0.3})});
       const d = await res.json();
       return JSON.parse((d.choices?.[0]?.message?.content||'{}').replace(/```json|```/g,'').trim());
     } catch(e) { console.warn('Groq failed:',e.message); return null; }
@@ -4499,8 +4501,8 @@ Respond ONLY with valid JSON:
             .nav-links span { font-size: 0.95rem !important; padding: 0.5rem 0.7rem !important; }
           }
           /* Desktop base */
-          body { font-size: 14px; }
-          .main-content { max-width: 1400px; margin: 0 auto; }
+          body { font-size: 15px; }
+          #root, .App { width: 100% !important; max-width: 100% !important; padding: 0 !important; }
 
           @media (max-width: 768px) {
             /* Navbar */
