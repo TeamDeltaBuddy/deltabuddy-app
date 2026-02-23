@@ -2025,7 +2025,7 @@ Respond ONLY with valid JSON:
             <span>DeltaBuddy</span>
           </div>
           <button onClick={()=>setShowMobileMenu(m=>!m)}
-            style={{display:'none',background:'none',border:'none',color:'var(--text-main)',fontSize:'1.5rem',cursor:'pointer',padding:'0.25rem 0.5rem'}}
+            style={{background:'none',border:'none',color:'var(--text-main)',fontSize:'1.5rem',cursor:'pointer',padding:'0.25rem 0.5rem',display:'flex',alignItems:'center',justifyContent:'center'}}
             className="hamburger-btn" aria-label="Menu">{showMobileMenu?'✕':'☰'}</button>
 
           <div className={`nav-links${showMobileMenu?' mobile-open':''}`} style={{display:'flex',alignItems:'center',gap:'0',flexWrap:'nowrap'}}>
@@ -4386,6 +4386,114 @@ Respond ONLY with valid JSON:
             70%  { box-shadow: 0 0 0 12px rgba(37,211,102,0); }
             100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); }
           }
+
+          /* ── MOBILE RESPONSIVE ─────────────────────────── */
+          @media (max-width: 768px) {
+            /* Navbar */
+            .nav-links { 
+              display: none !important; 
+              flex-direction: column !important;
+              position: fixed !important;
+              top: 56px; left: 0; right: 0;
+              background: #0a0f1e !important;
+              z-index: 999 !important;
+              padding: 1rem !important;
+              border-bottom: 1px solid #1e293b !important;
+              gap: 0 !important;
+            }
+            .nav-links.mobile-open { display: flex !important; }
+            .nav-links span {
+              padding: 0.75rem 1rem !important;
+              font-size: 0.95rem !important;
+              border-bottom: 1px solid #1e293b !important;
+              width: 100% !important;
+            }
+            .hamburger-btn { display: block !important; }
+
+            /* Main content padding */
+            .main-content, [class*="main-content"] { 
+              padding: 0.75rem !important; 
+            }
+
+            /* Cards and panels */
+            .panel, [class*="panel"] { 
+              padding: 0.75rem !important; 
+              border-radius: 8px !important;
+            }
+
+            /* Grids → single column */
+            .quick-actions-grid { 
+              grid-template-columns: 1fr !important; 
+            }
+
+            /* Option chain table */
+            .option-chain-table { font-size: 0.72rem !important; }
+
+            /* Charts */
+            .candlestick-chart-container svg { min-width: 100% !important; }
+
+            /* Stats cards */
+            [style*="grid-template-columns: repeat(auto-fit"] {
+              grid-template-columns: repeat(2, 1fr) !important;
+            }
+
+            /* Hero section */
+            [style*="linear-gradient(135deg"] { 
+              padding: 1rem !important; 
+            }
+
+            /* Ticker */
+            .ticker-header { flex-wrap: wrap !important; gap: 0.3rem !important; }
+
+            /* Modals */
+            .modal-content { 
+              width: 95% !important; 
+              max-width: 95% !important;
+              margin: 0.5rem !important;
+              max-height: 85vh !important;
+            }
+
+            /* Tables — horizontal scroll */
+            table { display: block !important; overflow-x: auto !important; }
+
+            /* Header */
+            .page-header h1 { font-size: 1.3rem !important; }
+
+            /* Backtest config grid */
+            [style*="minmax(260px"] {
+              grid-template-columns: 1fr !important;
+            }
+
+            /* Deep dive OI grid */
+            [style*="grid-template-columns: '1fr 1fr'"] {
+              grid-template-columns: 1fr !important;
+            }
+
+            /* WhatsApp button position */
+            a[href*="wa.me"] {
+              bottom: 16px !important;
+              right: 16px !important;
+              width: 48px !important;
+              height: 48px !important;
+            }
+
+            /* Market pulse widget */
+            [style*="Market Pulse"] { 
+              display: none !important; 
+            }
+
+            /* Equity curve chart */
+            svg[viewBox*="800"] { min-width: 320px !important; }
+          }
+
+          @media (max-width: 480px) {
+            /* Very small phones */
+            [style*="grid-template-columns: repeat(auto-fit"] {
+              grid-template-columns: 1fr 1fr !important;
+            }
+            .ticker-items { gap: 0.75rem !important; }
+          }
+
         `}</style>
 
       </div>
