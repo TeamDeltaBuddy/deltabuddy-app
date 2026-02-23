@@ -23,7 +23,7 @@ const googleProvider = new GoogleAuthProvider();
 
 // Railway backend URL — update after deploying
 const BACKEND_URL   = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
-const ADMIN_EMAIL   = process.env.REACT_APP_ADMIN_EMAIL  || 'your@email.com'; // set in .env
+const ADMIN_EMAIL   = 'mirza.hassanuzzaman@gmail.com';
 
 // ── TradingView lightweight-charts loader ─────────────────────────────────────
 let lwcPromise = null;
@@ -555,7 +555,7 @@ function App() {
 PCR: ${pcr} (${pcrSentiment}). Top CE OI strikes (resistance): ${ceTop.map(r=>r.strike).join(', ')}. Top PE OI strikes (support): ${peTop.map(r=>r.strike).join(', ')}.
 Suggest ONE specific options strategy for a retail trader. Respond ONLY in this JSON:
 {"strategy":"strategy name","action":"exact trade eg Buy 25500CE","reasoning":"2 sentences max","risk":"Low/Medium/High","timeframe":"intraday/weekly/monthly","sentiment":"Bullish/Bearish/Neutral"}`;
-        const r = await fetch(`${BACKEND_URL}/api/groq`,{method:'POST',headers:{'Content-Type':'application/json','x-groq-key':groqApiKey},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],max_tokens:200,temperature:0.3})});
+        const r = await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${groqApiKey}`},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],max_tokens:200,temperature:0.3})});
         const j = await r.json();
         const text = j?.choices?.[0]?.message?.content||'';
         const clean = text.replace(/```json|```/g,'').trim();
@@ -1091,7 +1091,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const testGroq = async () => {
     setGroqStatus('testing');
     try {
-      const res = await fetch(`${BACKEND_URL}/api/groq`,{method:'POST',headers:{'Content-Type':'application/json','x-groq-key':groqApiKey},body:JSON.stringify({model:'llama-3.1-8b-instant',messages:[{role:'user',content:'Reply: OK'}],max_tokens:5})});
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${groqApiKey}`},body:JSON.stringify({model:'llama-3.1-8b-instant',messages:[{role:'user',content:'Reply: OK'}],max_tokens:5})});
       const d = await res.json(); setGroqStatus(d.choices?'ok':'error');
     } catch(e) { setGroqStatus('error'); }
   };
@@ -1131,7 +1131,7 @@ Description: ${article.description||'N/A'}
 Respond ONLY with valid JSON:
 {"sentiment":"bullish"|"bearish"|"neutral","impact":"high"|"medium"|"low","impactReason":"one line","affectedIndex":"Nifty 50"|"Bank Nifty"|"Nifty IT"|"Nifty Pharma"|"Nifty Auto"|"Nifty FMCG"|"Nifty Metal"|"Nifty Energy","affectedStocks":["SYM1","SYM2"],"keyInsight":"one professional sentence for Indian traders","tradingStrategy":{"name":"Bull Call Spread"|"Bear Put Spread"|"Long Straddle"|"Iron Condor"|"Sell Strangle"|"Wait and Watch","reasoning":"2 sentences with specific NSE market impact","timeframe":"Intraday"|"1-3 Days"|"Weekly","risk":"Low"|"Medium"|"High"}}`;
     try {
-      const res = await fetch(`${BACKEND_URL}/api/groq`,{method:'POST',headers:{'Content-Type':'application/json','x-groq-key':groqApiKey},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],max_tokens:400,temperature:0.3})});
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${groqApiKey}`},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],max_tokens:400,temperature:0.3})});
       const d = await res.json();
       return JSON.parse((d.choices?.[0]?.message?.content||'{}').replace(/```json|```/g,'').trim());
     } catch(e) { console.warn('Groq failed:',e.message); return null; }
@@ -2026,10 +2026,10 @@ Respond ONLY with valid JSON:
             <span>DeltaBuddy</span>
           </div>
           <button onClick={()=>setShowMobileMenu(m=>!m)}
-            style={{background:'none',border:'none',color:'var(--text-main)',fontSize:'1.5rem',cursor:'pointer',padding:'0.25rem 0.5rem',display:'flex',alignItems:'center',justifyContent:'center'}}
+            className="hamburger-btn" style={{background:'none',border:'none',color:'var(--text-main)',fontSize:'1.5rem',cursor:'pointer',padding:'0.25rem 0.5rem'}}
             className="hamburger-btn" aria-label="Menu">{showMobileMenu?'✕':'☰'}</button>
 
-          <div className={`nav-links${showMobileMenu?' mobile-open':''}`} style={{display:'flex',alignItems:'center',gap:'0',flexWrap:'nowrap'}}>
+          <div className={`nav-links${showMobileMenu?' mobile-open':''}`} style={{display:'flex',alignItems:'center',gap:'0.1rem',flexWrap:'nowrap'}}>
             {[
               ['home',         'Home'],
               ['markets',      'Markets'],
@@ -2039,7 +2039,7 @@ Respond ONLY with valid JSON:
               ['scanner',      'Scanner'],
               ['journal',      'Journal'],
             ].map(([tab,label])=>(
-              <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}} style={{padding:'0.4rem 0.6rem',fontSize:'0.85rem',whiteSpace:'nowrap',cursor:'pointer',fontWeight:activeTab===tab?700:500,color:activeTab===tab?'var(--accent)':'var(--text-dim)',borderBottom:activeTab===tab?'2px solid var(--accent)':'2px solid transparent'}}>
+              <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}} style={{padding:'0.5rem 0.75rem',fontSize:'0.92rem',whiteSpace:'nowrap',cursor:'pointer',fontWeight:activeTab===tab?700:500,color:activeTab===tab?'var(--accent)':'var(--text-dim)',borderBottom:activeTab===tab?'2px solid var(--accent)':'2px solid transparent'}}>
                 {label}
               </span>
             ))}
@@ -2232,7 +2232,7 @@ Respond ONLY with valid JSON:
                 <input type="password" className="input-field" placeholder="Groq API key (gsk_...)" value={groqApiKey} onChange={e=>setGroqApiKey(e.target.value)} style={{width:'100%',boxSizing:'border-box',marginBottom:'0.5rem'}}/>
                 <div style={{display:'flex',gap:'0.5rem',alignItems:'center',flexWrap:'wrap'}}>
                   <button className="btn-action" onClick={testGroq} disabled={!groqApiKey||groqStatus==='testing'}>{groqStatus==='testing'?'⏳ Testing...':'🔌 Test'}</button>
-                  {groqStatus==='ok' && <span style={{color:'#22c55e',fontSize:'0.82rem'}}>✅ Connected — AI active!</span>}
+                  {groqStatus==='ok' && <button className="btn-action" style={{background:'#22c55e',color:'#000'}} onClick={()=>{setShowSettings(false);fetchIntelligentNews();}}>✅ Save & Load News</button>}
                   {groqStatus==='error' && <span style={{color:'#ef4444',fontSize:'0.82rem'}}>❌ Failed — check key</span>}
                   {!groqApiKey && <span style={{color:'var(--text-dim)',fontSize:'0.78rem'}}>No key — keyword mode</span>}
                 </div>
@@ -2250,7 +2250,7 @@ Respond ONLY with valid JSON:
                 <div style={{display:'flex',gap:'0.5rem',alignItems:'center',flexWrap:'wrap'}}>
                   <button className="btn-action" onClick={testTelegram} disabled={!tgChatId||tgStatus==='testing'}>{tgStatus==='testing'?'⏳ Sending...':'📤 Test Alert'}</button>
                   {tgStatus==='ok' && <span style={{color:'#22c55e',fontSize:'0.82rem'}}>✅ Sent! Check Telegram.</span>}
-                  {tgStatus==='error' && <span style={{color:'#ef4444',fontSize:'0.82rem'}}>❌ Check Render TG_BOT_TOKEN env var</span>}
+                  {tgStatus==='error' && <span style={{color:'#ef4444',fontSize:'0.82rem'}}>❌ Add TG_BOT_TOKEN to <b>backend</b> service on Render (not frontend)</span>}
                 </div>
               </div>
 
@@ -3526,8 +3526,33 @@ Respond ONLY with valid JSON:
             )}
 
             {activeMarketsTab === 'candlestick' && (
-              <div style={{color:'var(--text-dim)',textAlign:'center',padding:'1rem',fontSize:'0.85rem'}}>
-                Switch to <button onClick={()=>{setActiveTab('home');setActiveHomeTab('candlestick');}} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.2rem 0.7rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>Home → Chart</button> for full candlestick view.
+              <div style={{background:'var(--bg-card)',borderRadius:'12px',padding:'1rem',border:'1px solid var(--border)'}}>
+                <div style={{display:'flex',gap:'0.5rem',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap'}}>
+                  <select value={selectedChartSymbol} onChange={e=>{setSelectedChartSymbol(e.target.value);generateCandlestickData(e.target.value,chartTimeframe);}}
+                    style={{background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.3rem 0.5rem',fontWeight:700}}>
+                    {['NIFTY','BANKNIFTY','FINNIFTY','RELIANCE','TCS','HDFCBANK','INFY','ICICIBANK','SBIN','BAJFINANCE','ITC','WIPRO','AXISBANK','TATAMOTORS'].map(s=><option key={s}>{s}</option>)}
+                  </select>
+                  {['5m','15m','1H','1D','1W'].map(tf=>(
+                    <button key={tf} onClick={()=>{setChartTimeframe(tf);generateCandlestickData(selectedChartSymbol,tf);}}
+                      style={{padding:'0.25rem 0.6rem',borderRadius:'6px',border:'none',cursor:'pointer',fontSize:'0.78rem',
+                        background:chartTimeframe===tf?'var(--accent)':'var(--bg-dark)',color:chartTimeframe===tf?'#000':'var(--text-dim)',fontWeight:chartTimeframe===tf?700:400}}>
+                      {tf}
+                    </button>
+                  ))}
+                  <button onClick={()=>generateCandlestickData(selectedChartSymbol,chartTimeframe)} style={{marginLeft:'auto',background:'var(--bg-dark)',border:'1px solid var(--border)',color:'var(--text-dim)',borderRadius:'6px',padding:'0.25rem 0.6rem',cursor:'pointer',fontSize:'0.78rem'}}>🔄 Refresh</button>
+                </div>
+                {candlestickData && candlestickData.length > 0 ? (
+                  <TradingViewChart data={candlestickData} indicators={chartIndicators} symbol={selectedChartSymbol} timeframe={chartTimeframe}/>
+                ) : (
+                  <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>
+                    <div style={{fontSize:'2rem',marginBottom:'0.5rem'}}>📊</div>
+                    <div>Click Load Chart to view candlestick data</div>
+                    <button onClick={()=>generateCandlestickData(selectedChartSymbol,chartTimeframe)}
+                      style={{marginTop:'1rem',background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.5rem 1.5rem',fontWeight:700,cursor:'pointer'}}>
+                      📈 Load Chart
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -4389,6 +4414,12 @@ Respond ONLY with valid JSON:
           }
 
           /* ── MOBILE RESPONSIVE ─────────────────────────── */
+          /* Hamburger — hidden on desktop, shown on mobile */
+          .hamburger-btn { display: none !important; }
+          /* Desktop navbar bigger font */
+          @media (min-width: 769px) {
+            .nav-links span { font-size: 0.95rem !important; padding: 0.5rem 0.7rem !important; }
+          }
           /* Desktop base */
           body { font-size: 14px; }
           .main-content { max-width: 1400px; margin: 0 auto; }
