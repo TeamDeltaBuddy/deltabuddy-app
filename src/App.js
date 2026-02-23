@@ -555,7 +555,7 @@ function App() {
 PCR: ${pcr} (${pcrSentiment}). Top CE OI strikes (resistance): ${ceTop.map(r=>r.strike).join(', ')}. Top PE OI strikes (support): ${peTop.map(r=>r.strike).join(', ')}.
 Suggest ONE specific options strategy for a retail trader. Respond ONLY in this JSON:
 {"strategy":"strategy name","action":"exact trade eg Buy 25500CE","reasoning":"2 sentences max","risk":"Low/Medium/High","timeframe":"intraday/weekly/monthly","sentiment":"Bullish/Bearish/Neutral"}`;
-        const r = await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${groqApiKey.trim()}`},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],max_tokens:200,temperature:0.3})});
+        const r = await fetch(`${BACKEND_URL}/api/groq`,{method:'POST',headers:{'Content-Type':'application/json','x-groq-key':groqApiKey.trim()},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],max_tokens:200,temperature:0.3})});
         const j = await r.json();
         const text = j?.choices?.[0]?.message?.content||'';
         const clean = text.replace(/```json|```/g,'').trim();
@@ -1091,23 +1091,10 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const testGroq = async () => {
     setGroqStatus('testing');
     try {
-      // Call Groq directly from browser — no backend needed
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':`Bearer ${groqApiKey.trim()}`},
-        body:JSON.stringify({model:'llama-3.1-8b-instant',messages:[{role:'user',content:'Say OK'}],max_tokens:5})
-      });
+      const res = await fetch(`${BACKEND_URL}/api/groq`,{method:'POST',headers:{'Content-Type':'application/json','x-groq-key':groqApiKey.trim()},body:JSON.stringify({model:'llama-3.1-8b-instant',messages:[{role:'user',content:'Reply: OK'}],max_tokens:5})});
       const d = await res.json();
-      if (d.choices && d.choices.length > 0) {
-        setGroqStatus('ok');
-      } else {
-        console.error('Groq error:', d);
-        setGroqStatus('error');
-      }
-    } catch(e) {
-      console.error('Groq fetch error:', e);
-      setGroqStatus('error');
-    }
+      setGroqStatus(d.choices?'ok':'error');
+    } catch(e) { setGroqStatus('error'); }
   };
   // Trade Journal helpers
   const addTrade = (form) => {
@@ -1145,7 +1132,7 @@ Description: ${article.description||'N/A'}
 Respond ONLY with valid JSON:
 {"sentiment":"bullish"|"bearish"|"neutral","impact":"high"|"medium"|"low","impactReason":"one line","affectedIndex":"Nifty 50"|"Bank Nifty"|"Nifty IT"|"Nifty Pharma"|"Nifty Auto"|"Nifty FMCG"|"Nifty Metal"|"Nifty Energy","affectedStocks":["SYM1","SYM2"],"keyInsight":"one professional sentence for Indian traders","tradingStrategy":{"name":"Bull Call Spread"|"Bear Put Spread"|"Long Straddle"|"Iron Condor"|"Sell Strangle"|"Wait and Watch","reasoning":"2 sentences with specific NSE market impact","timeframe":"Intraday"|"1-3 Days"|"Weekly","risk":"Low"|"Medium"|"High"}}`;
     try {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${groqApiKey.trim()}`},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],max_tokens:400,temperature:0.3})});
+      const res = await fetch(`${BACKEND_URL}/api/groq`,{method:'POST',headers:{'Content-Type':'application/json','x-groq-key':groqApiKey.trim()},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],max_tokens:400,temperature:0.3})});
       const d = await res.json();
       return JSON.parse((d.choices?.[0]?.message?.content||'{}').replace(/```json|```/g,'').trim());
     } catch(e) { console.warn('Groq failed:',e.message); return null; }
@@ -2053,7 +2040,7 @@ Respond ONLY with valid JSON:
               ['scanner',      'Scanner'],
               ['journal',      'Journal'],
             ].map(([tab,label])=>(
-              <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}} style={{padding:'0.5rem 0.8rem',fontSize:'1rem',whiteSpace:'nowrap',cursor:'pointer',fontWeight:activeTab===tab?700:500,color:activeTab===tab?'var(--accent)':'var(--text-dim)',borderBottom:activeTab===tab?'2px solid var(--accent)':'2px solid transparent',letterSpacing:'0.01em'}}>
+              <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}} style={{padding:'0.5rem 0.85rem',fontSize:'0.95rem',whiteSpace:'nowrap',cursor:'pointer',fontWeight:activeTab===tab?700:500,color:activeTab===tab?'var(--accent)':'var(--text-dim)',borderBottom:activeTab===tab?'2px solid var(--accent)':'2px solid transparent'}}>
                 {label}
               </span>
             ))}
@@ -3531,11 +3518,26 @@ Respond ONLY with valid JSON:
 
             {activeMarketsTab === 'events' && (
               <div className="panel">
-                <h2>📅 Events Calendar</h2>
-                <p style={{color:'var(--text-dim)',fontSize:'0.85rem',marginBottom:'1rem'}}>Key market events affecting options. Switch to Home tab for full calendar.</p>
-                <div style={{textAlign:'center',padding:'1rem',color:'var(--text-dim)'}}>
-                  <button onClick={()=>{setActiveTab('home');setActiveHomeTab('events');}} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer'}}>Open Full Calendar</button>
-                </div>
+                <h2>📅 Key Market Events</h2>
+                <p style={{color:'var(--text-dim)',fontSize:'0.85rem',marginBottom:'1rem'}}>Upcoming events that could impact options premiums and volatility.</p>
+                {[
+                  {date:'28 Feb 2026',event:'NSE F&O Expiry',impact:'HIGH',type:'expiry'},
+                  {date:'06 Mar 2026',event:'RBI MPC Meeting',impact:'HIGH',type:'macro'},
+                  {date:'07 Mar 2026',event:'GDP Data Release',impact:'MEDIUM',type:'data'},
+                  {date:'13 Mar 2026',event:'NSE F&O Expiry',impact:'HIGH',type:'expiry'},
+                  {date:'18 Mar 2026',event:'US FOMC Meeting',impact:'HIGH',type:'global'},
+                  {date:'27 Mar 2026',event:'NSE Monthly Expiry',impact:'HIGH',type:'expiry'},
+                ].map((ev,i)=>(
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:'1rem',padding:'0.75rem',marginBottom:'0.5rem',background:'var(--bg-dark)',borderRadius:'8px',border:'1px solid var(--border)'}}>
+                    <div style={{minWidth:'80px',fontSize:'0.78rem',color:'var(--text-dim)'}}>{ev.date}</div>
+                    <div style={{flex:1,fontWeight:600,fontSize:'0.88rem'}}>{ev.event}</div>
+                    <span style={{padding:'0.2rem 0.6rem',borderRadius:'4px',fontSize:'0.72rem',fontWeight:700,
+                      background:ev.impact==='HIGH'?'rgba(239,68,68,0.15)':'rgba(251,191,36,0.15)',
+                      color:ev.impact==='HIGH'?'#f87171':'#fbbf24'}}>
+                      {ev.impact}
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -3571,8 +3573,45 @@ Respond ONLY with valid JSON:
             )}
 
             {activeMarketsTab === 'oi-chart' && (
-              <div style={{color:'var(--text-dim)',textAlign:'center',padding:'1rem',fontSize:'0.85rem'}}>
-                Switch to <button onClick={()=>{setActiveTab('home');setActiveHomeTab('oi-chart');}} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.2rem 0.7rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>Home → OI Analysis</button> for full chart.
+              <div className="panel">
+                <h2>📈 Open Interest Analysis</h2>
+                {oiChartData.length > 0 ? (
+                  <div>
+                    <p style={{color:'var(--text-dim)',fontSize:'0.82rem',marginBottom:'1rem'}}>Top strikes by OI buildup. CE = resistance, PE = support.</p>
+                    <div style={{overflowX:'auto'}}>
+                      <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.85rem'}}>
+                        <thead>
+                          <tr style={{borderBottom:'2px solid var(--border)'}}>
+                            <th style={{padding:'0.5rem',textAlign:'left',color:'var(--text-dim)'}}>Strike</th>
+                            <th style={{padding:'0.5rem',textAlign:'right',color:'#f87171'}}>CE OI (K)</th>
+                            <th style={{padding:'0.5rem',textAlign:'right',color:'#4ade80'}}>PE OI (K)</th>
+                            <th style={{padding:'0.5rem',textAlign:'right',color:'var(--text-dim)'}}>CE Vol (K)</th>
+                            <th style={{padding:'0.5rem',textAlign:'right',color:'var(--text-dim)'}}>PE Vol (K)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {oiChartData.slice(0,15).map((row,i)=>(
+                            <tr key={i} style={{borderBottom:'1px solid var(--border)',background:i%2===0?'transparent':'rgba(255,255,255,0.02)'}}>
+                              <td style={{padding:'0.4rem 0.5rem',fontWeight:700,color:'var(--text-main)'}}>{row.strike}</td>
+                              <td style={{padding:'0.4rem 0.5rem',textAlign:'right',color:'#f87171'}}>{(row.ce||0).toFixed(1)}</td>
+                              <td style={{padding:'0.4rem 0.5rem',textAlign:'right',color:'#4ade80'}}>{(row.pe||0).toFixed(1)}</td>
+                              <td style={{padding:'0.4rem 0.5rem',textAlign:'right',color:'var(--text-dim)'}}>{(row.ceVol||0).toFixed(1)}</td>
+                              <td style={{padding:'0.4rem 0.5rem',textAlign:'right',color:'var(--text-dim)'}}>{(row.peVol||0).toFixed(1)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{textAlign:'center',padding:'2rem',color:'var(--text-dim)'}}>
+                    <p>Load option chain first to see OI analysis.</p>
+                    <button onClick={()=>setActiveMarketsTab('option-chain')}
+                      style={{marginTop:'0.5rem',background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer'}}>
+                      Go to Option Chain →
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
