@@ -760,6 +760,11 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     setBtRunning(false);
   };
 
+  // ── Wake backend on load (Render free tier sleeps) ──────────────────────────
+  useEffect(() => {
+    fetch(`${BACKEND_URL}/api/health`).catch(()=>{});
+  }, []);
+
   // ── Firebase auth listener ────────────────────────────────────────────────
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -1091,10 +1096,21 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const testGroq = async () => {
     setGroqStatus('testing');
     try {
-      const res = await fetch(`${BACKEND_URL}/api/groq`,{method:'POST',headers:{'Content-Type':'application/json','x-groq-key':groqApiKey.trim()},body:JSON.stringify({model:'llama-3.1-8b-instant',messages:[{role:'user',content:'Reply: OK'}],max_tokens:5})});
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 40000);
+      const res = await fetch(`${BACKEND_URL}/api/groq`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json','x-groq-key':groqApiKey.trim()},
+        body: JSON.stringify({model:'llama-3.1-8b-instant',messages:[{role:'user',content:'Reply: OK'}],max_tokens:5}),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
       const d = await res.json();
-      setGroqStatus(d.choices?'ok':'error');
-    } catch(e) { setGroqStatus('error'); }
+      setGroqStatus(d.choices ? 'ok' : 'error');
+    } catch(e) {
+      if (e.name === 'AbortError') setGroqStatus('timeout');
+      else setGroqStatus('error');
+    }
   };
   // Trade Journal helpers
   const addTrade = (form) => {
@@ -2235,6 +2251,7 @@ Respond ONLY with valid JSON:
                   <button className="btn-action" onClick={testGroq} disabled={!groqApiKey||groqStatus==='testing'}>{groqStatus==='testing'?'⏳ Testing...':'🔌 Test'}</button>
                   {groqStatus==='ok' && <button className="btn-action" style={{background:'#22c55e',color:'#000'}} onClick={()=>{setShowSettings(false);fetchIntelligentNews();}}>✅ Save & Load News</button>}
                   {groqStatus==='error' && <span style={{color:'#ef4444',fontSize:'0.82rem'}}>❌ Failed — check key</span>}
+                  {groqStatus==='timeout' && <span style={{color:'#f59e0b',fontSize:'0.82rem'}}>⏳ Server waking up — wait 30s and try again</span>}
                   {!groqApiKey && <span style={{color:'var(--text-dim)',fontSize:'0.78rem'}}>No key — keyword mode</span>}
                 </div>
               </div>
@@ -3555,6 +3572,14 @@ Respond ONLY with valid JSON:
                       {tf}
                     </button>
                   ))}
+                  <select value={chartIndicators[0]||'SMA'} onChange={e=>setChartIndicators([e.target.value])}
+                    style={{background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.25rem 0.5rem',fontSize:'0.78rem'}}>
+                    <option value="SMA">SMA</option>
+                    <option value="EMA">EMA</option>
+                    <option value="BB">Bollinger Bands</option>
+                    <option value="VWAP">VWAP</option>
+                    <option value="RSI">RSI</option>
+                  </select>
                   <button onClick={()=>generateCandlestickData(selectedChartSymbol,chartTimeframe)} style={{marginLeft:'auto',background:'var(--bg-dark)',border:'1px solid var(--border)',color:'var(--text-dim)',borderRadius:'6px',padding:'0.25rem 0.6rem',cursor:'pointer',fontSize:'0.78rem'}}>🔄 Refresh</button>
                 </div>
                 {candlestickData && candlestickData.length > 0 ? (
