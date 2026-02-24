@@ -4509,24 +4509,36 @@ Respond ONLY with valid JSON:
             100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); }
           }
 
-          /* ── MOBILE RESPONSIVE ─────────────────────────── */
-          /* Hamburger — hidden on desktop, shown on mobile */
+          /* ── DESKTOP SIZING — match localhost exactly ── */
           .hamburger-btn { display: none !important; }
-          /* Desktop navbar bigger font */
-          @media (min-width: 769px) {
-            .nav-links span { font-size: 0.95rem !important; padding: 0.5rem 0.7rem !important; }
-          }
-          /* Desktop base — match localhost sizing */
-          html { font-size: 16px !important; }
-          body { font-size: 16px !important; line-height: 1.5; }
+          html, body { font-size: 16px !important; line-height: 1.5 !important; }
           #root, .App { width: 100% !important; max-width: 100% !important; padding: 0 !important; }
-          h1 { font-size: 1.8rem !important; }
-          h2 { font-size: 1.4rem !important; }
-          h3 { font-size: 1.15rem !important; }
-          p, span, div, td, th, label, input, select, button { font-size: inherit; }
-          .container { max-width: 100% !important; width: 100% !important; padding-left: 1.5rem !important; padding-right: 1.5rem !important; }
+          .container { max-width: 100% !important; width: 100% !important; padding-left: 2rem !important; padding-right: 2rem !important; }
           .main-content { max-width: 100% !important; width: 100% !important; }
-          header, nav, .navbar { max-width: 100% !important; width: 100% !important; }
+
+          /* Logo — big like localhost */
+          .logo { font-size: 1.5rem !important; font-weight: 800 !important; gap: 0.4rem !important; }
+          .logo .delta { font-size: 1.6rem !important; }
+
+          /* Navbar tabs — big like localhost */
+          .navbar { padding: 0 2rem !important; min-height: 64px !important; }
+          .nav-links { gap: 0.25rem !important; }
+          .nav-links span { font-size: 1.05rem !important; padding: 0.6rem 1.1rem !important; font-weight: 500 !important; }
+          .nav-links span.active { font-weight: 700 !important; }
+
+          /* Ticker bar — taller and bigger text like localhost */
+          .global-ticker-bar { padding: 0.6rem 2rem !important; }
+          .ticker-title { font-size: 0.9rem !important; font-weight: 700 !important; letter-spacing: 0.06em !important; }
+          .ticker-item { padding: 0.5rem 1.5rem !important; gap: 0.6rem !important; }
+          .ticker-name { font-size: 0.95rem !important; font-weight: 600 !important; }
+          .ticker-value { font-size: 1rem !important; font-weight: 700 !important; }
+          .ticker-change { font-size: 0.9rem !important; font-weight: 600 !important; }
+
+          /* Panels and headings */
+          h1 { font-size: 1.9rem !important; }
+          h2 { font-size: 1.5rem !important; }
+          h3 { font-size: 1.2rem !important; }
+          .panel { padding: 1.5rem !important; }
 
           @media (max-width: 768px) {
             /* Navbar */
