@@ -1171,64 +1171,40 @@ Respond ONLY with valid JSON:
   const fetchLivePrices = async () => {
     setIsPriceLoading(true);
     try {
+      // Core: NSE indices + Sensex + top FNO stocks for gainers/losers
       const symbols = {
-        // NSE Indices
-        'Nifty 50': '^NSEI',
-        'Bank Nifty': '^NSEBANK',
-        'Nifty IT': 'NIFTYIT.NS',
-        'Nifty Pharma': 'NIFTYPHARMA.NS',
-        'Nifty Auto': 'NIFTYAUTO.NS',
-        'Nifty Financial Services': 'CNXFINANCE.NS',
-        'Nifty FMCG': 'NIFTYFMCG.NS',
-        'Nifty Metal': 'NIFTYMETAL.NS',
-        'Nifty Realty': 'NIFTYREALTY.NS',
-        'Nifty Energy': 'NIFTYENERGY.NS',
-        'Nifty Infrastructure': 'NIFTYINFRA.NS',
-        'Nifty Media': 'NIFTYMEDIA.NS',
-        'Nifty PSU Bank': 'NIFTYPSUBANK.NS',
-        'Nifty Private Bank': 'NIFTY_PVT_BANK.NS',
+        // Core indices (always fetch)
+        'Nifty 50':        '^NSEI',
+        'Bank Nifty':      '^NSEBANK',
+        'Nifty IT':        'NIFTYIT.NS',
+        'Nifty Pharma':    'NIFTYPHARMA.NS',
+        'Nifty Auto':      'NIFTYAUTO.NS',
+        'Nifty Metal':     'NIFTYMETAL.NS',
+        'Nifty FMCG':      'NIFTYFMCG.NS',
+        'Nifty Realty':    'NIFTYREALTY.NS',
         'Nifty Midcap 50': 'NIFTYMIDCAP50.NS',
-        'Nifty Smallcap 50': 'NIFTYSMLCAP50.NS',
-        'Nifty Midcap 100': 'NIFTYMIDCAP100.NS',
-        'Nifty Next 50': 'NIFTYJR.NS',
-        'Nifty 100': 'NIFTY100.NS',
-        'Nifty 200': 'NIFTY200.NS',
-        'Nifty 500': 'NIFTY500.NS',
-        
-        // BSE Indices
-        'Sensex': '^BSESN',
-        'BSE 100': 'BSE100.BO',
-        'BSE 200': 'BSE200.BO',
-        'BSE 500': 'BSE500.BO',
-        'BSE Midcap': 'BSEMID.BO',
-        'BSE Smallcap': 'BSESMALL.BO',
-        
-        // Top FNO Stocks
-        'Reliance': 'RELIANCE.NS',
-        'TCS': 'TCS.NS',
-        'HDFC Bank': 'HDFCBANK.NS',
-        'Infosys': 'INFY.NS',
-        'ICICI Bank': 'ICICIBANK.NS',
-        'Bharti Airtel': 'BHARTIARTL.NS',
-        'ITC': 'ITC.NS',
-        'SBI': 'SBIN.NS',
-        'LT': 'LT.NS',
-        'Kotak Bank': 'KOTAKBANK.NS',
-        'HCL Tech': 'HCLTECH.NS',
-        'Axis Bank': 'AXISBANK.NS',
-        'Asian Paints': 'ASIANPAINT.NS',
-        'Maruti Suzuki': 'MARUTI.NS',
-        'Titan': 'TITAN.NS',
+        'Sensex':          '^BSESN',
+        'BSE Midcap':      'BSEMID.BO',
+        'BSE Smallcap':    'BSESMALL.BO',
+        // Top FNO stocks for gainers/losers
+        'Reliance':      'RELIANCE.NS',
+        'TCS':           'TCS.NS',
+        'HDFC Bank':     'HDFCBANK.NS',
+        'Infosys':       'INFY.NS',
+        'ICICI Bank':    'ICICIBANK.NS',
+        'SBI':           'SBIN.NS',
+        'Axis Bank':     'AXISBANK.NS',
         'Bajaj Finance': 'BAJFINANCE.NS',
-        'Wipro': 'WIPRO.NS',
-        'Ultra Cement': 'ULTRACEMCO.NS',
-        'Sun Pharma': 'SUNPHARMA.NS',
-        'Nestle': 'NESTLEIND.NS',
-        'M&M': 'M&M.NS',
-        'Tech Mahindra': 'TECHM.NS',
-        'Tata Motors': 'TATAMOTORS.NS',
-        'Power Grid': 'POWERGRID.NS',
-        'Adani Ports': 'ADANIPORTS.NS',
+        'Maruti Suzuki': 'MARUTI.NS',
+        'Tata Motors':   'TATAMOTORS.NS',
+        'Sun Pharma':    'SUNPHARMA.NS',
+        'HCL Tech':      'HCLTECH.NS',
+        'Wipro':         'WIPRO.NS',
+        'ITC':           'ITC.NS',
+        'LT':            'LT.NS',
+        'Titan':         'TITAN.NS',
+        'Kotak Bank':    'KOTAKBANK.NS',
+        'Adani Ports':   'ADANIPORTS.NS',
         'NTPC': 'NTPC.NS',
         'Tata Steel': 'TATASTEEL.NS',
         'JSW Steel': 'JSWSTEEL.NS',
@@ -1562,7 +1538,7 @@ Respond ONLY with valid JSON:
     setIsLoadingNews(true);
     try {
       const query = 'nifty OR sensex OR "bank nifty" OR "india market" OR RBI OR "crude oil" OR "india pakistan" OR geopolitical OR "fed rate"';
-      const response = await fetch(`${BACKEND_URL}/api/news?q=${encodeURIComponent(query)}&pageSize=10&apiKey=c14ca467b8574c3b8091d20368031139`);
+      const response = await fetch(`${BACKEND_URL}/api/news?q=${encodeURIComponent(query)}&pageSize=10&sortBy=publishedAt&apiKey=c14ca467b8574c3b8091d20368031139`);
       const data = await response.json();
       if (!data.articles) throw new Error('No articles');
       const analyzed = await Promise.all(data.articles.map(async (article) => {
@@ -1669,38 +1645,23 @@ Respond ONLY with valid JSON:
     generateCandlestickData(selectedChartSymbol, chartTimeframe);
     
     if (isLiveMode) {
-      // Update global indices every 15 seconds (real-time feel)
-      const globalInterval = setInterval(() => {
-        fetchGlobalIndices();
-      }, 15000);
-      
-      // Update Indian indices every 30 seconds
-      const indiaInterval = setInterval(() => {
-        fetchLivePrices();
-        fetchIntelligentNews();
-      }, 30000);
-      
-      // Update option chain every 10 seconds
-      const chainInterval = setInterval(() => {
-        generateLiveOptionChain(selectedUnderlying);
-      }, 10000);
-      
-      // Update business news every 5 minutes
-      const newsInterval = setInterval(() => {
-        fetchBusinessNews();
-      }, 300000);
-      
-      // Update chart data every 5 minutes
-      const chartInterval = setInterval(() => {
-        generateCandlestickData(selectedChartSymbol, chartTimeframe);
-      }, 300000);
-      
+      // Ticker: Yahoo Finance every 15 seconds
+      const globalInterval = setInterval(fetchGlobalIndices, 15000);
+
+      // Live prices: Yahoo Finance every 15 seconds
+      const indiaInterval = setInterval(fetchLivePrices, 15000);
+
+      // Option chain: NSE every 10 seconds
+      const chainInterval = setInterval(() => generateLiveOptionChain(selectedUnderlying), 10000);
+
+      // News: NewsAPI + AI every 5 minutes (top 10 only)
+      const newsInterval = setInterval(() => { fetchIntelligentNews(); fetchBusinessNews(); }, 300000);
+
       return () => {
         clearInterval(globalInterval);
         clearInterval(indiaInterval);
         clearInterval(chainInterval);
         clearInterval(newsInterval);
-        clearInterval(chartInterval);
       };
     }
   }, [isLiveMode, selectedUnderlying, selectedChartSymbol, chartTimeframe]);
@@ -4605,9 +4566,7 @@ Respond ONLY with valid JSON:
             100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); }
           }
 
-          /* ── Minimal overrides (App.css handles the rest) ── */
-          html, body { font-size: 16px !important; }
-          .hamburger-btn { display: none !important; }
+          /* Ensure correct display for desktop */
           @media (min-width: 769px) {
             .nav-links { display: flex !important; }
             .hamburger-btn { display: none !important; }
