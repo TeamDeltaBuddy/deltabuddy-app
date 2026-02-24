@@ -485,6 +485,7 @@ function App() {
   const [isAdmin,          setIsAdmin]          = useState(false);
   const [groqApiKey,       setGroqApiKey]       = useState(() => localStorage.getItem('db_groq_key')   || '');
   const [tgChatId,         setTgChatId]         = useState(() => localStorage.getItem('db_tg_chatid')  || '');
+  const sentTgAlerts = React.useRef(new Set()); // track sent alerts to prevent duplicates
   const [tgStatus,         setTgStatus]         = useState('idle');
   const [groqStatus,       setGroqStatus]       = useState('idle');
   const [notifyHighImpact, setNotifyHighImpact] = useState(() => localStorage.getItem('db_notify_hi') !== 'false');
@@ -847,7 +848,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     if (recentLosses>=2 && tooFast) {
       const end = new Date(Date.now()+30*60*1000);
       setCooldownActive(true); setCooldownEnd(end);
-      if (tgChatId) sendTelegramMessage('\u26a0\ufe0f <b>DeltaBuddy Risk Alert</b>\n\n2 losses in quick succession detected.\n\n\ud83e\uddd8 <b>30-min cooldown activated.</b>\n\nStep away. Review your journal. Return with clarity.');
+      // Cooldown alert sent below in addTrade function
     }
   };
 
@@ -1076,8 +1077,13 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     }
   }, []);
   // Telegram
-  const sendTelegramMessage = async (text) => {
+  const sendTelegramMessage = async (text, dedupeKey) => {
     if (!tgChatId) return;
+    // Deduplicate — don't send same alert twice within 1 hour
+    const key = dedupeKey || text.substring(0, 60);
+    if (sentTgAlerts.current.has(key)) return;
+    sentTgAlerts.current.add(key);
+    setTimeout(() => sentTgAlerts.current.delete(key), 60 * 60 * 1000); // clear after 1 hour
     try {
       await fetch(`${BACKEND_URL}/api/telegram`, {
         method: 'POST',
@@ -1574,7 +1580,7 @@ Respond ONLY with valid JSON:
 📈 Strategy: <b>${ai.tradingStrategy?.name}</b>
 ⏱ ${ai.tradingStrategy?.timeframe}
 
-🔗 <a href="${article.url}">Read more</a>`);
+🔗 <a href="${article.url}">Read more</a>`, article.url);
             }
             return {id:article.url,title:article.title,description:article.description,source:article.source.name,publishedAt:new Date(article.publishedAt),url:article.url,analysis};
           }
@@ -2355,58 +2361,68 @@ Respond ONLY with valid JSON:
               </div>
             </div>
 
-            {/* AI INSIGHT HERO */}
-            <div style={{background:'linear-gradient(135deg,#0a1628 0%,#0f2744 50%,#0a1628 100%)',border:'1px solid #1e3a5f',borderRadius:'16px',padding:'1.5rem',marginBottom:'1.5rem',position:'relative',overflow:'hidden'}}>
-              <div style={{position:'absolute',top:0,right:0,width:'300px',height:'100%',background:'radial-gradient(ellipse at top right,rgba(0,255,136,0.08),transparent 70%)',pointerEvents:'none'}}/>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'1rem'}}>
-                <div style={{flex:1,minWidth:'260px'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.6rem'}}>
-                    <span style={{background:'#1a3a1a',color:'#4ade80',padding:'2px 10px',borderRadius:'99px',fontSize:'0.72rem',fontWeight:700}}>
-                      AI INSIGHT OF THE DAY
-                    </span>
+            {/* ── MARKET PULSE CARDS ── */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:'1rem',marginBottom:'1.5rem'}}>
+              {[
+                {name:'NIFTY 50',val:marketData.nifty.value,chg:marketData.nifty.change,icon:'📈'},
+                {name:'BANK NIFTY',val:marketData.bankNifty.value,chg:marketData.bankNifty.change,icon:'🏦'},
+              ].map(({name,val,chg,icon})=>(
+                <div key={name} style={{background:'linear-gradient(135deg,#0f1f35,#0a1628)',border:`1px solid ${chg>=0?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'}`,borderRadius:'16px',padding:'1.25rem 1.5rem',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <div>
+                    <div style={{fontSize:'0.8rem',color:'#64748b',fontWeight:600,letterSpacing:'0.06em',marginBottom:'0.3rem'}}>{icon} {name}</div>
+                    <div style={{fontSize:'1.9rem',fontWeight:800,color:'#f0f9ff',letterSpacing:'-0.02em'}}>{(val||0).toLocaleString()}</div>
                   </div>
-                  {intelligentNews.length>0 ? (() => {
-                    const top = intelligentNews.find(n=>n.analysis.impact==='high')||intelligentNews[0];
-                    const em  = top.analysis.sentiment==='bullish'?'🟢':top.analysis.sentiment==='bearish'?'🔴':'⚪';
-                    return (
-                      <div>
-                        <h2 style={{fontSize:'1.05rem',fontWeight:700,color:'#f0f9ff',margin:'0 0 0.4rem',lineHeight:1.4}}>{top.title}</h2>
-                        {top.analysis.keyInsight && <p style={{color:'#93c5fd',fontSize:'0.85rem',margin:'0 0 0.7rem',lineHeight:1.5}}>💡 {top.analysis.keyInsight}</p>}
-                        <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap',alignItems:'center'}}>
-                          <span style={{background:top.analysis.sentiment==='bullish'?'#166534':top.analysis.sentiment==='bearish'?'#991b1b':'#374151',color:'white',padding:'2px 10px',borderRadius:'99px',fontSize:'0.75rem',fontWeight:600}}>{em} {(top.analysis.sentiment||'').toUpperCase()}</span>
-                          <span style={{color:'#64748b',fontSize:'0.78rem'}}>📊 {top.analysis.affectedIndex}</span>
-                          <button onClick={()=>setActiveTab('intelligence')} style={{background:'rgba(0,255,136,0.1)',border:'1px solid rgba(0,255,136,0.3)',color:'#4ade80',borderRadius:'6px',padding:'2px 10px',fontSize:'0.75rem',cursor:'pointer'}}>
-                            Full analysis →
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })() : (
-                    <div>
-                      <h2 style={{fontSize:'1.1rem',color:'#f0f9ff',margin:'0 0 0.4rem'}}>AI-Powered Market Intelligence</h2>
-                      <p style={{color:'#64748b',fontSize:'0.85rem',margin:'0 0 0.75rem'}}>News analysis, institutional activity, OI buildup signals — all AI-powered.</p>
-                      <button onClick={()=>setActiveTab('intelligence')} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem'}}>
-                        Open Market Intelligence →
+                  <div style={{textAlign:'right'}}>
+                    <div style={{fontSize:'1.1rem',fontWeight:700,color:chg>=0?'#4ade80':'#f87171'}}>{chg>=0?'▲':'▼'} {Math.abs(chg||0).toFixed(2)}%</div>
+                    <button onClick={fetchLivePrices} style={{marginTop:'0.4rem',background:'transparent',border:'1px solid #1e3a5f',color:'#4ade80',borderRadius:'6px',padding:'0.2rem 0.6rem',fontSize:'0.72rem',cursor:'pointer'}}>🔄 Refresh</button>
+                  </div>
+                </div>
+              ))}
+              {/* Quick action cards */}
+              <div onClick={()=>setActiveTab('markets')} style={{background:'linear-gradient(135deg,#0f1f35,#0a1628)',border:'1px solid rgba(99,102,241,0.3)',borderRadius:'16px',padding:'1.25rem 1.5rem',cursor:'pointer',display:'flex',flexDirection:'column',justifyContent:'space-between'}}>
+                <div style={{fontSize:'1.5rem',marginBottom:'0.5rem'}}>⚡</div>
+                <div style={{fontSize:'1rem',fontWeight:700,color:'#f0f9ff'}}>Option Chain</div>
+                <div style={{fontSize:'0.8rem',color:'#64748b',marginTop:'0.25rem'}}>Live OI, PCR, Max Pain →</div>
+              </div>
+              <div onClick={()=>setActiveTab('intelligence')} style={{background:'linear-gradient(135deg,#0f1f35,#0a1628)',border:'1px solid rgba(0,255,136,0.2)',borderRadius:'16px',padding:'1.25rem 1.5rem',cursor:'pointer',display:'flex',flexDirection:'column',justifyContent:'space-between'}}>
+                <div style={{fontSize:'1.5rem',marginBottom:'0.5rem'}}>🧠</div>
+                <div style={{fontSize:'1rem',fontWeight:700,color:'#f0f9ff'}}>AI Intelligence</div>
+                <div style={{fontSize:'0.8rem',color:'#64748b',marginTop:'0.25rem'}}>News + strategy signals →</div>
+              </div>
+            </div>
+
+            {/* ── AI INSIGHT HERO ── */}
+            <div style={{background:'linear-gradient(135deg,#0a1628 0%,#0f2744 50%,#0a1628 100%)',border:'1px solid #1e3a5f',borderRadius:'16px',padding:'1.75rem',marginBottom:'1.5rem',position:'relative',overflow:'hidden'}}>
+              <div style={{position:'absolute',top:0,right:0,width:'40%',height:'100%',background:'radial-gradient(ellipse at top right,rgba(0,255,136,0.07),transparent 70%)',pointerEvents:'none'}}/>
+              <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.85rem'}}>
+                <span style={{background:'#1a3a1a',color:'#4ade80',padding:'3px 12px',borderRadius:'99px',fontSize:'0.75rem',fontWeight:700,letterSpacing:'0.05em'}}>🤖 AI INSIGHT OF THE DAY</span>
+              </div>
+              {intelligentNews.length>0 ? (() => {
+                const top = intelligentNews.find(n=>n.analysis.impact==='high')||intelligentNews[0];
+                const em  = top.analysis.sentiment==='bullish'?'🟢':top.analysis.sentiment==='bearish'?'🔴':'⚪';
+                return (
+                  <div>
+                    <h2 style={{fontSize:'1.25rem',fontWeight:800,color:'#f0f9ff',margin:'0 0 0.6rem',lineHeight:1.4}}>{top.title}</h2>
+                    {top.analysis.keyInsight && <p style={{color:'#93c5fd',fontSize:'0.95rem',margin:'0 0 1rem',lineHeight:1.6}}>💡 {top.analysis.keyInsight}</p>}
+                    <div style={{display:'flex',gap:'0.6rem',flexWrap:'wrap',alignItems:'center'}}>
+                      <span style={{background:top.analysis.sentiment==='bullish'?'#166534':top.analysis.sentiment==='bearish'?'#991b1b':'#374151',color:'white',padding:'4px 14px',borderRadius:'99px',fontSize:'0.82rem',fontWeight:700}}>{em} {(top.analysis.sentiment||'').toUpperCase()}</span>
+                      <span style={{color:'#64748b',fontSize:'0.85rem'}}>📊 {top.analysis.affectedIndex}</span>
+                      {top.analysis.impact==='high' && <span style={{background:'rgba(239,68,68,0.15)',color:'#f87171',padding:'4px 12px',borderRadius:'99px',fontSize:'0.78rem',fontWeight:600}}>⚠️ HIGH IMPACT</span>}
+                      <button onClick={()=>setActiveTab('intelligence')} style={{background:'rgba(0,255,136,0.12)',border:'1px solid rgba(0,255,136,0.3)',color:'#4ade80',borderRadius:'8px',padding:'4px 14px',fontSize:'0.82rem',cursor:'pointer',fontWeight:600}}>
+                        Full analysis →
                       </button>
                     </div>
-                  )}
-                </div>
-                <div style={{display:'flex',flexDirection:'column',gap:'0.4rem',minWidth:'170px'}}>
-                  <div style={{fontSize:'0.7rem',color:'#64748b',fontWeight:600,marginBottom:'0.2rem',letterSpacing:'0.05em'}}>MARKET PULSE</div>
-                  {[['NIFTY 50',marketData.nifty.value,marketData.nifty.change],['BANK NIFTY',marketData.bankNifty.value,marketData.bankNifty.change]].map(([name,val,chg])=>(
-                    <div key={name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'rgba(255,255,255,0.04)',borderRadius:'8px',padding:'0.4rem 0.7rem',gap:'0.75rem'}}>
-                      <span style={{fontSize:'0.78rem',color:'#94a3b8'}}>{name}</span>
-                      <div style={{textAlign:'right'}}>
-                        <div style={{fontSize:'0.88rem',fontWeight:700,color:'#f0f9ff'}}>{(val||0).toLocaleString()}</div>
-                        <div style={{fontSize:'0.72rem',color:chg>=0?'#4ade80':'#f87171'}}>{chg>=0?'▲':'▼'}{Math.abs(chg||0)}%</div>
-                      </div>
-                    </div>
-                  ))}
-                  <button onClick={()=>fetchLivePrices()} style={{marginTop:'0.2rem',background:'transparent',border:'1px solid #1e3a5f',color:'#4ade80',borderRadius:'6px',padding:'0.3rem',fontSize:'0.72rem',cursor:'pointer',textAlign:'center'}}>
-                    🔄 Refresh prices
+                  </div>
+                );
+              })() : (
+                <div>
+                  <h2 style={{fontSize:'1.25rem',color:'#f0f9ff',margin:'0 0 0.5rem',fontWeight:800}}>AI-Powered Market Intelligence</h2>
+                  <p style={{color:'#64748b',fontSize:'0.95rem',margin:'0 0 1rem',lineHeight:1.6}}>Real-time news analysis, institutional activity, OI buildup signals — all powered by Groq AI.</p>
+                  <button onClick={()=>setActiveTab('intelligence')} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.5rem 1.25rem',fontWeight:700,cursor:'pointer',fontSize:'0.9rem'}}>
+                    Open Market Intelligence →
                   </button>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* INDEX SELECTOR */}
