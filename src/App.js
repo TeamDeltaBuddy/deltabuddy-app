@@ -857,6 +857,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     bankNifty: { value: 54000, change: 1.2 },
     vix: { value: 14.2, change: -2.1 }
   });
+  const [liveChanges, setLiveChanges] = useState({}); // name → % change
   const [livePrices, setLivePrices] = useState({
     // NSE Indices
     'Nifty 50': 25500,
@@ -1281,13 +1282,15 @@ Respond ONLY with valid JSON:
         }));
       }
 
-      // Update live prices
-      const priceMap = {};
+      // Update live prices + changes
+      const priceMap = {}, changeMap = {};
       Object.entries(results).forEach(([name, data]) => {
         priceMap[name] = data.value;
+        if (data.change !== undefined) changeMap[name] = data.change;
       });
       if (Object.keys(priceMap).length > 0) {
         setLivePrices(prev => ({ ...prev, ...priceMap }));
+        setLiveChanges(prev => ({ ...prev, ...changeMap }));
       }
 
     } catch (error) {
@@ -2428,6 +2431,95 @@ Respond ONLY with valid JSON:
                 </div>
               )}
             </div>
+
+            {/* ── NSE INDEX COMPARISON ── */}
+            <div style={{marginBottom:'1.5rem'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem'}}>
+                <h3 style={{margin:0,fontSize:'1.1rem',fontWeight:700,color:'#f0f9ff'}}>📊 NSE Indices — Today vs Prev Close</h3>
+                <button onClick={fetchLivePrices} style={{background:'transparent',border:'1px solid #1e3a5f',color:'#4ade80',borderRadius:'6px',padding:'0.25rem 0.75rem',fontSize:'0.8rem',cursor:'pointer'}}>🔄 Refresh</button>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:'0.75rem'}}>
+                {[
+                  {name:'Nifty 50',       icon:'📈'},
+                  {name:'Bank Nifty',     icon:'🏦'},
+                  {name:'Nifty IT',       icon:'💻'},
+                  {name:'Nifty Pharma',   icon:'💊'},
+                  {name:'Nifty Auto',     icon:'🚗'},
+                  {name:'Nifty Metal',    icon:'⚙️'},
+                  {name:'Nifty FMCG',     icon:'🛒'},
+                  {name:'Nifty Realty',   icon:'🏠'},
+                  {name:'Sensex',         icon:'📉'},
+                  {name:'Nifty Midcap 50',icon:'🔹'},
+                ].map(({name,icon})=>{
+                  const val = livePrices[name];
+                  const chg = liveChanges[name];
+                  const hasData = val && chg !== undefined;
+                  const isPos = (chg||0) >= 0;
+                  const pts = val && chg ? Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0) : null;
+                  return (
+                    <div key={name} style={{background:'#0d1b2e',border:`1px solid ${!hasData?'#1e293b':isPos?'rgba(74,222,128,0.2)':'rgba(248,113,113,0.2)'}`,borderRadius:'12px',padding:'0.85rem 1rem',transition:'border-color 0.3s'}}>
+                      <div style={{fontSize:'0.78rem',color:'#64748b',fontWeight:600,marginBottom:'0.3rem'}}>{icon} {name}</div>
+                      <div style={{fontSize:'1.2rem',fontWeight:800,color:'#f0f9ff'}}>{val?val.toLocaleString():<span style={{color:'#334155'}}>—</span>}</div>
+                      {hasData ? (
+                        <div style={{marginTop:'0.25rem',display:'flex',alignItems:'center',gap:'0.4rem'}}>
+                          <span style={{fontSize:'0.85rem',fontWeight:700,color:isPos?'#4ade80':'#f87171'}}>{isPos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
+                          <span style={{fontSize:'0.75rem',color:isPos?'#4ade80':'#f87171',opacity:0.8}}>{isPos?'+':'-'}{pts}</span>
+                        </div>
+                      ) : (
+                        <div style={{fontSize:'0.75rem',color:'#334155',marginTop:'0.25rem'}}>Click Refresh</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ── TOP GAINERS & LOSERS ── */}
+            {Object.keys(liveChanges).length > 5 && (() => {
+              const fnoStocks = ['Reliance','TCS','HDFC Bank','Infosys','ICICI Bank','Bharti Airtel','ITC','SBI','LT','Kotak Bank','HCL Tech','Axis Bank','Maruti Suzuki','Titan','Bajaj Finance','Wipro','Sun Pharma','Tata Motors'];
+              const withData = fnoStocks
+                .filter(s => livePrices[s] && liveChanges[s] !== undefined)
+                .map(s => ({name:s, value:livePrices[s], change:liveChanges[s]}));
+              if (withData.length < 4) return null;
+              const gainers = [...withData].sort((a,b)=>b.change-a.change).slice(0,5);
+              const losers  = [...withData].sort((a,b)=>a.change-b.change).slice(0,5);
+              return (
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem',marginBottom:'1.5rem'}}>
+                  {/* TOP GAINERS */}
+                  <div style={{background:'#0d1b2e',border:'1px solid rgba(74,222,128,0.2)',borderRadius:'16px',padding:'1.25rem',overflow:'hidden'}}>
+                    <div style={{fontSize:'0.85rem',fontWeight:700,color:'#4ade80',letterSpacing:'0.05em',marginBottom:'1rem'}}>🚀 TOP GAINERS</div>
+                    {gainers.map((s,i)=>(
+                      <div key={s.name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.5rem 0',borderBottom:i<4?'1px solid rgba(255,255,255,0.04)':'none'}}>
+                        <div>
+                          <div style={{fontSize:'0.9rem',fontWeight:600,color:'#f0f9ff'}}>{s.name}</div>
+                          <div style={{fontSize:'0.78rem',color:'#64748b'}}>₹{s.value.toLocaleString()}</div>
+                        </div>
+                        <div style={{textAlign:'right'}}>
+                          <div style={{fontSize:'0.95rem',fontWeight:700,color:'#4ade80'}}>▲ {s.change.toFixed(2)}%</div>
+                          <div style={{fontSize:'0.72rem',color:'#4ade80',opacity:0.7}}>+{Math.abs(((s.change/100)*s.value)/(1+s.change/100)).toFixed(0)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* TOP LOSERS */}
+                  <div style={{background:'#0d1b2e',border:'1px solid rgba(248,113,113,0.2)',borderRadius:'16px',padding:'1.25rem',overflow:'hidden'}}>
+                    <div style={{fontSize:'0.85rem',fontWeight:700,color:'#f87171',letterSpacing:'0.05em',marginBottom:'1rem'}}>📉 TOP LOSERS</div>
+                    {losers.map((s,i)=>(
+                      <div key={s.name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.5rem 0',borderBottom:i<4?'1px solid rgba(255,255,255,0.04)':'none'}}>
+                        <div>
+                          <div style={{fontSize:'0.9rem',fontWeight:600,color:'#f0f9ff'}}>{s.name}</div>
+                          <div style={{fontSize:'0.78rem',color:'#64748b'}}>₹{s.value.toLocaleString()}</div>
+                        </div>
+                        <div style={{textAlign:'right'}}>
+                          <div style={{fontSize:'0.95rem',fontWeight:700,color:'#f87171'}}>▼ {Math.abs(s.change).toFixed(2)}%</div>
+                          <div style={{fontSize:'0.72rem',color:'#f87171',opacity:0.7}}>-{Math.abs(((s.change/100)*s.value)/(1+s.change/100)).toFixed(0)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* INDEX SELECTOR */}
             <div className="panel index-selector-panel">
@@ -4513,63 +4605,13 @@ Respond ONLY with valid JSON:
             100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); }
           }
 
-          /* ── DESKTOP SIZING — match localhost exactly ── */
+          /* ── Minimal overrides (App.css handles the rest) ── */
+          html, body { font-size: 16px !important; }
           .hamburger-btn { display: none !important; }
-          html { font-size: 16px !important; }
-          body { font-size: 16px !important; line-height: 1.5 !important; }
-          * { box-sizing: border-box; }
-          .navbar *, .nav-links span { font-size: 1.05rem !important; }
-          .logo span:last-child { font-size: 1.45rem !important; font-weight: 800 !important; }
-          .logo .delta { font-size: 1.55rem !important; }
-          #root, .App { width: 100% !important; max-width: 100% !important; padding: 0 !important; }
-          .container { max-width: 100% !important; width: 100% !important; padding-left: 2rem !important; padding-right: 2rem !important; }
-          .main-content { max-width: 100% !important; width: 100% !important; }
-
-          /* Logo — big like localhost */
-          .logo { font-size: 1.5rem !important; font-weight: 800 !important; gap: 0.4rem !important; }
-          .logo .delta { font-size: 1.6rem !important; }
-
-          /* Navbar tabs — big like localhost */
-          .navbar { padding: 0 2rem !important; min-height: 64px !important; }
-          .nav-links { gap: 0.25rem !important; }
-          .nav-links span { font-size: 1.05rem !important; padding: 0.6rem 1.1rem !important; font-weight: 500 !important; }
-          .nav-links span.active { font-weight: 700 !important; }
-
-          /* Ticker bar — taller and bigger text like localhost */
-          .global-ticker-bar { padding: 0.6rem 2rem !important; }
-          .ticker-title { font-size: 0.9rem !important; font-weight: 700 !important; letter-spacing: 0.06em !important; }
-          .ticker-item { padding: 0.5rem 1.5rem !important; gap: 0.6rem !important; }
-          .ticker-name { font-size: 0.95rem !important; font-weight: 600 !important; }
-          .ticker-value { font-size: 1rem !important; font-weight: 700 !important; }
-          .ticker-change { font-size: 0.9rem !important; font-weight: 600 !important; }
-
-          /* Panels and headings */
-          h1 { font-size: 1.9rem !important; }
-          h2 { font-size: 1.5rem !important; }
-          h3 { font-size: 1.2rem !important; }
-          .panel { padding: 1.5rem !important; }
-
-          @media (max-width: 768px) {
-            /* Navbar */
-            .nav-links { 
-              display: none !important; 
-              flex-direction: column !important;
-              position: fixed !important;
-              top: 56px; left: 0; right: 0;
-              background: #0a0f1e !important;
-              z-index: 999 !important;
-              padding: 1rem !important;
-              border-bottom: 1px solid #1e293b !important;
-              gap: 0 !important;
-            }
-            .nav-links.mobile-open { display: flex !important; }
-            .nav-links span {
-              padding: 0.75rem 1rem !important;
-              font-size: 0.95rem !important;
-              border-bottom: 1px solid #1e293b !important;
-              width: 100% !important;
-            }
-            .hamburger-btn { display: block !important; }
+          @media (min-width: 769px) {
+            .nav-links { display: flex !important; }
+            .hamburger-btn { display: none !important; }
+          }
 
             /* Main content padding */
             .main-content, [class*="main-content"] { 
