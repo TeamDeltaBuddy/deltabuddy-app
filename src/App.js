@@ -2323,75 +2323,72 @@ Respond ONLY with valid JSON:
               </div>
             </div>
 
-            {/* ── MARKET PULSE CARDS ── */}
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:'1rem',marginBottom:'1.5rem'}}>
-              {[
-                {name:'NIFTY 50',val:marketData.nifty.value,chg:marketData.nifty.change,icon:'📈'},
-                {name:'BANK NIFTY',val:marketData.bankNifty.value,chg:marketData.bankNifty.change,icon:'🏦'},
-              ].map(({name,val,chg,icon})=>{
-                const pts = val && chg ? ((chg/100)*val/(1+chg/100)).toFixed(0) : 0;
-                const isPos = chg >= 0;
-                return (
-                <div key={name} style={{background:'linear-gradient(135deg,#0f1f35,#0a1628)',border:`1px solid ${isPos?'rgba(74,222,128,0.3)':'rgba(248,113,113,0.3)'}`,borderRadius:'16px',padding:'1.25rem 1.5rem',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <div>
-                    <div style={{fontSize:'0.85rem',color:'#64748b',fontWeight:600,letterSpacing:'0.06em',marginBottom:'0.4rem'}}>{icon} {name}</div>
-                    <div style={{fontSize:'2rem',fontWeight:800,color:'#f0f9ff',letterSpacing:'-0.02em',lineHeight:1}}>{(val||0).toLocaleString()}</div>
-                    <div style={{fontSize:'0.8rem',color:'#475569',marginTop:'0.3rem'}}>prev close</div>
-                  </div>
-                  <div style={{textAlign:'right'}}>
-                    <div style={{fontSize:'1.2rem',fontWeight:800,color:isPos?'#4ade80':'#f87171'}}>{isPos?'▲':'▼'} {Math.abs(chg||0).toFixed(2)}%</div>
-                    <div style={{fontSize:'0.95rem',fontWeight:600,color:isPos?'#4ade80':'#f87171',marginTop:'0.1rem'}}>{isPos?'+':''}{pts} pts</div>
-                    <button onClick={fetchLivePrices} style={{marginTop:'0.5rem',background:'transparent',border:'1px solid #1e3a5f',color:'#4ade80',borderRadius:'6px',padding:'0.25rem 0.75rem',fontSize:'0.75rem',cursor:'pointer'}}>🔄 Refresh</button>
-                  </div>
-                </div>
-                );
-              })}
-              {/* Quick action cards */}
-              <div onClick={()=>setActiveTab('markets')} style={{background:'linear-gradient(135deg,#0f1f35,#0a1628)',border:'1px solid rgba(99,102,241,0.3)',borderRadius:'16px',padding:'1.25rem 1.5rem',cursor:'pointer',display:'flex',flexDirection:'column',justifyContent:'space-between'}}>
-                <div style={{fontSize:'1.5rem',marginBottom:'0.5rem'}}>⚡</div>
-                <div style={{fontSize:'1rem',fontWeight:700,color:'#f0f9ff'}}>Option Chain</div>
-                <div style={{fontSize:'0.8rem',color:'#64748b',marginTop:'0.25rem'}}>Live OI, PCR, Max Pain →</div>
-              </div>
-              <div onClick={()=>setActiveTab('intelligence')} style={{background:'linear-gradient(135deg,#0f1f35,#0a1628)',border:'1px solid rgba(0,255,136,0.2)',borderRadius:'16px',padding:'1.25rem 1.5rem',cursor:'pointer',display:'flex',flexDirection:'column',justifyContent:'space-between'}}>
-                <div style={{fontSize:'1.5rem',marginBottom:'0.5rem'}}>🧠</div>
-                <div style={{fontSize:'1rem',fontWeight:700,color:'#f0f9ff'}}>AI Intelligence</div>
-                <div style={{fontSize:'0.8rem',color:'#64748b',marginTop:'0.25rem'}}>News + strategy signals →</div>
-              </div>
-            </div>
+            {/* ── AI INSIGHT + MARKET PULSE (compact, side-by-side like localhost) ── */}
+            <div style={{background:'linear-gradient(135deg,#0a1628 0%,#0f2744 50%,#0a1628 100%)',border:'1px solid #1e3a5f',borderRadius:'16px',padding:'1.5rem',marginBottom:'1.5rem',position:'relative',overflow:'hidden'}}>
+              <div style={{position:'absolute',top:0,right:0,width:'300px',height:'100%',background:'radial-gradient(ellipse at top right,rgba(0,255,136,0.08),transparent 70%)',pointerEvents:'none'}}/>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'1rem'}}>
 
-            {/* ── AI INSIGHT HERO ── */}
-            <div style={{background:'linear-gradient(135deg,#0a1628 0%,#0f2744 50%,#0a1628 100%)',border:'1px solid #1e3a5f',borderRadius:'16px',padding:'1.75rem',marginBottom:'1.5rem',position:'relative',overflow:'hidden'}}>
-              <div style={{position:'absolute',top:0,right:0,width:'40%',height:'100%',background:'radial-gradient(ellipse at top right,rgba(0,255,136,0.07),transparent 70%)',pointerEvents:'none'}}/>
-              <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.85rem'}}>
-                <span style={{background:'#1a3a1a',color:'#4ade80',padding:'3px 12px',borderRadius:'99px',fontSize:'0.75rem',fontWeight:700,letterSpacing:'0.05em'}}>🤖 AI INSIGHT OF THE DAY</span>
-              </div>
-              {intelligentNews.length>0 ? (() => {
-                const top = intelligentNews.find(n=>n.analysis.impact==='high')||intelligentNews[0];
-                const em  = top.analysis.sentiment==='bullish'?'🟢':top.analysis.sentiment==='bearish'?'🔴':'⚪';
-                return (
-                  <div>
-                    <h2 style={{fontSize:'1.25rem',fontWeight:800,color:'#f0f9ff',margin:'0 0 0.6rem',lineHeight:1.4}}>{top.title}</h2>
-                    {top.analysis.keyInsight && <p style={{color:'#93c5fd',fontSize:'0.95rem',margin:'0 0 1rem',lineHeight:1.6}}>💡 {top.analysis.keyInsight}</p>}
-                    <div style={{display:'flex',gap:'0.6rem',flexWrap:'wrap',alignItems:'center'}}>
-                      <span style={{background:top.analysis.sentiment==='bullish'?'#166534':top.analysis.sentiment==='bearish'?'#991b1b':'#374151',color:'white',padding:'4px 14px',borderRadius:'99px',fontSize:'0.82rem',fontWeight:700}}>{em} {(top.analysis.sentiment||'').toUpperCase()}</span>
-                      <span style={{color:'#64748b',fontSize:'0.85rem'}}>📊 {top.analysis.affectedIndex}</span>
-                      {top.analysis.impact==='high' && <span style={{background:'rgba(239,68,68,0.15)',color:'#f87171',padding:'4px 12px',borderRadius:'99px',fontSize:'0.78rem',fontWeight:600}}>⚠️ HIGH IMPACT</span>}
-                      <button onClick={()=>setActiveTab('intelligence')} style={{background:'rgba(0,255,136,0.12)',border:'1px solid rgba(0,255,136,0.3)',color:'#4ade80',borderRadius:'8px',padding:'4px 14px',fontSize:'0.82rem',cursor:'pointer',fontWeight:600}}>
-                        Full analysis →
+                {/* LEFT: AI Insight */}
+                <div style={{flex:1,minWidth:'260px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.6rem'}}>
+                    <span style={{background:'#1a3a1a',color:'#4ade80',padding:'2px 10px',borderRadius:'99px',fontSize:'0.72rem',fontWeight:700,letterSpacing:'0.05em'}}>
+                      🤖 AI INSIGHT OF THE DAY
+                    </span>
+                  </div>
+                  {intelligentNews.length>0 ? (() => {
+                    const top = intelligentNews.find(n=>n.analysis?.impact==='high')||intelligentNews[0];
+                    const em  = top.analysis?.sentiment==='bullish'?'🟢':top.analysis?.sentiment==='bearish'?'🔴':'⚪';
+                    return (
+                      <div>
+                        <h2 style={{fontSize:'1.05rem',fontWeight:700,color:'#f0f9ff',margin:'0 0 0.4rem',lineHeight:1.4}}>{top.title}</h2>
+                        {top.analysis?.keyInsight && <p style={{color:'#93c5fd',fontSize:'0.85rem',margin:'0 0 0.7rem',lineHeight:1.5}}>💡 {top.analysis.keyInsight}</p>}
+                        <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap',alignItems:'center'}}>
+                          <span style={{background:top.analysis?.sentiment==='bullish'?'#166534':top.analysis?.sentiment==='bearish'?'#991b1b':'#374151',color:'white',padding:'2px 10px',borderRadius:'99px',fontSize:'0.75rem',fontWeight:600}}>{em} {(top.analysis?.sentiment||'').toUpperCase()}</span>
+                          {top.analysis?.impact==='high' && <span style={{background:'rgba(239,68,68,0.15)',color:'#f87171',padding:'2px 10px',borderRadius:'99px',fontSize:'0.72rem',fontWeight:600}}>⚠️ HIGH IMPACT</span>}
+                          <button onClick={()=>setActiveTab('intelligence')} style={{background:'rgba(0,255,136,0.1)',border:'1px solid rgba(0,255,136,0.3)',color:'#4ade80',borderRadius:'6px',padding:'2px 10px',fontSize:'0.75rem',cursor:'pointer',fontWeight:600}}>
+                            Full analysis →
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })() : (
+                    <div>
+                      <h2 style={{fontSize:'1.05rem',color:'#f0f9ff',margin:'0 0 0.35rem',fontWeight:700}}>AI-Powered Market Intelligence</h2>
+                      <p style={{color:'#64748b',fontSize:'0.85rem',margin:'0 0 0.75rem'}}>News analysis, OI signals, strategy ideas — all AI-powered.</p>
+                      <button onClick={()=>setActiveTab('intelligence')} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem'}}>
+                        Open Market Intelligence →
                       </button>
                     </div>
-                  </div>
-                );
-              })() : (
-                <div>
-                  <h2 style={{fontSize:'1.25rem',color:'#f0f9ff',margin:'0 0 0.5rem',fontWeight:800}}>AI-Powered Market Intelligence</h2>
-                  <p style={{color:'#64748b',fontSize:'0.95rem',margin:'0 0 1rem',lineHeight:1.6}}>Real-time news analysis, institutional activity, OI buildup signals — all powered by Groq AI.</p>
-                  <button onClick={()=>setActiveTab('intelligence')} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.5rem 1.25rem',fontWeight:700,cursor:'pointer',fontSize:'0.9rem'}}>
-                    Open Market Intelligence →
+                  )}
+                </div>
+
+                {/* RIGHT: Market Pulse (compact) */}
+                <div style={{display:'flex',flexDirection:'column',gap:'0.4rem',minWidth:'170px'}}>
+                  <div style={{fontSize:'0.68rem',color:'#64748b',fontWeight:700,marginBottom:'0.2rem',letterSpacing:'0.07em',textTransform:'uppercase'}}>Market Pulse</div>
+                  {[
+                    ['NIFTY 50',   marketData.nifty.value,    marketData.nifty.change],
+                    ['BANK NIFTY', marketData.bankNifty.value, marketData.bankNifty.change],
+                  ].map(([name,val,chg])=>{
+                    const pts = val&&chg ? Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0) : null;
+                    return (
+                      <div key={name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'rgba(255,255,255,0.04)',borderRadius:'8px',padding:'0.4rem 0.7rem',gap:'0.75rem'}}>
+                        <span style={{fontSize:'0.75rem',color:'#94a3b8',fontWeight:600}}>{name}</span>
+                        <div style={{textAlign:'right'}}>
+                          <div style={{fontSize:'0.9rem',fontWeight:700,color:'#f0f9ff'}}>{(val||0).toLocaleString()}</div>
+                          <div style={{fontSize:'0.7rem',color:chg>=0?'#4ade80':'#f87171',fontWeight:600}}>
+                            {chg>=0?'▲':'▼'}{Math.abs(chg||0).toFixed(2)}% {pts&&chg!==0?`· ${chg>=0?'+':'−'}${pts}`:'' }
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <button onClick={fetchLivePrices} style={{marginTop:'0.15rem',background:'transparent',border:'1px solid #1e3a5f',color:'#4ade80',borderRadius:'6px',padding:'0.25rem',fontSize:'0.7rem',cursor:'pointer',textAlign:'center'}}>
+                    🔄 Refresh prices
                   </button>
                 </div>
-              )}
-            </div>
+
+              </div>
+            </div>            </div>
 
             {/* ── NSE INDEX COMPARISON ── */}
             <div style={{marginBottom:'1.5rem'}}>
