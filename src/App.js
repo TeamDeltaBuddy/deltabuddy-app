@@ -1273,12 +1273,12 @@ Respond ONLY with valid JSON:
       );
 
       // Update market data display
-      if (results['Nifty 50']) {
-        setMarketData({
-          nifty: results['Nifty 50'],
-          bankNifty: results['Bank Nifty'] || marketData.bankNifty,
-          vix: marketData.vix
-        });
+      if (results['Nifty 50'] || results['Bank Nifty']) {
+        setMarketData(prev => ({
+          nifty    : results['Nifty 50']   || prev.nifty,
+          bankNifty: results['Bank Nifty'] || prev.bankNifty,
+          vix      : prev.vix
+        }));
       }
 
       // Update live prices
@@ -2336,24 +2336,22 @@ Respond ONLY with valid JSON:
                   {isLiveMode ? '⏸ Pause' : '▶ Resume'}
                 </button>
               </div>
-              <div className="ticker-scroll">
-                <div className="ticker-items">
-                  {Object.entries(globalIndices).map(([name, data]) => (
-                    <div key={name} className="ticker-item">
-                      <span className="ticker-name">{name}</span>
-                      <span className="ticker-value">{data.value.toLocaleString()}</span>
-                      <span className={`ticker-change ${data.change >= 0 ? 'positive' : 'negative'}`}>
-                        {data.change >= 0 ? '▲' : '▼'} {Math.abs(data.change)}%
-                      </span>
-                    </div>
-                  ))}
-                  {/* Duplicate for seamless scroll */}
-                  {Object.entries(globalIndices).map(([name, data]) => (
-                    <div key={`${name}-dup`} className="ticker-item">
-                      <span className="ticker-name">{name}</span>
-                      <span className="ticker-value">{data.value.toLocaleString()}</span>
-                      <span className={`ticker-change ${data.change >= 0 ? 'positive' : 'negative'}`}>
-                        {data.change >= 0 ? '▲' : '▼'} {Math.abs(data.change)}%
+              <div style={{overflow:'hidden',flex:1}}>
+                <style>{`
+                  @keyframes fastTicker {
+                    0%   { transform: translateX(0); }
+                    100% { transform: translateX(-50%); }
+                  }
+                  .ticker-fast { animation: fastTicker 25s linear infinite; display:flex; width:max-content; }
+                  .ticker-fast:hover { animation-play-state: paused; }
+                `}</style>
+                <div className="ticker-fast">
+                  {[...Object.entries(globalIndices), ...Object.entries(globalIndices)].map(([name, data], i) => (
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:'0.5rem',padding:'0.35rem 1.5rem',borderRight:'1px solid rgba(255,255,255,0.07)',whiteSpace:'nowrap'}}>
+                      <span style={{fontSize:'0.95rem',fontWeight:600,color:'#94a3b8'}}>{name}</span>
+                      <span style={{fontSize:'1rem',fontWeight:700,color:'#f0f9ff'}}>{data.value.toLocaleString()}</span>
+                      <span style={{fontSize:'0.9rem',fontWeight:700,color:data.change>=0?'#4ade80':'#f87171'}}>
+                        {data.change>=0?'▲':'▼'} {Math.abs(data.change).toFixed(2)}%
                       </span>
                     </div>
                   ))}
@@ -2366,18 +2364,24 @@ Respond ONLY with valid JSON:
               {[
                 {name:'NIFTY 50',val:marketData.nifty.value,chg:marketData.nifty.change,icon:'📈'},
                 {name:'BANK NIFTY',val:marketData.bankNifty.value,chg:marketData.bankNifty.change,icon:'🏦'},
-              ].map(({name,val,chg,icon})=>(
-                <div key={name} style={{background:'linear-gradient(135deg,#0f1f35,#0a1628)',border:`1px solid ${chg>=0?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'}`,borderRadius:'16px',padding:'1.25rem 1.5rem',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              ].map(({name,val,chg,icon})=>{
+                const pts = val && chg ? ((chg/100)*val/(1+chg/100)).toFixed(0) : 0;
+                const isPos = chg >= 0;
+                return (
+                <div key={name} style={{background:'linear-gradient(135deg,#0f1f35,#0a1628)',border:`1px solid ${isPos?'rgba(74,222,128,0.3)':'rgba(248,113,113,0.3)'}`,borderRadius:'16px',padding:'1.25rem 1.5rem',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                   <div>
-                    <div style={{fontSize:'0.8rem',color:'#64748b',fontWeight:600,letterSpacing:'0.06em',marginBottom:'0.3rem'}}>{icon} {name}</div>
-                    <div style={{fontSize:'1.9rem',fontWeight:800,color:'#f0f9ff',letterSpacing:'-0.02em'}}>{(val||0).toLocaleString()}</div>
+                    <div style={{fontSize:'0.85rem',color:'#64748b',fontWeight:600,letterSpacing:'0.06em',marginBottom:'0.4rem'}}>{icon} {name}</div>
+                    <div style={{fontSize:'2rem',fontWeight:800,color:'#f0f9ff',letterSpacing:'-0.02em',lineHeight:1}}>{(val||0).toLocaleString()}</div>
+                    <div style={{fontSize:'0.8rem',color:'#475569',marginTop:'0.3rem'}}>prev close</div>
                   </div>
                   <div style={{textAlign:'right'}}>
-                    <div style={{fontSize:'1.1rem',fontWeight:700,color:chg>=0?'#4ade80':'#f87171'}}>{chg>=0?'▲':'▼'} {Math.abs(chg||0).toFixed(2)}%</div>
-                    <button onClick={fetchLivePrices} style={{marginTop:'0.4rem',background:'transparent',border:'1px solid #1e3a5f',color:'#4ade80',borderRadius:'6px',padding:'0.2rem 0.6rem',fontSize:'0.72rem',cursor:'pointer'}}>🔄 Refresh</button>
+                    <div style={{fontSize:'1.2rem',fontWeight:800,color:isPos?'#4ade80':'#f87171'}}>{isPos?'▲':'▼'} {Math.abs(chg||0).toFixed(2)}%</div>
+                    <div style={{fontSize:'0.95rem',fontWeight:600,color:isPos?'#4ade80':'#f87171',marginTop:'0.1rem'}}>{isPos?'+':''}{pts} pts</div>
+                    <button onClick={fetchLivePrices} style={{marginTop:'0.5rem',background:'transparent',border:'1px solid #1e3a5f',color:'#4ade80',borderRadius:'6px',padding:'0.25rem 0.75rem',fontSize:'0.75rem',cursor:'pointer'}}>🔄 Refresh</button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
               {/* Quick action cards */}
               <div onClick={()=>setActiveTab('markets')} style={{background:'linear-gradient(135deg,#0f1f35,#0a1628)',border:'1px solid rgba(99,102,241,0.3)',borderRadius:'16px',padding:'1.25rem 1.5rem',cursor:'pointer',display:'flex',flexDirection:'column',justifyContent:'space-between'}}>
                 <div style={{fontSize:'1.5rem',marginBottom:'0.5rem'}}>⚡</div>
@@ -4511,7 +4515,12 @@ Respond ONLY with valid JSON:
 
           /* ── DESKTOP SIZING — match localhost exactly ── */
           .hamburger-btn { display: none !important; }
-          html, body { font-size: 16px !important; line-height: 1.5 !important; }
+          html { font-size: 16px !important; }
+          body { font-size: 16px !important; line-height: 1.5 !important; }
+          * { box-sizing: border-box; }
+          .navbar *, .nav-links span { font-size: 1.05rem !important; }
+          .logo span:last-child { font-size: 1.45rem !important; font-weight: 800 !important; }
+          .logo .delta { font-size: 1.55rem !important; }
           #root, .App { width: 100% !important; max-width: 100% !important; padding: 0 !important; }
           .container { max-width: 100% !important; width: 100% !important; padding-left: 2rem !important; padding-right: 2rem !important; }
           .main-content { max-width: 100% !important; width: 100% !important; }
