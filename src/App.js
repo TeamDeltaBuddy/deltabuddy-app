@@ -2058,7 +2058,7 @@ Respond ONLY with valid JSON:
               ['scanner',      'Scanner'],
               ['journal',      'Journal'],
             ].map(([tab,label])=>(
-              <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}} style={{padding:'0.5rem 0.85rem',fontSize:'0.95rem',whiteSpace:'nowrap',cursor:'pointer',fontWeight:activeTab===tab?700:500,color:activeTab===tab?'var(--accent)':'var(--text-dim)',borderBottom:activeTab===tab?'2px solid var(--accent)':'2px solid transparent'}}>
+              <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}} style={{padding:'0.55rem 1rem',fontSize:'1rem',whiteSpace:'nowrap',cursor:'pointer',fontWeight:activeTab===tab?700:500,color:activeTab===tab?'var(--accent)':'var(--text-dim)',borderBottom:activeTab===tab?'2px solid var(--accent)':'2px solid transparent'}}>
                 {label}
               </span>
             ))}
@@ -4500,9 +4500,14 @@ Respond ONLY with valid JSON:
           @media (min-width: 769px) {
             .nav-links span { font-size: 0.95rem !important; padding: 0.5rem 0.7rem !important; }
           }
-          /* Desktop base */
-          body { font-size: 15px; }
+          /* Desktop base — match localhost sizing */
+          html { font-size: 16px !important; }
+          body { font-size: 16px !important; line-height: 1.5; }
           #root, .App { width: 100% !important; max-width: 100% !important; padding: 0 !important; }
+          h1 { font-size: 1.8rem !important; }
+          h2 { font-size: 1.4rem !important; }
+          h3 { font-size: 1.15rem !important; }
+          p, span, div, td, th, label, input, select, button { font-size: inherit; }
           .container { max-width: 100% !important; width: 100% !important; padding-left: 1.5rem !important; padding-right: 1.5rem !important; }
           .main-content { max-width: 100% !important; width: 100% !important; }
           header, nav, .navbar { max-width: 100% !important; width: 100% !important; }
