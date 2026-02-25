@@ -857,7 +857,11 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     bankNifty: { value: 54000, change: 1.2 },
     vix: { value: 14.2, change: -2.1 }
   });
-  const [liveChanges, setLiveChanges] = useState({}); // name → % change
+  const [liveChanges,  setLiveChanges]  = useState({});
+  const [watchNSE,     setWatchNSE]     = useState(['Nifty 50','Bank Nifty','Nifty IT']);
+  const [watchBSE,     setWatchBSE]     = useState(['Sensex','BSE Midcap']);
+  const [watchStocks,  setWatchStocks]  = useState(['Reliance','TCS','HDFC Bank']);
+  const [watchTab,     setWatchTab]     = useState('nse');
   const [livePrices, setLivePrices] = useState({
     // NSE Indices
     'Nifty 50': 25500,
