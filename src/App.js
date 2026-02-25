@@ -2436,8 +2436,7 @@ Respond ONLY with valid JSON:
             <div className="panel" style={{marginBottom:'1.5rem'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem'}}>
                 <h3 style={{margin:0}}>📊 Track Your Indices &amp; Stocks</h3>
-                <button onClick={fetchLivePrices} disabled={isPriceLoading}
-                  style={{background:'transparent',border:'1px solid var(--border-light)',color:'var(--accent)',borderRadius:'6px',padding:'0.3rem 0.85rem',fontSize:'0.8rem',cursor:'pointer',opacity:isPriceLoading?0.6:1,fontFamily:'inherit'}}>
+                <button onClick={fetchLivePrices} disabled={isPriceLoading} style={{background:'transparent',border:'1px solid var(--border-light)',color:'var(--accent)',borderRadius:'6px',padding:'0.3rem 0.85rem',fontSize:'0.8rem',cursor:'pointer',fontFamily:'inherit'}}>
                   {isPriceLoading ? '⟳ Loading…' : '🔄 Refresh'}
                 </button>
               </div>
@@ -2445,54 +2444,127 @@ Respond ONLY with valid JSON:
               {/* Tab switcher */}
               <div style={{display:'flex',borderBottom:'1px solid var(--border)',marginBottom:'1.25rem'}}>
                 {[['nse','📊 NSE'],['bse','🏦 BSE'],['stocks','🏢 Stocks']].map(([key,label])=>(
-                  <button key={key} onClick={()=>setWatchTab(key)} style={{background:'none',border:'none',borderBottom:`2px solid ${watchTab===key?'var(--accent)':'transparent'}`,color:watchTab===key?'var(--accent)':'var(--text-dim)',padding:'0.5rem 1.25rem',fontWeight:watchTab===key?700:500,fontSize:'0.95rem',cursor:'pointer',transition:'all 0.15s',fontFamily:'inherit',marginBottom:'-1px'}}>
+                  <button key={key} onClick={()=>setWatchTab(key)} style={{background:'none',border:'none',borderBottom:watchTab===key?'2px solid var(--accent)':'2px solid transparent',color:watchTab===key?'var(--accent)':'var(--text-dim)',padding:'0.5rem 1.25rem',fontWeight:watchTab===key?700:500,fontSize:'0.95rem',cursor:'pointer',fontFamily:'inherit',marginBottom:'-1px'}}>
                     {label}
                   </button>
                 ))}
               </div>
 
-              {/* Reusable watch card renderer */}
-              {[['nse',watchNSE,setWatchNSE,['Nifty 50','Bank Nifty','Nifty IT','Nifty Pharma','Nifty Auto','Nifty Financial Services','Nifty FMCG','Nifty Metal','Nifty Realty','Nifty Energy','Nifty Midcap 50','Nifty Smallcap 50','Nifty Next 50'],false],['bse',watchBSE,setWatchBSE,['Sensex','BSE 100','BSE 200','BSE 500','BSE Midcap','BSE Smallcap'],false],['stocks',watchStocks,setWatchStocks,['Reliance','TCS','HDFC Bank','Infosys','ICICI Bank','Bharti Airtel','ITC','SBI','LT','Kotak Bank','HCL Tech','Axis Bank','Maruti Suzuki','Titan','Bajaj Finance','Wipro','Sun Pharma','Tata Motors','Asian Paints','Adani Ports','ONGC','NTPC','Power Grid','M&M','Tech Mahindra'],true]].map(([key,list,setter,options,isStock])=>
-                watchTab!==key ? null : (
-                  <div key={key}>
-                    <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'1rem',flexWrap:'wrap'}}>
-                      <select value="" onChange={e=>{if(e.target.value&&!list.includes(e.target.value))setter(p=>[...p,e.target.value]);}}
-                        style={{background:'var(--bg-surface)',border:'1px solid var(--border-light)',color:'var(--text-main)',borderRadius:'8px',padding:'0.45rem 0.85rem',fontSize:'0.875rem',cursor:'pointer',minWidth:'210px',fontFamily:'inherit'}}>
-                        <option value="">+ Add {key==='nse'?'NSE Index':key==='bse'?'BSE Index':'FNO Stock'}</option>
-                        {options.filter(n=>!list.includes(n)).map(n=><option key={n} value={n}>{n}</option>)}
-                      </select>
-                      <span style={{fontSize:'0.78rem',color:'var(--text-muted)'}}>Click × on a card to remove it</span>
-                    </div>
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:'0.75rem'}}>
-                      {list.length===0 && <div style={{color:'var(--text-muted)',fontSize:'0.875rem',padding:'0.5rem 0',gridColumn:'1/-1'}}>Use the dropdown to add items.</div>}
-                      {list.map(name=>{
-                        const val=livePrices[name], chg=liveChanges[name];
-                        const has=val!=null&&chg!=null;
-                        const pos=(chg||0)>=0;
-                        const pts=has?Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0):null;
-                        const col=pos?'var(--green)':'var(--red)';
-                        return (
-                          <div key={name} style={{background:'var(--bg-surface)',border:`1px solid ${!has?'var(--border)':pos?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'}`,borderRadius:'12px',padding:'0.9rem 1rem 0.8rem',position:'relative',transition:'border-color 0.2s'}}>
-                            <button onClick={()=>setter(p=>p.filter(x=>x!==name))} title="Remove"
-                              style={{position:'absolute',top:'0.35rem',right:'0.5rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0}}>×</button>
-                            <div style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.25rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.03em'}}>{name}</div>
-                            <div style={{fontSize:'1.3rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em'}}>
-                              {has ? (isStock?`₹${val.toLocaleString()}`:val.toLocaleString()) : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>—</span>}
-                            </div>
-                            {has ? (
-                              <div style={{display:'flex',gap:'0.5rem',marginTop:'0.3rem',alignItems:'baseline'}}>
-                                <span style={{fontSize:'0.85rem',fontWeight:700,color:col}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
-                                <span style={{fontSize:'0.75rem',color:col,opacity:0.8}}>{pos?'+':'−'}{isStock?'₹':''}{pts} pts</span>
-                              </div>
-                            ) : (
-                              <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+              {/* NSE TAB */}
+              {watchTab==='nse' && (
+                <div>
+                  <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'1rem',flexWrap:'wrap'}}>
+                    <select value="" onChange={e=>{if(e.target.value&&!watchNSE.includes(e.target.value))setWatchNSE(p=>[...p,e.target.value]);}} style={{background:'var(--bg-surface)',border:'1px solid var(--border-light)',color:'var(--text-main)',borderRadius:'8px',padding:'0.45rem 0.85rem',fontSize:'0.875rem',cursor:'pointer',minWidth:'210px',fontFamily:'inherit'}}>
+                      <option value="">+ Add NSE Index</option>
+                      {['Nifty 50','Bank Nifty','Nifty IT','Nifty Pharma','Nifty Auto','Nifty Financial Services','Nifty FMCG','Nifty Metal','Nifty Realty','Nifty Energy','Nifty Midcap 50','Nifty Smallcap 50','Nifty Next 50','Nifty 100','Nifty 200'].filter(n=>!watchNSE.includes(n)).map(n=>(
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                    <span style={{fontSize:'0.78rem',color:'var(--text-muted)'}}>Click × on a card to remove</span>
                   </div>
-                )
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:'0.75rem'}}>
+                    {watchNSE.length===0 && <div style={{color:'var(--text-muted)',fontSize:'0.875rem',gridColumn:'1/-1'}}>Add indices from dropdown above.</div>}
+                    {watchNSE.map(name=>{
+                      const val=livePrices[name], chg=liveChanges[name];
+                      const has=val!=null&&chg!=null;
+                      const pos=(chg||0)>=0;
+                      const pts=has?Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0):null;
+                      return (
+                        <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+(has?(pos?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'):'var(--border)'),borderRadius:'12px',padding:'0.9rem 1rem',position:'relative'}}>
+                          <button onClick={()=>setWatchNSE(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.35rem',right:'0.5rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
+                          <div style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.25rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.03em'}}>{name}</div>
+                          <div style={{fontSize:'1.25rem',fontWeight:800,color:'var(--text-main)'}}>{has ? val.toLocaleString() : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>—</span>}</div>
+                          {has ? (
+                            <div style={{display:'flex',gap:'0.5rem',marginTop:'0.3rem',alignItems:'baseline'}}>
+                              <span style={{fontSize:'0.85rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
+                              <span style={{fontSize:'0.75rem',color:pos?'var(--green)':'var(--red)',opacity:0.8}}>{pos?'+':'−'}{pts} pts</span>
+                            </div>
+                          ) : (
+                            <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* BSE TAB */}
+              {watchTab==='bse' && (
+                <div>
+                  <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'1rem',flexWrap:'wrap'}}>
+                    <select value="" onChange={e=>{if(e.target.value&&!watchBSE.includes(e.target.value))setWatchBSE(p=>[...p,e.target.value]);}} style={{background:'var(--bg-surface)',border:'1px solid var(--border-light)',color:'var(--text-main)',borderRadius:'8px',padding:'0.45rem 0.85rem',fontSize:'0.875rem',cursor:'pointer',minWidth:'210px',fontFamily:'inherit'}}>
+                      <option value="">+ Add BSE Index</option>
+                      {['Sensex','BSE 100','BSE 200','BSE 500','BSE Midcap','BSE Smallcap'].filter(n=>!watchBSE.includes(n)).map(n=>(
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                    <span style={{fontSize:'0.78rem',color:'var(--text-muted)'}}>Click × on a card to remove</span>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:'0.75rem'}}>
+                    {watchBSE.length===0 && <div style={{color:'var(--text-muted)',fontSize:'0.875rem',gridColumn:'1/-1'}}>Add indices from dropdown above.</div>}
+                    {watchBSE.map(name=>{
+                      const val=livePrices[name], chg=liveChanges[name];
+                      const has=val!=null&&chg!=null;
+                      const pos=(chg||0)>=0;
+                      const pts=has?Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0):null;
+                      return (
+                        <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+(has?(pos?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'):'var(--border)'),borderRadius:'12px',padding:'0.9rem 1rem',position:'relative'}}>
+                          <button onClick={()=>setWatchBSE(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.35rem',right:'0.5rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
+                          <div style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.25rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.03em'}}>{name}</div>
+                          <div style={{fontSize:'1.25rem',fontWeight:800,color:'var(--text-main)'}}>{has ? val.toLocaleString() : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>—</span>}</div>
+                          {has ? (
+                            <div style={{display:'flex',gap:'0.5rem',marginTop:'0.3rem',alignItems:'baseline'}}>
+                              <span style={{fontSize:'0.85rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
+                              <span style={{fontSize:'0.75rem',color:pos?'var(--green)':'var(--red)',opacity:0.8}}>{pos?'+':'−'}{pts} pts</span>
+                            </div>
+                          ) : (
+                            <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* STOCKS TAB */}
+              {watchTab==='stocks' && (
+                <div>
+                  <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'1rem',flexWrap:'wrap'}}>
+                    <select value="" onChange={e=>{if(e.target.value&&!watchStocks.includes(e.target.value))setWatchStocks(p=>[...p,e.target.value]);}} style={{background:'var(--bg-surface)',border:'1px solid var(--border-light)',color:'var(--text-main)',borderRadius:'8px',padding:'0.45rem 0.85rem',fontSize:'0.875rem',cursor:'pointer',minWidth:'210px',fontFamily:'inherit'}}>
+                      <option value="">+ Add FNO Stock</option>
+                      {['Reliance','TCS','HDFC Bank','Infosys','ICICI Bank','Bharti Airtel','ITC','SBI','LT','Kotak Bank','HCL Tech','Axis Bank','Maruti Suzuki','Titan','Bajaj Finance','Wipro','Sun Pharma','Tata Motors','Asian Paints','Adani Ports','ONGC','NTPC','Power Grid','M&M','Tech Mahindra'].filter(n=>!watchStocks.includes(n)).map(n=>(
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                    <span style={{fontSize:'0.78rem',color:'var(--text-muted)'}}>Click × on a card to remove</span>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:'0.75rem'}}>
+                    {watchStocks.length===0 && <div style={{color:'var(--text-muted)',fontSize:'0.875rem',gridColumn:'1/-1'}}>Add stocks from dropdown above.</div>}
+                    {watchStocks.map(name=>{
+                      const val=livePrices[name], chg=liveChanges[name];
+                      const has=val!=null&&chg!=null;
+                      const pos=(chg||0)>=0;
+                      const pts=has?Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0):null;
+                      return (
+                        <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+(has?(pos?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'):'var(--border)'),borderRadius:'12px',padding:'0.9rem 1rem',position:'relative'}}>
+                          <button onClick={()=>setWatchStocks(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.35rem',right:'0.5rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
+                          <div style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.25rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.03em'}}>{name}</div>
+                          <div style={{fontSize:'1.25rem',fontWeight:800,color:'var(--text-main)'}}>{'₹'+(has ? val.toLocaleString() : '—')}</div>
+                          {has ? (
+                            <div style={{display:'flex',gap:'0.5rem',marginTop:'0.3rem',alignItems:'baseline'}}>
+                              <span style={{fontSize:'0.85rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
+                              <span style={{fontSize:'0.75rem',color:pos?'var(--green)':'var(--red)',opacity:0.8}}>{pos?'+':'−'}₹{pts}</span>
+                            </div>
+                          ) : (
+                            <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
             </div>
 
@@ -2502,18 +2574,18 @@ Respond ONLY with valid JSON:
               const withData=STOCKS.filter(s=>livePrices[s]!=null&&liveChanges[s]!=null).map(s=>({name:s,value:livePrices[s],change:liveChanges[s]}));
               const gainers=[...withData].sort((a,b)=>b.change-a.change).slice(0,5);
               const losers=[...withData].sort((a,b)=>a.change-b.change).slice(0,5);
-              const Row=({s,g})=>{
+              const renderRow=(s,isGainer)=>{
                 const pts=Math.abs(((s.change/100)*s.value)/(1+s.change/100)).toFixed(0);
-                const col=g?'var(--green)':'var(--red)';
+                const col=isGainer?'var(--green)':'var(--red)';
                 return (
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.55rem 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                  <div key={s.name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.55rem 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
                     <div>
                       <div style={{fontSize:'0.875rem',fontWeight:600,color:'var(--text-main)'}}>{s.name}</div>
-                      <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>₹{s.value.toLocaleString()}</div>
+                      <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{'₹'+s.value.toLocaleString()}</div>
                     </div>
                     <div style={{textAlign:'right'}}>
-                      <div style={{fontSize:'0.9rem',fontWeight:700,color:col}}>{g?'▲':'▼'} {Math.abs(s.change).toFixed(2)}%</div>
-                      <div style={{fontSize:'0.72rem',color:col,opacity:0.8}}>{g?'+':'−'}₹{pts} pts</div>
+                      <div style={{fontSize:'0.9rem',fontWeight:700,color:col}}>{isGainer?'▲':'▼'} {Math.abs(s.change).toFixed(2)}%</div>
+                      <div style={{fontSize:'0.72rem',color:col,opacity:0.8}}>{isGainer?'+':'−'}{'₹'+pts+' pts'}</div>
                     </div>
                   </div>
                 );
@@ -2522,15 +2594,15 @@ Respond ONLY with valid JSON:
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem',marginBottom:'1.5rem'}}>
                   <div style={{background:'var(--bg-card)',border:'1px solid rgba(74,222,128,0.2)',borderRadius:'16px',padding:'1.25rem'}}>
                     <div style={{fontSize:'0.8rem',fontWeight:700,color:'var(--green)',letterSpacing:'0.06em',marginBottom:'0.85rem',textTransform:'uppercase'}}>🚀 Top Gainers</div>
-                    {withData.length===0
-                      ? <div style={{color:'var(--text-muted)',fontSize:'0.85rem',padding:'0.5rem 0'}}>Click Refresh to load stock data</div>
-                      : gainers.map(s=><Row key={s.name} s={s} g={true}/>)}
+                    {withData.length===0 ? (
+                      <div style={{color:'var(--text-muted)',fontSize:'0.85rem',padding:'0.5rem 0'}}>Click Refresh above to load data</div>
+                    ) : gainers.map(s=>renderRow(s,true))}
                   </div>
                   <div style={{background:'var(--bg-card)',border:'1px solid rgba(248,113,113,0.2)',borderRadius:'16px',padding:'1.25rem'}}>
                     <div style={{fontSize:'0.8rem',fontWeight:700,color:'var(--red)',letterSpacing:'0.06em',marginBottom:'0.85rem',textTransform:'uppercase'}}>📉 Top Losers</div>
-                    {withData.length===0
-                      ? <div style={{color:'var(--text-muted)',fontSize:'0.85rem',padding:'0.5rem 0'}}>Click Refresh to load stock data</div>
-                      : losers.map(s=><Row key={s.name} s={s} g={false}/>)}
+                    {withData.length===0 ? (
+                      <div style={{color:'var(--text-muted)',fontSize:'0.85rem',padding:'0.5rem 0'}}>Click Refresh above to load data</div>
+                    ) : losers.map(s=>renderRow(s,false))}
                   </div>
                 </div>
               );
