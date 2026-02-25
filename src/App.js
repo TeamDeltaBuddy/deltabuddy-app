@@ -2282,21 +2282,6 @@ Respond ONLY with valid JSON:
             </div>
           </div>
         )}
-activeTab === 'single' 
-      ? (maxLoss === 'Unlimited' ? 0 : parseFloat(maxLoss.replace(/[₹,]/g, '')))
-      : (multiMaxLoss === 'Unlimited' ? 0 : parseFloat(multiMaxLoss.replace(/[₹,]/g, '')));
-    
-    if (maxLossValue === 0) return { lots: 0, capitalRequired: 0, riskAmount };
-    
-    const maxLossPerLot = maxLossValue / lotSize;
-    const recommendedLots = Math.floor(riskAmount / maxLossPerLot) * lotSize;
-    
-    return {
-      lots: recommendedLots,
-      capitalRequired: maxLossValue * (recommendedLots / lotSize),
-      riskAmount: riskAmount
-    };
-  };
 
   const positionSize = calculatePositionSize();
 
