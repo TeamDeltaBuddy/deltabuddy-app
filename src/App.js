@@ -2388,7 +2388,7 @@ Respond ONLY with valid JSON:
                 </div>
 
               </div>
-            </div>            </div>
+            </div>
 
             {/* ── NSE INDEX COMPARISON ── */}
             <div style={{marginBottom:'1.5rem'}}>
