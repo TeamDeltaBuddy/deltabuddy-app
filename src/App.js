@@ -1999,6 +1999,7 @@ Respond ONLY with valid JSON:
               ['home',         'Home'],
               ['markets',      'Markets'],
               ['intelligence', '🧠 Intelligence'],
+              ['strategy',     '🎯 Strategy'],
               ['backtest',     '📈 Backtest'],
               ['single',       'Calculator'],
               ['scanner',      'Scanner'],
@@ -2594,26 +2595,375 @@ Respond ONLY with valid JSON:
             </div>{/* end home content wrapper */}
 
                         {/* QUICK ACTIONS */}
-            <div className="panel">
+            <div className="panel" style={{marginBottom:'1.5rem'}}>
               <h2>🚀 Quick Actions</h2>
               <div className="quick-actions-grid">
                 <div className="quick-action-card" onClick={() => setActiveTab('single')}>
                   <div className="action-icon">📊</div>
                   <h3>Options Calculator</h3>
-                  <p>Calculate P&L and Greeks</p>
+                  <p>Calculate P&L, Greeks & breakeven</p>
                 </div>
-                <div className="quick-action-card" onClick={() => setActiveTab('strategy')}>
-                  <div className="action-icon">🎯</div>
-                  <h3>Strategy Builder</h3>
-                  <p>10 multi-leg strategies</p>
+                <div className="quick-action-card" onClick={() => setActiveTab('markets')}>
+                  <div className="action-icon">⚡</div>
+                  <h3>Option Chain</h3>
+                  <p>Live NSE chain with OI & IV</p>
                 </div>
                 <div className="quick-action-card" onClick={() => setActiveTab('scanner')}>
                   <div className="action-icon">🔍</div>
                   <h3>Market Scanner</h3>
-                  <p>5 live alert filters</p>
+                  <p>Live alerts & trade signals</p>
+                </div>
+                <div className="quick-action-card" onClick={() => setActiveTab('intelligence')}>
+                  <div className="action-icon">🧠</div>
+                  <h3>AI Intelligence</h3>
+                  <p>News analysis & market insights</p>
                 </div>
               </div>
             </div>
+
+            {/* ══ 6 INSIGHT CARDS ══ */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))',gap:'1rem',marginBottom:'2rem'}}>
+
+              {/* ── CARD 1: EXPIRY COUNTDOWN ── */}
+              {(()=>{
+                const now = new Date();
+                // NSE weekly expiry: Thursday. Monthly: last Thursday of month
+                const getNextExpiry = (dayOfWeek, label) => {
+                  const d = new Date(now);
+                  const diff = (dayOfWeek - d.getDay() + 7) % 7;
+                  d.setDate(d.getDate() + (diff === 0 ? 7 : diff));
+                  d.setHours(15,30,0,0);
+                  const msLeft = d - now;
+                  const hrs = Math.floor(msLeft/3600000);
+                  const mins = Math.floor((msLeft%3600000)/60000);
+                  const days = Math.floor(hrs/24);
+                  const urgent = days < 1;
+                  return { label, date: d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'}), days, hrs: hrs%24, mins, urgent };
+                };
+                const expiries = [
+                  { ...getNextExpiry(4,'NIFTY Weekly'), sym:'NIFTY', color:'#4ade80' },
+                  { ...getNextExpiry(2,'BANKNIFTY Weekly'), sym:'BNKN', color:'#60a5fa' },
+                  { ...getNextExpiry(2,'FINNIFTY Weekly'), sym:'FINN', color:'#f59e0b' },
+                  { ...getNextExpiry(4,'Monthly Expiry'), sym:'MON', color:'#c084fc' },
+                ];
+                return (
+                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'16px',padding:'1.25rem'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'1rem'}}>
+                      <span style={{fontSize:'1.1rem'}}>⏳</span>
+                      <span style={{fontWeight:700,fontSize:'0.95rem',color:'var(--text-main)'}}>Expiry Countdown</span>
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:'0.6rem'}}>
+                      {expiries.map(e=>(
+                        <div key={e.sym} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.5rem 0.75rem',background:'var(--bg-surface)',borderRadius:'8px',border:'1px solid '+(e.urgent?e.color+'44':'var(--border)')}}>
+                          <div>
+                            <div style={{fontSize:'0.78rem',fontWeight:700,color:e.color}}>{e.sym}</div>
+                            <div style={{fontSize:'0.68rem',color:'var(--text-muted)'}}>{e.label} · {e.date}</div>
+                          </div>
+                          <div style={{textAlign:'right'}}>
+                            {e.days > 0
+                              ? <div style={{fontSize:'1.1rem',fontWeight:800,color:e.urgent?'#f87171':e.color}}>{e.days}d {e.hrs}h</div>
+                              : <div style={{fontSize:'1.1rem',fontWeight:800,color:'#f87171'}}>{e.hrs}h {e.mins}m</div>}
+                            {e.urgent && <div style={{fontSize:'0.65rem',color:'#f87171',fontWeight:600}}>TODAY</div>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* ── CARD 2: F&O BAN LIST ── */}
+              {(()=>{
+                const [banList, setBanList] = React.useState([]);
+                const [banLoading, setBanLoading] = React.useState(false);
+                const [banFetched, setBanFetched] = React.useState(false);
+                const fetchBanList = async () => {
+                  setBanLoading(true);
+                  try {
+                    const r = await fetch(`${BACKEND_URL}/api/nse/fno-ban`);
+                    if (r.ok) { const d = await r.json(); setBanList(d.securities||[]); }
+                  } catch(e) { console.log('Ban list fetch failed'); }
+                  finally { setBanLoading(false); setBanFetched(true); }
+                };
+                React.useEffect(()=>{ fetchBanList(); },[]);
+                return (
+                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'16px',padding:'1.25rem'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
+                        <span style={{fontSize:'1.1rem'}}>🚫</span>
+                        <span style={{fontWeight:700,fontSize:'0.95rem',color:'var(--text-main)'}}>F&O Ban List</span>
+                      </div>
+                      <button onClick={fetchBanList} style={{background:'none',border:'1px solid var(--border)',color:'var(--accent)',borderRadius:'5px',padding:'2px 8px',fontSize:'0.72rem',cursor:'pointer',fontFamily:'inherit'}}>
+                        {banLoading?'…':'↻'}
+                      </button>
+                    </div>
+                    {banLoading ? (
+                      <div style={{color:'var(--text-muted)',fontSize:'0.85rem',padding:'0.5rem'}}>Fetching from NSE…</div>
+                    ) : banList.length > 0 ? (
+                      <div>
+                        <div style={{fontSize:'0.7rem',color:'var(--text-muted)',marginBottom:'0.5rem'}}>Stocks in ban period — no fresh F&O positions allowed</div>
+                        <div style={{display:'flex',flexWrap:'wrap',gap:'0.4rem'}}>
+                          {banList.map(s=>(
+                            <span key={s} style={{background:'rgba(248,113,113,0.12)',border:'1px solid rgba(248,113,113,0.3)',color:'#f87171',borderRadius:'6px',padding:'3px 8px',fontSize:'0.78rem',fontWeight:700}}>{s}</span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : banFetched ? (
+                      <div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'0.75rem',gap:'0.3rem'}}>
+                        <span style={{fontSize:'1.5rem'}}>✅</span>
+                        <span style={{fontSize:'0.85rem',color:'var(--green)',fontWeight:600}}>No stocks in ban today</span>
+                        <span style={{fontSize:'0.7rem',color:'var(--text-muted)'}}>All FNO stocks are tradeable</span>
+                      </div>
+                    ) : (
+                      <div style={{color:'var(--text-muted)',fontSize:'0.85rem'}}>Loading…</div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* ── CARD 3: MARKET MOOD-O-METER ── */}
+              {(()=>{
+                const vix   = marketData.nifty?.vix  || 14.5;
+                const pcr   = pcrData?.pcr            || 1.0;
+                const spot  = marketData.nifty?.value || 23500;
+                const prevS = livePrevClose['Nifty 50']|| spot;
+                const adRatio = spot > prevS ? 1.2 : spot < prevS ? 0.8 : 1.0;
+                // Score: 0=Extreme Fear, 100=Extreme Greed
+                let score = 50;
+                // VIX: high vix = fear
+                if (vix > 22) score -= 20; else if (vix > 18) score -= 10; else if (vix < 12) score += 15; else if (vix < 15) score += 8;
+                // PCR: >1.2 = oversold/bullish, <0.7 = overbought/bearish
+                if (pcr > 1.4) score += 15; else if (pcr > 1.2) score += 8; else if (pcr < 0.7) score -= 15; else if (pcr < 0.9) score -= 8;
+                // AD ratio
+                if (adRatio > 1.1) score += 10; else if (adRatio < 0.9) score -= 10;
+                score = Math.max(0, Math.min(100, score));
+                const zones = [
+                  {label:'Extreme Fear', min:0,  max:20,  color:'#ef4444'},
+                  {label:'Fear',         min:20, max:40,  color:'#f87171'},
+                  {label:'Neutral',      min:40, max:60,  color:'#fbbf24'},
+                  {label:'Greed',        min:60, max:80,  color:'#4ade80'},
+                  {label:'Extreme Greed',min:80, max:100, color:'#22c55e'},
+                ];
+                const zone = zones.find(z=>score>=z.min&&score<z.max)||zones[2];
+                const needleAngle = -90 + (score / 100) * 180;
+                return (
+                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'16px',padding:'1.25rem'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.75rem'}}>
+                      <span style={{fontSize:'1.1rem'}}>🎯</span>
+                      <span style={{fontWeight:700,fontSize:'0.95rem',color:'var(--text-main)'}}>Market Mood-O-Meter</span>
+                    </div>
+                    {/* Gauge */}
+                    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'0.5rem'}}>
+                      <svg width="200" height="110" viewBox="0 0 200 110">
+                        {zones.map((z,i)=>{
+                          const startAngle = -180 + (z.min/100)*180;
+                          const endAngle   = -180 + (z.max/100)*180;
+                          const toRad = a => a*Math.PI/180;
+                          const x1=100+85*Math.cos(toRad(startAngle)), y1=100+85*Math.sin(toRad(startAngle));
+                          const x2=100+85*Math.cos(toRad(endAngle)),   y2=100+85*Math.sin(toRad(endAngle));
+                          const xi1=100+55*Math.cos(toRad(startAngle)),yi1=100+55*Math.sin(toRad(startAngle));
+                          const xi2=100+55*Math.cos(toRad(endAngle)),  yi2=100+55*Math.sin(toRad(endAngle));
+                          const large = (z.max-z.min)>50?1:0;
+                          return <path key={i} d={'M '+xi1+' '+yi1+' A 55 55 0 '+large+' 1 '+xi2+' '+yi2+' L '+x2+' '+y2+' A 85 85 0 '+large+' 0 '+x1+' '+y1+' Z'} fill={z.color} opacity="0.85"/>;
+                        })}
+                        {/* Needle */}
+                        <line x1="100" y1="100"
+                          x2={100+70*Math.cos(needleAngle*Math.PI/180)}
+                          y2={100+70*Math.sin(needleAngle*Math.PI/180)}
+                          stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+                        <circle cx="100" cy="100" r="5" fill="white"/>
+                      </svg>
+                      <div style={{textAlign:'center'}}>
+                        <div style={{fontSize:'1.4rem',fontWeight:800,color:zone.color}}>{zone.label}</div>
+                        <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.2rem'}}>Score: {Math.round(score)}/100 · VIX {vix} · PCR {pcr}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* ── CARD 4: OPEN POSITIONS P&L ── */}
+              {(()=>{
+                const openTrades = tradeLog.filter(t => !t.exitPrice || t.exitPrice === '');
+                const totalUnrealisedPnl = openTrades.reduce((sum, t) => {
+                  const ltp = livePrices[t.symbol] || 0;
+                  const entry = parseFloat(t.entryPrice) || 0;
+                  if (!ltp || !entry) return sum;
+                  const lots = parseInt(t.qty) || 1;
+                  const pnl = (ltp - entry) * (t.action==='BUY'?1:-1) * lots * 50;
+                  return sum + pnl;
+                }, 0);
+                return (
+                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'16px',padding:'1.25rem'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
+                        <span style={{fontSize:'1.1rem'}}>💼</span>
+                        <span style={{fontWeight:700,fontSize:'0.95rem',color:'var(--text-main)'}}>Open Positions</span>
+                      </div>
+                      <button onClick={()=>setActiveTab('journal')} style={{background:'none',border:'1px solid var(--border)',color:'var(--accent)',borderRadius:'5px',padding:'2px 10px',fontSize:'0.72rem',cursor:'pointer',fontFamily:'inherit'}}>Journal →</button>
+                    </div>
+                    {openTrades.length === 0 ? (
+                      <div style={{textAlign:'center',padding:'0.75rem',color:'var(--text-muted)'}}>
+                        <div style={{fontSize:'1.4rem',marginBottom:'0.3rem'}}>📭</div>
+                        <div style={{fontSize:'0.85rem'}}>No open positions</div>
+                        <div style={{fontSize:'0.72rem',marginTop:'0.2rem'}}>Add trades in Journal tab</div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{background:totalUnrealisedPnl>=0?'rgba(74,222,128,0.08)':'rgba(248,113,113,0.08)',border:'1px solid '+(totalUnrealisedPnl>=0?'rgba(74,222,128,0.2)':'rgba(248,113,113,0.2)'),borderRadius:'10px',padding:'0.75rem',marginBottom:'0.75rem',textAlign:'center'}}>
+                          <div style={{fontSize:'0.7rem',color:'var(--text-muted)',marginBottom:'0.2rem'}}>UNREALISED P&L</div>
+                          <div style={{fontSize:'1.6rem',fontWeight:800,color:totalUnrealisedPnl>=0?'var(--green)':'var(--red)'}}>{totalUnrealisedPnl>=0?'+':''}{totalUnrealisedPnl>=0?'':'−'}₹{Math.abs(Math.round(totalUnrealisedPnl)).toLocaleString()}</div>
+                          <div style={{fontSize:'0.7rem',color:'var(--text-muted)'}}>{openTrades.length} open {openTrades.length===1?'position':'positions'}</div>
+                        </div>
+                        <div style={{display:'flex',flexDirection:'column',gap:'0.4rem',maxHeight:'160px',overflowY:'auto'}}>
+                          {openTrades.slice(0,5).map((t,i)=>{
+                            const ltp=livePrices[t.symbol]||0;
+                            const entry=parseFloat(t.entryPrice)||0;
+                            const lots=parseInt(t.qty)||1;
+                            const pnl=ltp&&entry?(ltp-entry)*(t.action==='BUY'?1:-1)*lots*50:null;
+                            return (
+                              <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.35rem 0.5rem',background:'var(--bg-surface)',borderRadius:'6px'}}>
+                                <div>
+                                  <span style={{fontSize:'0.8rem',fontWeight:700,color:'var(--text-main)'}}>{t.symbol} {t.type}</span>
+                                  <span style={{fontSize:'0.7rem',color:t.action==='BUY'?'var(--green)':'var(--red)',marginLeft:'6px'}}>{t.action}</span>
+                                </div>
+                                <div style={{fontSize:'0.8rem',fontWeight:700,color:pnl==null?'var(--text-muted)':pnl>=0?'var(--green)':'var(--red)'}}>
+                                  {pnl==null?'No LTP':((pnl>=0?'+':'−')+'₹'+Math.abs(Math.round(pnl)).toLocaleString())}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* ── CARD 5: ECONOMIC CALENDAR ── */}
+              {(()=>{
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = now.getMonth();
+                // Static high-impact events — enough to demonstrate; can be API-driven later
+                const events = [
+                  { date: new Date(year, month, 6),  label:'RBI MPC Decision', impact:'high',   icon:'🏦' },
+                  { date: new Date(year, month, 10), label:'US CPI Release',    impact:'high',   icon:'🇺🇸' },
+                  { date: new Date(year, month, 15), label:'India WPI Data',    impact:'medium', icon:'📊' },
+                  { date: new Date(year, month, 20), label:'US Fed Meeting',    impact:'high',   icon:'💵' },
+                  { date: new Date(year, month, 25), label:'F&O Monthly Expiry',impact:'high',   icon:'⏰' },
+                  { date: new Date(year, month+1, 1),label:'GDP Data Release',  impact:'high',   icon:'📈' },
+                  { date: new Date(year, month+1, 5),label:'RBI Policy Review', impact:'medium', icon:'🏦' },
+                ].map(e=>({ ...e, daysAway: Math.ceil((e.date-now)/86400000) }))
+                 .filter(e=>e.daysAway>=-1)
+                 .sort((a,b)=>a.daysAway-b.daysAway)
+                 .slice(0,6);
+                const impColor = i => i==='high'?'#f87171':i==='medium'?'#fbbf24':'#94a3b8';
+                return (
+                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'16px',padding:'1.25rem'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'1rem'}}>
+                      <span style={{fontSize:'1.1rem'}}>📅</span>
+                      <span style={{fontWeight:700,fontSize:'0.95rem',color:'var(--text-main)'}}>Economic Calendar</span>
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:'0.5rem'}}>
+                      {events.map((e,i)=>(
+                        <div key={i} style={{display:'flex',alignItems:'center',gap:'0.75rem',padding:'0.45rem 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                          <div style={{fontSize:'1.1rem',flexShrink:0}}>{e.icon}</div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:'0.82rem',fontWeight:600,color:'var(--text-main)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.label}</div>
+                            <div style={{fontSize:'0.68rem',color:'var(--text-muted)'}}>{e.date.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</div>
+                          </div>
+                          <div style={{textAlign:'right',flexShrink:0}}>
+                            <div style={{fontSize:'0.72rem',fontWeight:700,color:impColor(e.impact),textTransform:'uppercase'}}>{e.impact}</div>
+                            <div style={{fontSize:'0.7rem',color:e.daysAway<=0?'#f87171':e.daysAway<=3?'#fbbf24':'var(--text-muted)',fontWeight:e.daysAway<=1?700:400}}>
+                              {e.daysAway<=0?'TODAY':e.daysAway===1?'Tomorrow':`${e.daysAway}d away`}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* ── CARD 6: UNUSUAL OI ACTIVITY ── */}
+              {(()=>{
+                const spot = marketData.nifty?.value || 23500;
+                const [prevOI, setPrevOI] = React.useState({});
+                // Track OI changes between refreshes
+                React.useEffect(()=>{
+                  if (liveOptionChain.length === 0) return;
+                  const snapshot = {};
+                  liveOptionChain.forEach(r=>{ snapshot[r.strike]={ce:r.ce?.oi||0,pe:r.pe?.oi||0}; });
+                  // Store first snapshot, then compare on subsequent updates
+                  setPrevOI(prev=>{
+                    if (Object.keys(prev).length===0) return snapshot;
+                    return prev; // keep original for comparison
+                  });
+                },[liveOptionChain]);
+
+                const unusual = liveOptionChain
+                  .filter(r=>r.strike&&(r.ce?.oi>0||r.pe?.oi>0))
+                  .map(r=>{
+                    const prev = prevOI[r.strike];
+                    const ceOI=r.ce?.oi||0, peOI=r.pe?.oi||0;
+                    const cePrev=prev?.ce||ceOI, pePrev=prev?.pe||peOI;
+                    const ceChg=cePrev>0?Math.round(((ceOI-cePrev)/cePrev)*100):0;
+                    const peChg=pePrev>0?Math.round(((peOI-pePrev)/pePrev)*100):0;
+                    const maxChg=Math.abs(ceChg)>Math.abs(peChg)?ceChg:peChg;
+                    const side=Math.abs(ceChg)>Math.abs(peChg)?'CE':'PE';
+                    return { strike:r.strike, side, chg:maxChg, oi:(side==='CE'?ceOI:peOI), distFromSpot:Math.abs(r.strike-spot) };
+                  })
+                  .filter(r=>Math.abs(r.chg)>=15)
+                  .sort((a,b)=>Math.abs(b.chg)-Math.abs(a.chg))
+                  .slice(0,6);
+
+                return (
+                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'16px',padding:'1.25rem'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
+                        <span style={{fontSize:'1.1rem'}}>🔥</span>
+                        <span style={{fontWeight:700,fontSize:'0.95rem',color:'var(--text-main)'}}>Unusual OI Activity</span>
+                      </div>
+                      <span style={{fontSize:'0.68rem',color:'var(--text-muted)'}}>≥15% OI change</span>
+                    </div>
+                    {liveOptionChain.length === 0 ? (
+                      <div style={{textAlign:'center',padding:'1rem',color:'var(--text-muted)'}}>
+                        <div style={{fontSize:'0.85rem'}}>Load option chain in Markets tab first</div>
+                        <button onClick={()=>setActiveTab('markets')} style={{marginTop:'0.5rem',background:'var(--accent)',color:'#000',border:'none',borderRadius:'5px',padding:'4px 12px',fontSize:'0.78rem',cursor:'pointer',fontFamily:'inherit'}}>Go to Markets</button>
+                      </div>
+                    ) : unusual.length === 0 ? (
+                      <div style={{textAlign:'center',padding:'1rem',color:'var(--text-muted)',fontSize:'0.85rem'}}>
+                        <div style={{fontSize:'1.3rem',marginBottom:'0.3rem'}}>😴</div>
+                        No unusual activity detected yet.<br/>
+                        <span style={{fontSize:'0.72rem'}}>Refreshes every 10s with option chain</span>
+                      </div>
+                    ) : (
+                      <div style={{display:'flex',flexDirection:'column',gap:'0.45rem'}}>
+                        {unusual.map((u,i)=>{
+                          const isBuildup = u.chg > 0;
+                          const col = u.side==='CE'?'#f87171':'#4ade80';
+                          const signal = isBuildup ? (u.side==='CE'?'🚧 Resistance building':'🛡️ Support building') : (u.side==='CE'?'📉 CE unwinding':'📈 PE unwinding');
+                          return (
+                            <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.45rem 0.6rem',background:'var(--bg-surface)',borderRadius:'7px',borderLeft:'3px solid '+col}}>
+                              <div>
+                                <div style={{fontSize:'0.85rem',fontWeight:700,color:'var(--text-main)'}}>{u.strike.toLocaleString()} {u.side}</div>
+                                <div style={{fontSize:'0.7rem',color:'var(--text-muted)'}}>{signal}</div>
+                              </div>
+                              <div style={{textAlign:'right'}}>
+                                <div style={{fontSize:'0.88rem',fontWeight:700,color:isBuildup?'var(--green)':'var(--red)'}}>{isBuildup?'+':''}{u.chg}%</div>
+                                <div style={{fontSize:'0.68rem',color:'var(--text-muted)'}}>{u.oi>=100000?(u.oi/100000).toFixed(1)+'L':(u.oi/1000).toFixed(0)+'K'} OI</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+            </div>{/* end 6 insight cards grid */}
           </>
         ) : activeTab === 'single' ? (
           <>
