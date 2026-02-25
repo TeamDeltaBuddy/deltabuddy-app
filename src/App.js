@@ -2282,6 +2282,301 @@ Respond ONLY with valid JSON:
             </div>
           </div>
         )}
+activeTab === 'single' 
+      ? (maxLoss === 'Unlimited' ? 0 : parseFloat(maxLoss.replace(/[₹,]/g, '')))
+      : (multiMaxLoss === 'Unlimited' ? 0 : parseFloat(multiMaxLoss.replace(/[₹,]/g, '')));
+    
+    if (maxLossValue === 0) return { lots: 0, capitalRequired: 0, riskAmount };
+    
+    const maxLossPerLot = maxLossValue / lotSize;
+    const recommendedLots = Math.floor(riskAmount / maxLossPerLot) * lotSize;
+    
+    return {
+      lots: recommendedLots,
+      capitalRequired: maxLossValue * (recommendedLots / lotSize),
+      riskAmount: riskAmount
+    };
+  };
+
+  const positionSize = calculatePositionSize();
+
+  return (
+    <div className="App">
+      <nav className="navbar">
+        <div className="container">
+          <div className="logo" onClick={()=>{setActiveTab('home');setShowMobileMenu(false);}}
+            style={{cursor:'pointer',userSelect:'none',borderBottom:activeTab==='home'?'2px solid var(--accent)':'2px solid transparent',paddingBottom:'2px',transition:'border-color 0.2s'}}>
+            <span className="delta">Δ</span>
+            <span>DeltaBuddy</span>
+          </div>
+          <button onClick={()=>setShowMobileMenu(m=>!m)}
+            className="hamburger-btn" style={{background:'none',border:'none',color:'var(--text-main)',fontSize:'1.5rem',cursor:'pointer',padding:'0.25rem 0.5rem'}}
+            className="hamburger-btn" aria-label="Menu">{showMobileMenu?'✕':'☰'}</button>
+
+          <div className={`nav-links${showMobileMenu?' mobile-open':''}`} style={{display:'flex',alignItems:'center',gap:'0.1rem',flexWrap:'nowrap'}}>
+            {[
+              ['markets',      'Markets'],
+              ['intelligence', '🧠 Intelligence'],
+              ['strategy',     '🎯 Strategy'],
+              ['backtest',     '📈 Backtest'],
+              ['single',       'Calculator'],
+              ['scanner',      'Scanner'],
+              ['journal',      'Journal'],
+            ].map(([tab,label])=>(
+              <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}} style={{padding:'0.55rem 1rem',fontSize:'1rem',whiteSpace:'nowrap',cursor:'pointer',fontWeight:activeTab===tab?700:500,color:activeTab===tab?'var(--accent)':'var(--text-dim)',borderBottom:activeTab===tab?'2px solid var(--accent)':'2px solid transparent'}}>
+                {label}
+              </span>
+            ))}
+            <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginLeft:'0.5rem'}}>
+              {!authLoading && (currentUser ? (
+                <div style={{position:'relative',display:'flex',alignItems:'center',gap:'0.5rem'}}>
+                  {/* Telegram bell */}
+                  <button onClick={()=>setShowTgSetup(true)} title="Connect Telegram alerts"
+                    style={{background:'none',border:'none',cursor:'pointer',padding:'2px',fontSize:'1.1rem',opacity:tgChatId?1:0.5}}
+                    title={tgChatId?'Telegram connected — click to update':'Connect Telegram for alerts'}>
+                    {tgChatId ? '🔔' : '🔕'}
+                  </button>
+                  {/* Avatar → sign out */}
+                  <div style={{cursor:'pointer'}} onClick={handleSignOut} title="Click to sign out">
+                    {currentUser.photoURL
+                      ? <img src={currentUser.photoURL} alt="" style={{width:'30px',height:'30px',borderRadius:'50%',border:'2px solid var(--accent)',display:'block'}}/>
+                      : <div style={{width:'30px',height:'30px',borderRadius:'50%',background:'var(--accent)',color:'#000',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:'0.85rem'}}>{(currentUser.displayName||currentUser.email||'U')[0].toUpperCase()}</div>}
+                  </div>
+                </div>
+              ) : (
+                <button onClick={()=>setShowAuthModal(true)} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.3rem 0.85rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>Sign In</button>
+              ))}
+              <a href="https://wa.me/917506218502?text=Hi%20DeltaBuddy%20Team%2C%20I%20need%20help%20with..."
+                target="_blank" rel="noreferrer"
+                title="Get help on WhatsApp"
+                style={{color:'#25D366',fontSize:'0.78rem',fontWeight:600,textDecoration:'none',padding:'0.25rem 0.4rem',borderRadius:'6px',border:'1px solid rgba(37,211,102,0.3)',whiteSpace:'nowrap'}}>
+                💬 Help
+              </a>
+              {isAdmin && (
+                <span title="Admin Settings" onClick={()=>{setShowSettings(s=>!s);setShowMobileMenu(false);}}
+                  style={{cursor:'pointer',fontSize:'1.1rem',padding:'0.25rem 0.5rem',borderRadius:'6px',background:showSettings?'var(--accent)':'transparent',lineHeight:1}}>
+                  ⚙️
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <div style={{minHeight:'80vh'}}>
+        {showSaveModal && (
+          <div className="modal-overlay" onClick={() => setShowSaveModal(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <h2>Save Strategy</h2>
+              <div className="input-group">
+                <label>Strategy Name *</label>
+                <input 
+                  type="text"
+                  value={strategyName}
+                  onChange={(e) => setStrategyName(e.target.value)}
+                  placeholder="e.g., Nifty Iron Condor Feb"
+                  className="input-field"
+                  autoFocus
+                />
+              </div>
+              <div className="input-group">
+                <label>Notes (Optional)</label>
+                <textarea 
+                  value={strategyNotes}
+                  onChange={(e) => setStrategyNotes(e.target.value)}
+                  placeholder="Trade plan, exit strategy, etc..."
+                  className="input-field"
+                  rows="3"
+                />
+              </div>
+              <div className="modal-buttons">
+                <button className="btn-secondary" onClick={() => setShowSaveModal(false)}>
+                  Cancel
+                </button>
+                <button className="btn-primary" onClick={saveStrategy}>
+                  Save Strategy
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* AUTH MODAL */}
+        {/* ── TELEGRAM SETUP MODAL — for regular users ── */}
+        {showTgSetup && (
+          <div className="modal-overlay" onClick={()=>setShowTgSetup(false)}>
+            <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'440px',width:'95%'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem'}}>
+                <h2 style={{margin:0,fontSize:'1.15rem'}}>📱 Connect Telegram</h2>
+                <button onClick={()=>setShowTgSetup(false)} style={{background:'none',border:'none',color:'var(--text-dim)',fontSize:'1.5rem',cursor:'pointer'}}>✕</button>
+              </div>
+
+              <p style={{color:'var(--text-dim)',fontSize:'0.85rem',marginBottom:'1.25rem',lineHeight:1.6}}>
+                Get instant alerts for high-impact news and scanner signals — directly on Telegram. Free, takes 60 seconds.
+              </p>
+
+              {/* Steps */}
+              {[
+                ['1', 'Open Telegram', 'Search for our bot: ', '@DeltaBuddyAlertBot', 'https://t.me/DeltaBuddyAlertBot'],
+                ['2', 'Start the bot', 'Press the Start button or send /start to the bot', null, null],
+                ['3', 'Get your Chat ID', 'The bot will reply with your unique Chat ID number. Copy it.', null, null],
+              ].map(([num, title, desc, link, href])=>(
+                <div key={num} style={{display:'flex',gap:'0.75rem',marginBottom:'1rem',alignItems:'flex-start'}}>
+                  <div style={{width:'28px',height:'28px',borderRadius:'50%',background:'var(--accent)',color:'#000',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:'0.85rem',flexShrink:0}}>{num}</div>
+                  <div>
+                    <div style={{fontWeight:600,fontSize:'0.88rem',marginBottom:'2px'}}>{title}</div>
+                    <div style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>
+                      {desc}
+                      {link && <a href={href} target="_blank" rel="noreferrer" style={{color:'var(--accent)',fontWeight:600}}>{link}</a>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Chat ID input */}
+              <div style={{background:'var(--bg-dark)',borderRadius:'8px',padding:'0.75rem',marginBottom:'1rem'}}>
+                <label style={{fontSize:'0.78rem',color:'var(--text-dim)',display:'block',marginBottom:'0.4rem'}}>Paste your Chat ID here:</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="e.g. 6458200459"
+                  value={tgChatId}
+                  onChange={e=>setTgChatId(e.target.value.trim())}
+                  style={{width:'100%',boxSizing:'border-box',fontSize:'1rem',letterSpacing:'0.05em'}}
+                />
+              </div>
+
+              <div style={{display:'flex',gap:'0.75rem'}}>
+                <button
+                  onClick={async()=>{
+                    await testTelegram();
+                    if(currentUser) {
+                      try { await setDoc(doc(db,'users',currentUser.uid),{tgChatId,updatedAt:serverTimestamp()},{merge:true}); } catch(e){}
+                    }
+                  }}
+                  disabled={!tgChatId||tgStatus==='testing'}
+                  style={{flex:1,background:'#229ED9',color:'white',border:'none',borderRadius:'8px',padding:'0.6rem',fontWeight:700,cursor:'pointer',fontSize:'0.88rem'}}>
+                  {tgStatus==='testing'?'⏳ Sending test...':'📤 Send Test Message'}
+                </button>
+                {tgStatus==='ok' && (
+                  <button onClick={()=>setShowTgSetup(false)}
+                    style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.88rem'}}>
+                    Done ✓
+                  </button>
+                )}
+              </div>
+              {tgStatus==='ok' && <p style={{color:'#22c55e',fontSize:'0.82rem',marginTop:'0.5rem',textAlign:'center'}}>✅ Connected! You'll now receive DeltaBuddy alerts on Telegram.</p>}
+              {tgStatus==='error' && <p style={{color:'#ef4444',fontSize:'0.82rem',marginTop:'0.5rem',textAlign:'center'}}>❌ Couldn't send. Make sure you've pressed Start on the bot first.</p>}
+            </div>
+          </div>
+        )}
+
+        {showAuthModal && (
+          <div className="modal-overlay" onClick={()=>{setShowAuthModal(false);setAuthError('');}}>
+            <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'400px',width:'95%'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.5rem'}}>
+                <h2 style={{margin:0}}>{authMode==='login'?'Welcome Back':'Create Account'}</h2>
+                <button onClick={()=>{setShowAuthModal(false);setAuthError('');}} style={{background:'none',border:'none',color:'var(--text-dim)',fontSize:'1.4rem',cursor:'pointer'}}>x</button>
+              </div>
+              <button onClick={signInWithGoogle} disabled={authSubmitting}
+                style={{width:'100%',padding:'0.75rem',background:'#fff',color:'#333',border:'none',borderRadius:'8px',fontWeight:600,fontSize:'0.95rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'0.6rem',marginBottom:'1rem'}}>
+                Continue with Google
+              </button>
+              <div style={{display:'flex',flexDirection:'column',gap:'0.6rem'}}>
+                {authMode==='signup' && <input type="text" className="input-field" placeholder="Your name" value={authName} onChange={e=>setAuthName(e.target.value)} style={{width:'100%',boxSizing:'border-box'}}/>}
+                <input type="email" className="input-field" placeholder="Email address" value={authEmail} onChange={e=>setAuthEmail(e.target.value)} style={{width:'100%',boxSizing:'border-box'}}/>
+                <input type="password" className="input-field" placeholder="Password" value={authPassword} onChange={e=>setAuthPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')signInWithEmail();}} style={{width:'100%',boxSizing:'border-box'}}/>
+              </div>
+              {authError && <div style={{background:'#450a0a',border:'1px solid #ef4444',borderRadius:'6px',padding:'0.5rem 0.75rem',marginTop:'0.75rem',color:'#fca5a5',fontSize:'0.82rem'}}>{authError}</div>}
+              <button onClick={signInWithEmail} disabled={authSubmitting||!authEmail||!authPassword}
+                style={{width:'100%',marginTop:'1rem',padding:'0.75rem',background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',fontWeight:700,fontSize:'0.95rem',cursor:'pointer'}}>
+                {authSubmitting?'Please wait...':authMode==='login'?'Sign In':'Create Account'}
+              </button>
+              <p style={{textAlign:'center',marginTop:'1rem',fontSize:'0.84rem',color:'var(--text-dim)'}}>
+                {authMode==='login'?"No account? ":"Have account? "}
+                <span style={{color:'var(--accent)',cursor:'pointer',fontWeight:600}} onClick={()=>{setAuthMode(m=>m==='login'?'signup':'login');setAuthError('');}}>
+                  {authMode==='login'?'Sign up free':'Sign in'}
+                </span>
+              </p>
+            </div>
+          </div>
+        )}
+
+        {showSettings && (
+          <div className="modal-overlay" onClick={()=>setShowSettings(false)}>
+            <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'500px',width:'95%',maxHeight:'90vh',overflowY:'auto'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.5rem'}}>
+                <h2 style={{margin:0}}>⚙️ Settings</h2>
+                <button onClick={()=>setShowSettings(false)} style={{background:'none',border:'none',color:'var(--text-dim)',fontSize:'1.5rem',cursor:'pointer',lineHeight:1}}>✕</button>
+              </div>
+
+              <div style={{marginBottom:'1.25rem',padding:'1rem',background:'var(--bg-dark)',borderRadius:'8px',border:'1px solid var(--border)'}}>
+                <h3 style={{margin:'0 0 0.5rem',color:'var(--accent)',fontSize:'0.95rem'}}>🤖 Groq AI — News Intelligence (Free)</h3>
+                <p style={{color:'var(--text-dim)',fontSize:'0.78rem',margin:'0 0 0.6rem'}}>Free at <a href="https://console.groq.com" target="_blank" rel="noreferrer" style={{color:'var(--accent)'}}>console.groq.com</a> — 14,400 requests/day. Model: Llama 3.3 70B.</p>
+                <input type="password" className="input-field" placeholder="Groq API key (gsk_...)" value={groqApiKey} onChange={e=>setGroqApiKey(e.target.value)} style={{width:'100%',boxSizing:'border-box',marginBottom:'0.5rem'}}/>
+                <div style={{display:'flex',gap:'0.5rem',alignItems:'center',flexWrap:'wrap'}}>
+                  <button className="btn-action" onClick={testGroq} disabled={!groqApiKey||groqStatus==='testing'}>{groqStatus==='testing'?'⏳ Testing...':'🔌 Test'}</button>
+                  {groqStatus==='ok' && <button className="btn-action" style={{background:'#22c55e',color:'#000'}} onClick={()=>{setShowSettings(false);fetchIntelligentNews();}}>✅ Save & Load News</button>}
+                  {groqStatus==='error' && <span style={{color:'#ef4444',fontSize:'0.82rem'}}>❌ Failed — check key</span>}
+                  {groqStatus==='timeout' && <span style={{color:'#f59e0b',fontSize:'0.82rem'}}>⏳ Server waking up — wait 30s and try again</span>}
+                  {!groqApiKey && <span style={{color:'var(--text-dim)',fontSize:'0.78rem'}}>No key — keyword mode</span>}
+                </div>
+              </div>
+
+              <div style={{marginBottom:'1.25rem',padding:'1rem',background:'var(--bg-dark)',borderRadius:'8px',border:'1px solid #1e3a5f'}}>
+                <h3 style={{margin:'0 0 0.5rem',color:'#229ED9',fontSize:'0.95rem'}}>📱 Telegram Bot — Admin Config</h3>
+                <p style={{color:'var(--text-dim)',fontSize:'0.78rem',margin:'0 0 0.75rem'}}>
+                  Bot token is set on Render as <code style={{background:'#1e293b',padding:'1px 5px',borderRadius:'3px'}}>TG_BOT_TOKEN</code> env variable. Users connect via Chat ID only — they never see the token.
+                </p>
+                <p style={{color:'var(--text-dim)',fontSize:'0.78rem',margin:'0 0 0.6rem'}}>
+                  Your admin Chat ID (for your own alerts):
+                </p>
+                <input type="text" className="input-field" placeholder="Your Chat ID (e.g. 6458200459)" value={tgChatId} onChange={e=>setTgChatId(e.target.value)} style={{width:'100%',boxSizing:'border-box',marginBottom:'0.5rem'}}/>
+                <div style={{display:'flex',gap:'0.5rem',alignItems:'center',flexWrap:'wrap'}}>
+                  <button className="btn-action" onClick={testTelegram} disabled={!tgChatId||tgStatus==='testing'}>{tgStatus==='testing'?'⏳ Sending...':'📤 Test Alert'}</button>
+                  {tgStatus==='ok' && <span style={{color:'#22c55e',fontSize:'0.82rem'}}>✅ Sent! Check Telegram.</span>}
+                  {tgStatus==='error' && <span style={{color:'#ef4444',fontSize:'0.82rem'}}>❌ Add TG_BOT_TOKEN to <b>backend</b> service on Render (not frontend)</span>}
+                </div>
+              </div>
+
+              <div style={{padding:'1rem',background:'var(--bg-dark)',borderRadius:'8px',border:'1px solid var(--border)'}}>
+                <h3 style={{margin:'0 0 0.75rem',fontSize:'0.95rem'}}>🔔 Notify Me When</h3>
+                <label style={{display:'flex',alignItems:'center',gap:'0.6rem',marginBottom:'0.6rem',cursor:'pointer'}}>
+                  <input type="checkbox" checked={notifyHighImpact} onChange={e=>setNotifyHighImpact(e.target.checked)}/>
+                  📰 High-impact news detected by AI
+                </label>
+                <label style={{display:'flex',alignItems:'center',gap:'0.6rem',cursor:'pointer'}}>
+                  <input type="checkbox" checked={notifyScanner} onChange={e=>setNotifyScanner(e.target.checked)}/>
+                  🔍 Scanner alerts (IV Crush, PCR Extreme, Gamma Squeeze)
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {savedStrategies.length > 0 && (
+          <div className="saved-strategies-bar">
+            <h3>📁 Saved Strategies ({savedStrategies.length})</h3>
+            <div className="saved-list">
+              {savedStrategies.map(strategy => (
+                <div key={strategy.id} className="saved-item">
+                  <div className="saved-info" onClick={() => loadStrategy(strategy)}>
+                    <div className="saved-name">{strategy.name}</div>
+                    <div className="saved-date">
+                      {new Date(strategy.timestamp).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <button 
+                    className="delete-btn"
+                    onClick={() => deleteStrategy(strategy.id)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 {activeTab === 'home' ? (
           <>
             {/* GLOBAL INDICES TICKER */}
@@ -2326,15 +2621,15 @@ Respond ONLY with valid JSON:
             {/* HOME CONTENT */}
             <div style={{maxWidth:'1280px',margin:'0 auto',padding:'1.5rem 2rem'}}>
 
-            {/* ── AI INSIGHT + MARKET PULSE (compact, side-by-side like localhost) ── */}
-            <div style={{background:'linear-gradient(135deg,#0a1628 0%,#0f2744 50%,#0a1628 100%)',border:'1px solid #1e3a5f',borderRadius:'16px',padding:'1.5rem',marginBottom:'1.5rem',position:'relative',overflow:'hidden'}}>
-              <div style={{position:'absolute',top:0,right:0,width:'300px',height:'100%',background:'radial-gradient(ellipse at top right,rgba(0,255,136,0.08),transparent 70%)',pointerEvents:'none'}}/>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'1rem'}}>
+            {/* ── AI INSIGHT + MARKET PULSE ── */}
+            <div style={{background:'var(--bg-card)',border:'1px solid var(--border-light)',borderRadius:'var(--radius-lg)',padding:'1.5rem',marginBottom:'1.5rem',position:'relative',overflow:'hidden'}}>
+              <div style={{position:'absolute',top:0,right:0,width:'300px',height:'100%',background:'radial-gradient(ellipse at top right,var(--accent-glow),transparent 70%)',pointerEvents:'none'}}/>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'1.5rem'}}>
 
                 {/* LEFT: AI Insight */}
                 <div style={{flex:1,minWidth:'260px'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.6rem'}}>
-                    <span style={{background:'#1a3a1a',color:'#4ade80',padding:'2px 10px',borderRadius:'99px',fontSize:'0.72rem',fontWeight:700,letterSpacing:'0.05em'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.75rem'}}>
+                    <span style={{background:'var(--green-dim)',color:'var(--green)',padding:'3px 10px',borderRadius:'99px',fontSize:'0.75rem',fontWeight:700,letterSpacing:'0.04em'}}>
                       🤖 AI INSIGHT OF THE DAY
                     </span>
                   </div>
@@ -2343,12 +2638,12 @@ Respond ONLY with valid JSON:
                     const em  = top.analysis?.sentiment==='bullish'?'🟢':top.analysis?.sentiment==='bearish'?'🔴':'⚪';
                     return (
                       <div>
-                        <h2 style={{fontSize:'1.05rem',fontWeight:700,color:'#f0f9ff',margin:'0 0 0.4rem',lineHeight:1.4}}>{top.title}</h2>
-                        {top.analysis?.keyInsight && <p style={{color:'#93c5fd',fontSize:'0.85rem',margin:'0 0 0.7rem',lineHeight:1.5}}>💡 {top.analysis.keyInsight}</p>}
+                        <h3 style={{margin:'0 0 0.5rem',lineHeight:1.4,color:'var(--text-main)'}}>{top.title}</h3>
+                        {top.analysis?.keyInsight && <p style={{color:'var(--blue)',fontSize:'0.875rem',margin:'0 0 0.75rem',lineHeight:1.6}}>💡 {top.analysis.keyInsight}</p>}
                         <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap',alignItems:'center'}}>
-                          <span style={{background:top.analysis?.sentiment==='bullish'?'#166534':top.analysis?.sentiment==='bearish'?'#991b1b':'#374151',color:'white',padding:'2px 10px',borderRadius:'99px',fontSize:'0.75rem',fontWeight:600}}>{em} {(top.analysis?.sentiment||'').toUpperCase()}</span>
-                          {top.analysis?.impact==='high' && <span style={{background:'rgba(239,68,68,0.15)',color:'#f87171',padding:'2px 10px',borderRadius:'99px',fontSize:'0.72rem',fontWeight:600}}>⚠️ HIGH IMPACT</span>}
-                          <button onClick={()=>setActiveTab('intelligence')} style={{background:'rgba(0,255,136,0.1)',border:'1px solid rgba(0,255,136,0.3)',color:'#4ade80',borderRadius:'6px',padding:'2px 10px',fontSize:'0.75rem',cursor:'pointer',fontWeight:600}}>
+                          <span style={{background:top.analysis?.sentiment==='bullish'?'var(--green-dim)':top.analysis?.sentiment==='bearish'?'var(--red-dim)':'var(--bg-surface)',color:top.analysis?.sentiment==='bullish'?'var(--green)':top.analysis?.sentiment==='bearish'?'var(--red)':'var(--text-dim)',padding:'3px 10px',borderRadius:'99px',fontSize:'0.75rem',fontWeight:600}}>{em} {(top.analysis?.sentiment||'').toUpperCase()}</span>
+                          {top.analysis?.impact==='high' && <span style={{background:'var(--red-dim)',color:'var(--red)',padding:'3px 10px',borderRadius:'99px',fontSize:'0.75rem',fontWeight:600}}>⚠️ HIGH IMPACT</span>}
+                          <button onClick={()=>setActiveTab('intelligence')} style={{background:'var(--accent-glow)',border:'1px solid var(--accent-dim)',color:'var(--accent)',borderRadius:'6px',padding:'3px 10px',fontSize:'0.75rem',cursor:'pointer',fontWeight:600}}>
                             Full analysis →
                           </button>
                         </div>
@@ -2356,9 +2651,9 @@ Respond ONLY with valid JSON:
                     );
                   })() : (
                     <div>
-                      <h2 style={{fontSize:'1.05rem',color:'#f0f9ff',margin:'0 0 0.35rem',fontWeight:700}}>AI-Powered Market Intelligence</h2>
-                      <p style={{color:'#64748b',fontSize:'0.85rem',margin:'0 0 0.75rem'}}>News analysis, OI signals, strategy ideas — all AI-powered.</p>
-                      <button onClick={()=>setActiveTab('intelligence')} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem'}}>
+                      <h3 style={{margin:'0 0 0.4rem',color:'var(--text-main)'}}>AI-Powered Market Intelligence</h3>
+                      <p style={{fontSize:'0.875rem',margin:'0 0 0.75rem'}}>News analysis, OI signals, strategy ideas — all AI-powered.</p>
+                      <button onClick={()=>setActiveTab('intelligence')} className="btn-primary">
                         Open Market Intelligence →
                       </button>
                     </div>
@@ -2367,32 +2662,32 @@ Respond ONLY with valid JSON:
 
                 {/* RIGHT: Market Pulse */}
                 <div style={{display:'flex',flexDirection:'column',gap:'0.5rem',minWidth:'200px'}}>
-                  <div style={{fontSize:'0.68rem',color:'#64748b',fontWeight:700,letterSpacing:'0.07em',textTransform:'uppercase'}}>Market Pulse</div>
+                  <div style={{fontSize:'0.75rem',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:'0.25rem'}}>Market Pulse</div>
                   {[
-                    {label:'NIFTY',     val:marketData.nifty.value,     chg:marketData.nifty.change},
-                    {label:'BANKNIFTY', val:marketData.bankNifty.value,  chg:marketData.bankNifty.change},
-                    {label:'VIX',       val:marketData.nifty?.vix,       chg:null, vix:true},
-                    {label:'PCR',       val:pcrData?.pcr?.toFixed(2),    chg:null, pcr:true},
+                    {label:'NIFTY',     val:marketData.nifty.value,    chg:marketData.nifty.change},
+                    {label:'BANKNIFTY', val:marketData.bankNifty.value, chg:marketData.bankNifty.change},
+                    {label:'VIX',       val:marketData.nifty?.vix,      chg:null, vix:true},
+                    {label:'PCR',       val:pcrData?.pcr?.toFixed(2),   chg:null, pcr:true},
                   ].map((r,i)=>{
                     const pos = (r.chg||0) >= 0;
-                    const vixCol = r.vix ? ((r.val||14)<13?'#4ade80':(r.val||14)>18?'#f87171':'#fbbf24') : null;
-                    const pcrCol = r.pcr ? (r.val>1.2?'#4ade80':r.val<0.8?'#f87171':'#fbbf24') : null;
-                    const valCol = vixCol || pcrCol || (pos?'#4ade80':'#f87171');
-                    const pts = r.val&&r.chg ? Math.abs(((r.chg/100)*r.val)/(1+r.chg/100)).toFixed(0) : null;
+                    const vixCol = r.vix ? ((r.val||14)<13?'var(--green)':(r.val||14)>18?'var(--red)':'var(--yellow)') : null;
+                    const pcrCol = r.pcr ? (r.val>1.2?'var(--green)':r.val<0.8?'var(--red)':'var(--yellow)') : null;
+                    const chgCol = pos ? 'var(--green)' : 'var(--red)';
+                    const valCol = vixCol || pcrCol || chgCol;
                     return (
-                      <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'rgba(255,255,255,0.04)',borderRadius:'8px',padding:'0.4rem 0.75rem'}}>
-                        <span style={{fontSize:'0.75rem',color:'#94a3b8',fontWeight:600}}>{r.label}</span>
+                      <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'var(--bg-surface)',borderRadius:'var(--radius-sm)',padding:'0.4rem 0.75rem',gap:'0.75rem'}}>
+                        <span style={{fontSize:'0.875rem',color:'var(--text-dim)',fontWeight:600}}>{r.label}</span>
                         <div style={{textAlign:'right'}}>
-                          <span style={{fontSize:'0.92rem',fontWeight:800,color:r.chg!=null?valCol:'#f0f9ff'}}>{r.val?.toLocaleString() || '—'}</span>
-                          {r.chg!=null && <span style={{fontSize:'0.7rem',color:valCol,marginLeft:'5px'}}>{pos?'▲':'▼'}{Math.abs(r.chg||0).toFixed(2)}%{pts&&r.chg!==0?' ('+pts+'pts)':''}</span>}
-                          {r.pcr && <span style={{fontSize:'0.68rem',color:pcrCol,marginLeft:'5px',fontWeight:700}}>{r.val>1.2?'BULL':r.val<0.8?'BEAR':'NEUT'}</span>}
+                          <span style={{fontSize:'0.95rem',fontWeight:800,color:r.chg!=null?chgCol:'var(--text-main)'}}>{r.val?.toLocaleString() || '—'}</span>
+                          {r.chg!=null && <span style={{fontSize:'0.75rem',color:chgCol,marginLeft:'5px'}}>{pos?'▲':'▼'}{Math.abs(r.chg||0).toFixed(2)}%</span>}
+                          {r.pcr && <span style={{fontSize:'0.75rem',color:pcrCol,marginLeft:'5px',fontWeight:700}}>{r.val>1.2?'BULL':r.val<0.8?'BEAR':'NEUT'}</span>}
+                          {r.vix && <span style={{fontSize:'0.75rem',color:vixCol,marginLeft:'5px'}}>{(r.val||14)<13?'LOW':(r.val||14)>18?'HIGH':'MOD'}</span>}
                         </div>
                       </div>
                     );
                   })}
-                  <button onClick={()=>{fetchLivePrices();}} disabled={isPriceLoading}
-                    style={{background:'transparent',border:'1px solid #1e3a5f',color:'#4ade80',borderRadius:'6px',padding:'0.3rem',fontSize:'0.72rem',cursor:'pointer',textAlign:'center',fontWeight:600}}>
-                    {isPriceLoading ? '…' : '⟳ Refresh'}
+                  <button onClick={()=>fetchLivePrices()} disabled={isPriceLoading} className="btn-secondary" style={{marginTop:'0.25rem',fontSize:'0.875rem',padding:'0.3rem'}}>
+                    {isPriceLoading ? '⟳ Loading…' : '⟳ Refresh'}
                   </button>
                 </div>
 
@@ -2405,7 +2700,7 @@ Respond ONLY with valid JSON:
             <div className="panel" style={{marginBottom:'1.5rem'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem'}}>
                 <h3 style={{margin:0}}>📊 Track Your Indices &amp; Stocks</h3>
-                <button onClick={fetchLivePrices} disabled={isPriceLoading} style={{background:'transparent',border:'1px solid var(--border-light)',color:'var(--accent)',borderRadius:'6px',padding:'0.3rem 0.85rem',fontSize:'0.8rem',cursor:'pointer',fontFamily:'inherit'}}>
+                <button onClick={fetchLivePrices} disabled={isPriceLoading} style={{background:'transparent',border:'1px solid var(--border-light)',color:'var(--accent)',borderRadius:'6px',padding:'0.3rem 0.85rem',fontSize:'0.875rem',cursor:'pointer',fontFamily:'inherit'}}>
                   {isPriceLoading ? '⟳ Loading…' : '🔄 Refresh'}
                 </button>
               </div>
@@ -2429,7 +2724,7 @@ Respond ONLY with valid JSON:
                         <option key={n} value={n}>{n}</option>
                       ))}
                     </select>
-                    <span style={{fontSize:'0.78rem',color:'var(--text-muted)'}}>Click × on a card to remove</span>
+                    <span style={{fontSize:'0.875rem',color:'var(--text-muted)'}}>Click × on a card to remove</span>
                   </div>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:'0.75rem'}}>
                     {watchNSE.length===0 && <div style={{color:'var(--text-muted)',fontSize:'0.875rem',gridColumn:'1/-1'}}>Add indices from dropdown above.</div>}
@@ -2443,20 +2738,20 @@ Respond ONLY with valid JSON:
                       return (
                         <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+border,borderRadius:'12px',padding:'0.9rem 1rem',position:'relative'}}>
                           <button onClick={()=>setWatchNSE(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.35rem',right:'0.5rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
-                          <div style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.3rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
-                          <div style={{fontSize:'1.3rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em'}}>{val!=null ? val.toLocaleString() : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>Loading…</span>}</div>
+                          <div style={{fontSize:'0.75rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.3rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
+                          <div style={{fontSize:'1.25rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em'}}>{val!=null ? val.toLocaleString() : <span style={{fontSize:'0.875rem',color:'var(--text-muted)'}}>Loading…</span>}</div>
                           {val!=null && (
                             <div style={{marginTop:'0.3rem'}}>
                               {chg!=null ? (
                                 <div style={{display:'flex',gap:'0.4rem',alignItems:'baseline'}}>
-                                  <span style={{fontSize:'0.88rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
-                                  {pts && <span style={{fontSize:'0.78rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}{pts} pts</span>}
+                                  <span style={{fontSize:'0.875rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
+                                  {pts && <span style={{fontSize:'0.875rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}{pts} pts</span>}
                                 </div>
-                              ) : <div style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>—</div>}
-                              {prev && <div style={{fontSize:'0.65rem',color:'var(--text-muted)',marginTop:'0.1rem'}}>Prev: {prev.toLocaleString()}</div>}
+                              ) : <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>—</div>}
+                              {prev && <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.1rem'}}>Prev: {prev.toLocaleString()}</div>}
                             </div>
                           )}
-                          {val==null && <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>}
+                          {val==null && <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>}
                         </div>
                       );
                     })}
@@ -2474,7 +2769,7 @@ Respond ONLY with valid JSON:
                         <option key={n} value={n}>{n}</option>
                       ))}
                     </select>
-                    <span style={{fontSize:'0.78rem',color:'var(--text-muted)'}}>Click × on a card to remove</span>
+                    <span style={{fontSize:'0.875rem',color:'var(--text-muted)'}}>Click × on a card to remove</span>
                   </div>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:'0.75rem'}}>
                     {watchBSE.length===0 && <div style={{color:'var(--text-muted)',fontSize:'0.875rem',gridColumn:'1/-1'}}>Add indices from dropdown above.</div>}
@@ -2488,20 +2783,20 @@ Respond ONLY with valid JSON:
                       return (
                         <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+border,borderRadius:'12px',padding:'0.9rem 1rem',position:'relative'}}>
                           <button onClick={()=>setWatchBSE(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.35rem',right:'0.5rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
-                          <div style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.3rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
-                          <div style={{fontSize:'1.3rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em'}}>{val!=null ? val.toLocaleString() : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>Loading…</span>}</div>
+                          <div style={{fontSize:'0.75rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.3rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
+                          <div style={{fontSize:'1.25rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em'}}>{val!=null ? val.toLocaleString() : <span style={{fontSize:'0.875rem',color:'var(--text-muted)'}}>Loading…</span>}</div>
                           {val!=null && (
                             <div style={{marginTop:'0.3rem'}}>
                               {chg!=null ? (
                                 <div style={{display:'flex',gap:'0.4rem',alignItems:'baseline'}}>
-                                  <span style={{fontSize:'0.88rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
-                                  {pts && <span style={{fontSize:'0.78rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}{pts} pts</span>}
+                                  <span style={{fontSize:'0.875rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
+                                  {pts && <span style={{fontSize:'0.875rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}{pts} pts</span>}
                                 </div>
-                              ) : <div style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>—</div>}
-                              {prev && <div style={{fontSize:'0.65rem',color:'var(--text-muted)',marginTop:'0.1rem'}}>Prev: {prev.toLocaleString()}</div>}
+                              ) : <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>—</div>}
+                              {prev && <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.1rem'}}>Prev: {prev.toLocaleString()}</div>}
                             </div>
                           )}
-                          {val==null && <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>}
+                          {val==null && <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>}
                         </div>
                       );
                     })}
@@ -2519,7 +2814,7 @@ Respond ONLY with valid JSON:
                         <option key={n} value={n}>{n}</option>
                       ))}
                     </select>
-                    <span style={{fontSize:'0.78rem',color:'var(--text-muted)'}}>Click × on a card to remove</span>
+                    <span style={{fontSize:'0.875rem',color:'var(--text-muted)'}}>Click × on a card to remove</span>
                   </div>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:'0.85rem'}}>
                     {watchStocks.length===0 && <div style={{color:'var(--text-muted)',fontSize:'0.875rem',gridColumn:'1/-1'}}>Add stocks from dropdown above.</div>}
@@ -2539,33 +2834,33 @@ Respond ONLY with valid JSON:
                           <button onClick={()=>setWatchStocks(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.4rem',right:'0.6rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
                           {/* Stock name + price */}
                           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'0.5rem',paddingRight:'1rem'}}>
-                            <div style={{fontSize:'0.8rem',color:'var(--text-dim)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
-                            {val!=null&&chg!=null && <div style={{fontSize:'0.72rem',background:pos?'rgba(74,222,128,0.12)':'rgba(248,113,113,0.12)',color:pos?'var(--green)':'var(--red)',padding:'1px 6px',borderRadius:'4px',fontWeight:700}}>{pos?'▲':'▼'}{Math.abs(chg).toFixed(2)}%</div>}
+                            <div style={{fontSize:'0.875rem',color:'var(--text-dim)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
+                            {val!=null&&chg!=null && <div style={{fontSize:'0.75rem',background:pos?'rgba(74,222,128,0.12)':'rgba(248,113,113,0.12)',color:pos?'var(--green)':'var(--red)',padding:'1px 6px',borderRadius:'4px',fontWeight:700}}>{pos?'▲':'▼'}{Math.abs(chg).toFixed(2)}%</div>}
                           </div>
-                          <div style={{fontSize:'1.5rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em',marginBottom:'0.2rem'}}>
-                            {val!=null ? '₹'+val.toLocaleString() : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>Loading…</span>}
+                          <div style={{fontSize:'1.4rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em',marginBottom:'0.2rem'}}>
+                            {val!=null ? '₹'+val.toLocaleString() : <span style={{fontSize:'0.875rem',color:'var(--text-muted)'}}>Loading…</span>}
                           </div>
                           <div style={{marginBottom:'0.6rem'}}>
                             {val!=null&&chg!=null ? (
-                              <span style={{fontSize:'0.78rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}₹{pts} pts vs prev close {prev?'('+prev.toLocaleString()+')':''}</span>
+                              <span style={{fontSize:'0.875rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}₹{pts} pts vs prev close {prev?'('+prev.toLocaleString()+')':''}</span>
                             ) : val!=null ? (
-                              <span style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>Click Refresh for change data</span>
+                              <span style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>Click Refresh for change data</span>
                             ) : null}
                           </div>
                           {/* AI Report Card */}
                           <div style={{borderTop:'1px solid var(--border)',paddingTop:'0.5rem',marginTop:'0.25rem'}}>
-                            <div style={{fontSize:'0.65rem',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.05em',marginBottom:'0.3rem'}}>🤖 AI SIGNAL</div>
+                            <div style={{fontSize:'0.75rem',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.05em',marginBottom:'0.3rem'}}>🤖 AI SIGNAL</div>
                             {newsHit ? (
                               <div>
                                 <div style={{display:'flex',alignItems:'center',gap:'0.35rem',marginBottom:'0.25rem'}}>
-                                  <span style={{fontSize:'0.78rem',fontWeight:700,color:sentColor}}>{sentEmoji} {(sentiment||'neutral').toUpperCase()}</span>
-                                  {newsHit.analysis?.impact==='high' && <span style={{fontSize:'0.65rem',background:'rgba(239,68,68,0.12)',color:'var(--red)',padding:'1px 5px',borderRadius:'4px',fontWeight:600}}>HIGH IMPACT</span>}
+                                  <span style={{fontSize:'0.875rem',fontWeight:700,color:sentColor}}>{sentEmoji} {(sentiment||'neutral').toUpperCase()}</span>
+                                  {newsHit.analysis?.impact==='high' && <span style={{fontSize:'0.75rem',background:'rgba(239,68,68,0.12)',color:'var(--red)',padding:'1px 5px',borderRadius:'4px',fontWeight:600}}>HIGH IMPACT</span>}
                                 </div>
                                 <div style={{fontSize:'0.75rem',color:'var(--text-dim)',lineHeight:1.4}}>
                                   {newsHit.analysis?.keyInsight ? newsHit.analysis.keyInsight.slice(0,80)+'…' : newsHit.title.slice(0,70)+'…'}
                                 </div>
                                 {newsHit.analysis?.tradingIdea?.strategy && (
-                                  <div style={{fontSize:'0.7rem',color:'var(--accent)',marginTop:'0.3rem',fontWeight:600}}>Strategy: {newsHit.analysis.tradingIdea.strategy}</div>
+                                  <div style={{fontSize:'0.75rem',color:'var(--accent)',marginTop:'0.3rem',fontWeight:600}}>Strategy: {newsHit.analysis.tradingIdea.strategy}</div>
                                 )}
                               </div>
                             ) : (
@@ -2597,7 +2892,7 @@ Respond ONLY with valid JSON:
                     </div>
                     <div style={{textAlign:'right'}}>
                       <div style={{fontSize:'0.9rem',fontWeight:700,color:col}}>{isGainer?'▲':'▼'} {Math.abs(s.change).toFixed(2)}%</div>
-                      <div style={{fontSize:'0.72rem',color:col,opacity:0.8}}>{isGainer?'+':'−'}{'₹'+pts+' pts'}</div>
+                      <div style={{fontSize:'0.75rem',color:col,opacity:0.8}}>{isGainer?'+':'−'}{'₹'+pts+' pts'}</div>
                     </div>
                   </div>
                 );
@@ -2605,15 +2900,15 @@ Respond ONLY with valid JSON:
               return (
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem',marginBottom:'1.5rem'}}>
                   <div style={{background:'var(--bg-card)',border:'1px solid rgba(74,222,128,0.2)',borderRadius:'16px',padding:'1.25rem'}}>
-                    <div style={{fontSize:'0.8rem',fontWeight:700,color:'var(--green)',letterSpacing:'0.06em',marginBottom:'0.85rem',textTransform:'uppercase'}}>🚀 Top Gainers</div>
+                    <div style={{fontSize:'0.875rem',fontWeight:700,color:'var(--green)',letterSpacing:'0.06em',marginBottom:'0.85rem',textTransform:'uppercase'}}>🚀 Top Gainers</div>
                     {withData.length===0 ? (
-                      <div style={{color:'var(--text-muted)',fontSize:'0.85rem',padding:'0.5rem 0'}}>Click Refresh above to load data</div>
+                      <div style={{color:'var(--text-muted)',fontSize:'0.875rem',padding:'0.5rem 0'}}>Click Refresh above to load data</div>
                     ) : gainers.map(s=>renderRow(s,true))}
                   </div>
                   <div style={{background:'var(--bg-card)',border:'1px solid rgba(248,113,113,0.2)',borderRadius:'16px',padding:'1.25rem'}}>
-                    <div style={{fontSize:'0.8rem',fontWeight:700,color:'var(--red)',letterSpacing:'0.06em',marginBottom:'0.85rem',textTransform:'uppercase'}}>📉 Top Losers</div>
+                    <div style={{fontSize:'0.875rem',fontWeight:700,color:'var(--red)',letterSpacing:'0.06em',marginBottom:'0.85rem',textTransform:'uppercase'}}>📉 Top Losers</div>
                     {withData.length===0 ? (
-                      <div style={{color:'var(--text-muted)',fontSize:'0.85rem',padding:'0.5rem 0'}}>Click Refresh above to load data</div>
+                      <div style={{color:'var(--text-muted)',fontSize:'0.875rem',padding:'0.5rem 0'}}>Click Refresh above to load data</div>
                     ) : losers.map(s=>renderRow(s,false))}
                   </div>
                 </div>
@@ -2622,10 +2917,7 @@ Respond ONLY with valid JSON:
 
                         {/* Market data → go to Markets tab */}
 
-            </div>{/* end home content wrapper */}
-
-
-                        {/* ══ 6 INSIGHT CARDS ══ */}
+            {/* ══ 6 INSIGHT CARDS ══ */}
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:'1rem',marginBottom:'2rem'}}>
 
               {/* CARD 1 — EXPIRY COUNTDOWN */}
@@ -2646,7 +2938,7 @@ Respond ONLY with valid JSON:
                   {sym:'MONTHLY', label:'Monthly Expiry',  d:getNext(4), col:'#c084fc'},
                 ];
                 return (
-                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'16px',padding:'1.25rem'}}>
+                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'1.25rem'}}>
                     <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'1rem'}}>
                       <span>⏳</span>
                       <span style={{fontWeight:700,fontSize:'0.95rem'}}>Expiry Countdown</span>
@@ -2658,16 +2950,16 @@ Respond ONLY with valid JSON:
                       const mins = Math.floor((ms % 3600000) / 60000);
                       const urgent = days < 1;
                       return (
-                        <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.5rem 0.75rem',background:'var(--bg-surface)',borderRadius:'8px',border:'1px solid var(--border)',marginBottom:'0.4rem'}}>
+                        <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.5rem 0.75rem',background:'var(--bg-surface)',borderRadius:'var(--radius-sm)',border:'1px solid var(--border)',marginBottom:'0.4rem'}}>
                           <div>
-                            <div style={{fontSize:'0.78rem',fontWeight:700,color:r.col}}>{r.sym}</div>
-                            <div style={{fontSize:'0.68rem',color:'var(--text-muted)'}}>{r.label}</div>
+                            <div style={{fontSize:'0.875rem',fontWeight:700,color:r.col}}>{r.sym}</div>
+                            <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{r.label}</div>
                           </div>
                           <div style={{textAlign:'right'}}>
-                            <div style={{fontSize:'1.05rem',fontWeight:800,color:urgent?'#f87171':r.col}}>
+                            <div style={{fontSize:'1.1rem',fontWeight:800,color:urgent?'#f87171':r.col}}>
                               {days > 0 ? (days + 'd ' + hrs + 'h') : (hrs + 'h ' + mins + 'm')}
                             </div>
-                            {urgent && <div style={{fontSize:'0.65rem',color:'#f87171',fontWeight:700}}>TODAY</div>}
+                            {urgent && <div style={{fontSize:'0.75rem',color:'var(--red)',fontWeight:700}}>TODAY</div>}
                           </div>
                         </div>
                       );
@@ -2677,35 +2969,35 @@ Respond ONLY with valid JSON:
               })()}
 
               {/* CARD 2 — F&amp;O BAN LIST */}
-              <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'16px',padding:'1.25rem'}}>
+              <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'1.25rem'}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem'}}>
                   <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
                     <span>🚫</span>
                     <span style={{fontWeight:700,fontSize:'0.95rem'}}>F&amp;O Ban List</span>
                   </div>
-                  <button onClick={fetchBanList} style={{background:'none',border:'1px solid var(--border)',color:'var(--accent)',borderRadius:'5px',padding:'2px 8px',fontSize:'0.72rem',cursor:'pointer'}}>
+                  <button onClick={fetchBanList} style={{background:'none',border:'1px solid var(--border)',color:'var(--accent)',borderRadius:'5px',padding:'2px 8px',fontSize:'0.75rem',cursor:'pointer'}}>
                     {banLoading ? '…' : '↻ Refresh'}
                   </button>
                 </div>
                 {banLoading ? (
-                  <div style={{color:'var(--text-muted)',fontSize:'0.85rem'}}>Fetching from NSE…</div>
+                  <div style={{color:'var(--text-muted)',fontSize:'0.875rem'}}>Fetching from NSE…</div>
                 ) : banList.length > 0 ? (
                   <div>
-                    <div style={{fontSize:'0.7rem',color:'var(--text-muted)',marginBottom:'0.5rem'}}>Stocks in ban — no fresh F&amp;O positions allowed</div>
+                    <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginBottom:'0.5rem'}}>Stocks in ban — no fresh F&amp;O positions allowed</div>
                     <div style={{display:'flex',flexWrap:'wrap',gap:'0.4rem'}}>
                       {banList.map((s,i) => (
-                        <span key={i} style={{background:'rgba(248,113,113,0.12)',border:'1px solid rgba(248,113,113,0.3)',color:'#f87171',borderRadius:'6px',padding:'3px 8px',fontSize:'0.78rem',fontWeight:700}}>{s}</span>
+                        <span key={i} style={{background:'var(--red-dim)',border:'1px solid rgba(248,113,113,0.3)',color:'var(--red)',borderRadius:'6px',padding:'3px 8px',fontSize:'0.875rem',fontWeight:700}}>{s}</span>
                       ))}
                     </div>
                   </div>
                 ) : banFetched ? (
                   <div style={{textAlign:'center',padding:'0.75rem'}}>
                     <div style={{fontSize:'1.4rem'}}>✅</div>
-                    <div style={{fontSize:'0.85rem',color:'var(--green)',fontWeight:600}}>No stocks in ban today</div>
-                    <div style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>All F&amp;O stocks tradeable</div>
+                    <div style={{fontSize:'0.875rem',color:'var(--green)',fontWeight:600}}>No stocks in ban today</div>
+                    <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>All F&amp;O stocks tradeable</div>
                   </div>
                 ) : (
-                  <div style={{color:'var(--text-muted)',fontSize:'0.85rem'}}>Click Refresh to load…</div>
+                  <div style={{color:'var(--text-muted)',fontSize:'0.875rem'}}>Click Refresh to load…</div>
                 )}
               </div>
 
@@ -2731,7 +3023,7 @@ Respond ONLY with valid JSON:
                 ];
                 const activeZone = Math.min(4, Math.floor(score / 20));
                 return (
-                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'16px',padding:'1.25rem'}}>
+                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'1.25rem'}}>
                     <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'1rem'}}>
                       <span>🎯</span>
                       <span style={{fontWeight:700,fontSize:'0.95rem'}}>Market Mood-O-Meter</span>
@@ -2740,21 +3032,21 @@ Respond ONLY with valid JSON:
                       <div style={{fontSize:'2rem',fontWeight:900,color:col}}>{label}</div>
                       <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.2rem'}}>Score: {Math.round(score)}/100 · VIX {vix} · PCR {pcr}</div>
                     </div>
-                    <div style={{display:'flex',borderRadius:'8px',overflow:'hidden',height:'12px',marginBottom:'0.75rem'}}>
+                    <div style={{display:'flex',borderRadius:'var(--radius-sm)',overflow:'hidden',height:'12px',marginBottom:'0.75rem'}}>
                       {zones.map((z,i) => (
                         <div key={i} style={{flex:1,background:z.col,opacity:i===activeZone?1:0.3,transition:'opacity 0.3s'}}/>
                       ))}
                     </div>
                     <div style={{display:'flex',justifyContent:'space-between'}}>
                       {zones.map((z,i) => (
-                        <div key={i} style={{fontSize:'0.62rem',color:i===activeZone?z.col:'var(--text-muted)',fontWeight:i===activeZone?700:400,textAlign:'center',flex:1}}>{z.label}</div>
+                        <div key={i} style={{fontSize:'0.75rem',color:i===activeZone?z.col:'var(--text-muted)',fontWeight:i===activeZone?700:400,textAlign:'center',flex:1}}>{z.label}</div>
                       ))}
                     </div>
                     <div style={{marginTop:'0.75rem',display:'flex',gap:'0.5rem',justifyContent:'center',flexWrap:'wrap'}}>
                       {[['VIX',vix,'#f87171'],['PCR',pcr,'#4ade80'],['Score',Math.round(score),'#60a5fa']].map(([k,v,c],i)=>(
                         <div key={i} style={{background:'var(--bg-surface)',borderRadius:'6px',padding:'0.3rem 0.6rem',textAlign:'center'}}>
-                          <div style={{fontSize:'0.65rem',color:'var(--text-muted)'}}>{k}</div>
-                          <div style={{fontSize:'0.88rem',fontWeight:700,color:c}}>{v}</div>
+                          <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{k}</div>
+                          <div style={{fontSize:'0.875rem',fontWeight:700,color:c}}>{v}</div>
                         </div>
                       ))}
                     </div>
@@ -2775,26 +3067,26 @@ Respond ONLY with valid JSON:
                 });
                 const pnlPos = totalPnl >= 0;
                 return (
-                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'16px',padding:'1.25rem'}}>
+                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'1.25rem'}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem'}}>
                       <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
                         <span>💼</span>
                         <span style={{fontWeight:700,fontSize:'0.95rem'}}>Open Positions</span>
                       </div>
-                      <button onClick={() => setActiveTab('journal')} style={{background:'none',border:'1px solid var(--border)',color:'var(--accent)',borderRadius:'5px',padding:'2px 10px',fontSize:'0.72rem',cursor:'pointer'}}>Journal →</button>
+                      <button onClick={() => setActiveTab('journal')} style={{background:'none',border:'1px solid var(--border)',color:'var(--accent)',borderRadius:'5px',padding:'2px 10px',fontSize:'0.75rem',cursor:'pointer'}}>Journal →</button>
                     </div>
                     {openTrades.length === 0 ? (
                       <div style={{textAlign:'center',padding:'0.75rem',color:'var(--text-muted)'}}>
                         <div style={{fontSize:'1.4rem',marginBottom:'0.3rem'}}>📭</div>
-                        <div style={{fontSize:'0.85rem'}}>No open positions</div>
-                        <div style={{fontSize:'0.72rem',marginTop:'0.2rem'}}>Add trades in Journal tab</div>
+                        <div style={{fontSize:'0.875rem'}}>No open positions</div>
+                        <div style={{fontSize:'0.75rem',marginTop:'0.2rem'}}>Add trades in Journal tab</div>
                       </div>
                     ) : (
                       <div>
                         <div style={{background:pnlPos?'rgba(74,222,128,0.08)':'rgba(248,113,113,0.08)',border:'1px solid '+(pnlPos?'rgba(74,222,128,0.2)':'rgba(248,113,113,0.2)'),borderRadius:'10px',padding:'0.75rem',marginBottom:'0.75rem',textAlign:'center'}}>
-                          <div style={{fontSize:'0.7rem',color:'var(--text-muted)',marginBottom:'0.2rem'}}>UNREALISED P&amp;L</div>
-                          <div style={{fontSize:'1.6rem',fontWeight:800,color:pnlPos?'var(--green)':'var(--red)'}}>{pnlPos?'+':'-'}&#8377;{Math.abs(Math.round(totalPnl)).toLocaleString()}</div>
-                          <div style={{fontSize:'0.7rem',color:'var(--text-muted)'}}>{openTrades.length} open {openTrades.length === 1 ? 'position' : 'positions'}</div>
+                          <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginBottom:'0.2rem'}}>UNREALISED P&amp;L</div>
+                          <div style={{fontSize:'1.4rem',fontWeight:800,color:pnlPos?'var(--green)':'var(--red)'}}>{pnlPos?'+':'-'}&#8377;{Math.abs(Math.round(totalPnl)).toLocaleString()}</div>
+                          <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{openTrades.length} open {openTrades.length === 1 ? 'position' : 'positions'}</div>
                         </div>
                         <div style={{display:'flex',flexDirection:'column',gap:'0.4rem',maxHeight:'150px',overflowY:'auto'}}>
                           {openTrades.slice(0,5).map((t,i) => {
@@ -2805,10 +3097,10 @@ Respond ONLY with valid JSON:
                             return (
                               <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.35rem 0.5rem',background:'var(--bg-surface)',borderRadius:'6px'}}>
                                 <div>
-                                  <span style={{fontSize:'0.8rem',fontWeight:700}}>{t.symbol} {t.type}</span>
-                                  <span style={{fontSize:'0.7rem',color:t.action==='BUY'?'var(--green)':'var(--red)',marginLeft:'6px'}}>{t.action}</span>
+                                  <span style={{fontSize:'0.875rem',fontWeight:700}}>{t.symbol} {t.type}</span>
+                                  <span style={{fontSize:'0.75rem',color:t.action==='BUY'?'var(--green)':'var(--red)',marginLeft:'6px'}}>{t.action}</span>
                                 </div>
-                                <span style={{fontSize:'0.8rem',fontWeight:700,color:pnl==null?'var(--text-muted)':pnl>=0?'var(--green)':'var(--red)'}}>
+                                <span style={{fontSize:'0.875rem',fontWeight:700,color:pnl==null?'var(--text-muted)':pnl>=0?'var(--green)':'var(--red)'}}>
                                   {pnl == null ? 'No LTP' : ((pnl >= 0 ? '+' : '-') + '&#8377;' + Math.abs(Math.round(pnl)).toLocaleString())}
                                 </span>
                               </div>
@@ -2839,7 +3131,7 @@ Respond ONLY with valid JSON:
                  .sort((a,b) => a.days - b.days)
                  .slice(0, 6);
                 return (
-                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'16px',padding:'1.25rem'}}>
+                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'1.25rem'}}>
                     <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'1rem'}}>
                       <span>📅</span>
                       <span style={{fontWeight:700,fontSize:'0.95rem'}}>Economic Calendar</span>
@@ -2848,12 +3140,12 @@ Respond ONLY with valid JSON:
                       <div key={i} style={{display:'flex',alignItems:'center',gap:'0.75rem',padding:'0.45rem 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
                         <span style={{fontSize:'1.1rem',flexShrink:0}}>{e.icon}</span>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:'0.82rem',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.label}</div>
-                          <div style={{fontSize:'0.68rem',color:'var(--text-muted)'}}>{e.date.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</div>
+                          <div style={{fontSize:'0.875rem',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.label}</div>
+                          <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{e.date.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</div>
                         </div>
                         <div style={{textAlign:'right',flexShrink:0}}>
-                          <div style={{fontSize:'0.72rem',fontWeight:700,color:e.impact==='HIGH'?'#f87171':'#fbbf24'}}>{e.impact}</div>
-                          <div style={{fontSize:'0.7rem',color:e.days<=0?'#f87171':e.days<=3?'#fbbf24':'var(--text-muted)',fontWeight:e.days<=1?700:400}}>
+                          <div style={{fontSize:'0.75rem',fontWeight:700,color:e.impact==='HIGH'?'#f87171':'#fbbf24'}}>{e.impact}</div>
+                          <div style={{fontSize:'0.75rem',color:e.days<=0?'#f87171':e.days<=3?'#fbbf24':'var(--text-muted)',fontWeight:e.days<=1?700:400}}>
                             {e.days <= 0 ? 'TODAY' : e.days === 1 ? 'Tomorrow' : (e.days + 'd away')}
                           </div>
                         </div>
@@ -2885,24 +3177,24 @@ Respond ONLY with valid JSON:
                   .sort((a,b) => Math.abs(b.chg) - Math.abs(a.chg))
                   .slice(0, 6);
                 return (
-                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'16px',padding:'1.25rem'}}>
+                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'1.25rem'}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem'}}>
                       <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
                         <span>🔥</span>
                         <span style={{fontWeight:700,fontSize:'0.95rem'}}>Unusual OI Activity</span>
                       </div>
-                      <span style={{fontSize:'0.68rem',color:'var(--text-muted)'}}>&#8805;15% OI change</span>
+                      <span style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>&#8805;15% OI change</span>
                     </div>
                     {liveOptionChain.length === 0 ? (
                       <div style={{textAlign:'center',padding:'1rem',color:'var(--text-muted)'}}>
-                        <div style={{fontSize:'0.85rem',marginBottom:'0.5rem'}}>Load option chain in Markets tab first</div>
-                        <button onClick={() => setActiveTab('markets')} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'5px',padding:'4px 12px',fontSize:'0.78rem',cursor:'pointer'}}>Go to Markets</button>
+                        <div style={{fontSize:'0.875rem',marginBottom:'0.5rem'}}>Load option chain in Markets tab first</div>
+                        <button onClick={() => setActiveTab('markets')} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'5px',padding:'4px 12px',fontSize:'0.875rem',cursor:'pointer'}}>Go to Markets</button>
                       </div>
                     ) : unusual.length === 0 ? (
-                      <div style={{textAlign:'center',padding:'1rem',color:'var(--text-muted)',fontSize:'0.85rem'}}>
-                        <div style={{fontSize:'1.3rem',marginBottom:'0.3rem'}}>😴</div>
+                      <div style={{textAlign:'center',padding:'1rem',color:'var(--text-muted)',fontSize:'0.875rem'}}>
+                        <div style={{fontSize:'1.25rem',marginBottom:'0.3rem'}}>😴</div>
                         <div>No unusual activity yet</div>
-                        <div style={{fontSize:'0.72rem',marginTop:'0.2rem'}}>Updates every 10s with option chain</div>
+                        <div style={{fontSize:'0.75rem',marginTop:'0.2rem'}}>Updates every 10s with option chain</div>
                       </div>
                     ) : (
                       <div style={{display:'flex',flexDirection:'column',gap:'0.45rem'}}>
@@ -2911,14 +3203,14 @@ Respond ONLY with valid JSON:
                           const col   = u.side === 'CE' ? '#f87171' : '#4ade80';
                           const sig   = isUp ? (u.side === 'CE' ? '🚧 Resistance building' : '🛡️ Support building') : (u.side === 'CE' ? '📉 CE unwinding' : '📈 PE unwinding');
                           return (
-                            <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.45rem 0.6rem',background:'var(--bg-surface)',borderRadius:'7px',borderLeft:'3px solid '+col}}>
+                            <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.45rem 0.6rem',background:'var(--bg-surface)',borderRadius:'var(--radius-sm)',borderLeft:'3px solid '+col}}>
                               <div>
-                                <div style={{fontSize:'0.85rem',fontWeight:700}}>{u.strike.toLocaleString()} {u.side}</div>
-                                <div style={{fontSize:'0.7rem',color:'var(--text-muted)'}}>{sig}</div>
+                                <div style={{fontSize:'0.875rem',fontWeight:700}}>{u.strike.toLocaleString()} {u.side}</div>
+                                <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{sig}</div>
                               </div>
                               <div style={{textAlign:'right'}}>
-                                <div style={{fontSize:'0.88rem',fontWeight:700,color:isUp?'var(--green)':'var(--red)'}}>{isUp?'+':''}{u.chg}%</div>
-                                <div style={{fontSize:'0.68rem',color:'var(--text-muted)'}}>{u.oi >= 100000 ? ((u.oi/100000).toFixed(1)+'L') : ((u.oi/1000).toFixed(0)+'K')} OI</div>
+                                <div style={{fontSize:'0.875rem',fontWeight:700,color:isUp?'var(--green)':'var(--red)'}}>{isUp?'+':''}{u.chg}%</div>
+                                <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{u.oi >= 100000 ? ((u.oi/100000).toFixed(1)+'L') : ((u.oi/1000).toFixed(0)+'K')} OI</div>
                               </div>
                             </div>
                           );
@@ -2930,6 +3222,8 @@ Respond ONLY with valid JSON:
               })()}
 
             </div>{/* end 6 insight cards grid */}
+
+            </div>{/* end home content wrapper */}
           </>
         ) : activeTab === 'single' ? (
           <>
