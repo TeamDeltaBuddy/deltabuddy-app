@@ -2365,28 +2365,34 @@ Respond ONLY with valid JSON:
                   )}
                 </div>
 
-                {/* RIGHT: Market Pulse (compact) */}
-                <div style={{display:'flex',flexDirection:'column',gap:'0.4rem',minWidth:'170px'}}>
-                  <div style={{fontSize:'0.68rem',color:'#64748b',fontWeight:700,marginBottom:'0.2rem',letterSpacing:'0.07em',textTransform:'uppercase'}}>Market Pulse</div>
+                {/* RIGHT: Market Pulse */}
+                <div style={{display:'flex',flexDirection:'column',gap:'0.5rem',minWidth:'200px'}}>
+                  <div style={{fontSize:'0.68rem',color:'#64748b',fontWeight:700,letterSpacing:'0.07em',textTransform:'uppercase'}}>Market Pulse</div>
                   {[
-                    ['NIFTY 50',   marketData.nifty.value,    marketData.nifty.change],
-                    ['BANK NIFTY', marketData.bankNifty.value, marketData.bankNifty.change],
-                  ].map(([name,val,chg])=>{
-                    const pts = val&&chg ? Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0) : null;
+                    {label:'NIFTY',     val:marketData.nifty.value,     chg:marketData.nifty.change},
+                    {label:'BANKNIFTY', val:marketData.bankNifty.value,  chg:marketData.bankNifty.change},
+                    {label:'VIX',       val:marketData.nifty?.vix,       chg:null, vix:true},
+                    {label:'PCR',       val:pcrData?.pcr?.toFixed(2),    chg:null, pcr:true},
+                  ].map((r,i)=>{
+                    const pos = (r.chg||0) >= 0;
+                    const vixCol = r.vix ? ((r.val||14)<13?'#4ade80':(r.val||14)>18?'#f87171':'#fbbf24') : null;
+                    const pcrCol = r.pcr ? (r.val>1.2?'#4ade80':r.val<0.8?'#f87171':'#fbbf24') : null;
+                    const valCol = vixCol || pcrCol || (pos?'#4ade80':'#f87171');
+                    const pts = r.val&&r.chg ? Math.abs(((r.chg/100)*r.val)/(1+r.chg/100)).toFixed(0) : null;
                     return (
-                      <div key={name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'rgba(255,255,255,0.04)',borderRadius:'8px',padding:'0.4rem 0.7rem',gap:'0.75rem'}}>
-                        <span style={{fontSize:'0.75rem',color:'#94a3b8',fontWeight:600}}>{name}</span>
+                      <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'rgba(255,255,255,0.04)',borderRadius:'8px',padding:'0.4rem 0.75rem'}}>
+                        <span style={{fontSize:'0.75rem',color:'#94a3b8',fontWeight:600}}>{r.label}</span>
                         <div style={{textAlign:'right'}}>
-                          <div style={{fontSize:'0.9rem',fontWeight:700,color:'#f0f9ff'}}>{(val||0).toLocaleString()}</div>
-                          <div style={{fontSize:'0.7rem',color:chg>=0?'#4ade80':'#f87171',fontWeight:600}}>
-                            {chg>=0?'▲':'▼'}{Math.abs(chg||0).toFixed(2)}% {pts&&chg!==0?`· ${chg>=0?'+':'−'}${pts}`:'' }
-                          </div>
+                          <span style={{fontSize:'0.92rem',fontWeight:800,color:r.chg!=null?valCol:'#f0f9ff'}}>{r.val?.toLocaleString() || '—'}</span>
+                          {r.chg!=null && <span style={{fontSize:'0.7rem',color:valCol,marginLeft:'5px'}}>{pos?'▲':'▼'}{Math.abs(r.chg||0).toFixed(2)}%{pts&&r.chg!==0?' ('+pts+'pts)':''}</span>}
+                          {r.pcr && <span style={{fontSize:'0.68rem',color:pcrCol,marginLeft:'5px',fontWeight:700}}>{r.val>1.2?'BULL':r.val<0.8?'BEAR':'NEUT'}</span>}
                         </div>
                       </div>
                     );
                   })}
-                  <button onClick={fetchLivePrices} style={{marginTop:'0.15rem',background:'transparent',border:'1px solid #1e3a5f',color:'#4ade80',borderRadius:'6px',padding:'0.25rem',fontSize:'0.7rem',cursor:'pointer',textAlign:'center'}}>
-                    🔄 Refresh prices
+                  <button onClick={()=>{fetchLivePrices();}} disabled={isPriceLoading}
+                    style={{background:'transparent',border:'1px solid #1e3a5f',color:'#4ade80',borderRadius:'6px',padding:'0.3rem',fontSize:'0.72rem',cursor:'pointer',textAlign:'center',fontWeight:600}}>
+                    {isPriceLoading ? '…' : '⟳ Refresh'}
                   </button>
                 </div>
 
@@ -2394,55 +2400,7 @@ Respond ONLY with valid JSON:
             </div>
 
 
-            {/* ── MARKET PULSE BAR ── */}
-            <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'0.75rem 1.25rem',marginBottom:'1.25rem',display:'flex',flexWrap:'wrap',alignItems:'center',gap:'1.5rem',justifyContent:'space-between'}}>
-              <div style={{display:'flex',alignItems:'baseline',gap:'0.5rem'}}>
-                <span style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.05em'}}>NIFTY</span>
-                <span style={{fontSize:'1.1rem',fontWeight:800,color:'var(--text-main)'}}>{marketData.nifty?.value?.toLocaleString() || '—'}</span>
-                {marketData.nifty?.change != null && (
-                  <span style={{fontSize:'0.82rem',fontWeight:700,color:marketData.nifty.change>=0?'var(--green)':'var(--red)'}}>
-                    {marketData.nifty.change>=0?'▲':'▼'} {Math.abs(marketData.nifty.change).toFixed(2)}%
-                  </span>
-                )}
-              </div>
-              <div style={{width:'1px',height:'24px',background:'var(--border)',flexShrink:0}}/>
-              <div style={{display:'flex',alignItems:'baseline',gap:'0.5rem'}}>
-                <span style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.05em'}}>BANKNIFTY</span>
-                <span style={{fontSize:'1.1rem',fontWeight:800,color:'var(--text-main)'}}>{marketData.bankNifty?.value?.toLocaleString() || '—'}</span>
-                {marketData.bankNifty?.change != null && (
-                  <span style={{fontSize:'0.82rem',fontWeight:700,color:marketData.bankNifty.change>=0?'var(--green)':'var(--red)'}}>
-                    {marketData.bankNifty.change>=0?'▲':'▼'} {Math.abs(marketData.bankNifty.change).toFixed(2)}%
-                  </span>
-                )}
-              </div>
-              <div style={{width:'1px',height:'24px',background:'var(--border)',flexShrink:0}}/>
-              <div style={{display:'flex',alignItems:'baseline',gap:'0.5rem'}}>
-                <span style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.05em'}}>VIX</span>
-                <span style={{fontSize:'1.1rem',fontWeight:800,color:(marketData.nifty?.vix||14)<13?'var(--green)':(marketData.nifty?.vix||14)>18?'var(--red)':'#fbbf24'}}>
-                  {marketData.nifty?.vix || '—'}
-                </span>
-              </div>
-              <div style={{width:'1px',height:'24px',background:'var(--border)',flexShrink:0}}/>
-              <div style={{display:'flex',alignItems:'baseline',gap:'0.5rem'}}>
-                <span style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.05em'}}>PCR</span>
-                <span style={{fontSize:'1.1rem',fontWeight:800,color:pcrData.pcr>1.2?'var(--green)':pcrData.pcr<0.8?'var(--red)':'#fbbf24'}}>
-                  {pcrData.pcr?.toFixed(2) || '—'}
-                </span>
-                <span style={{fontSize:'0.75rem',fontWeight:600,color:pcrData.pcr>1.2?'var(--green)':pcrData.pcr<0.8?'var(--red)':'#fbbf24'}}>
-                  {pcrData.pcr>1.2?'BULLISH':pcrData.pcr<0.8?'BEARISH':'NEUTRAL'}
-                </span>
-              </div>
-              <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginLeft:'auto'}}>
-                <span style={{fontSize:'0.7rem',color:'var(--text-muted)'}}>
-                  Updated {lastUpdateTime.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}
-                </span>
-                <button onClick={()=>{fetchLivePrices();fetchGlobalIndices();}} disabled={isPriceLoading}
-                  style={{background:isPriceLoading?'var(--bg-surface)':'var(--accent)',color:isPriceLoading?'var(--text-muted)':'#000',border:'none',borderRadius:'6px',padding:'0.3rem 0.75rem',fontSize:'0.75rem',fontWeight:700,cursor:isPriceLoading?'not-allowed':'pointer'}}>
-                  {isPriceLoading ? '…' : '⟳ Refresh'}
-                </button>
-              </div>
-            </div>
-
+            
             {/* ══ TRACK YOUR INDICES & STOCKS ══ */}
             <div className="panel" style={{marginBottom:'1.5rem'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem'}}>
@@ -2666,34 +2624,8 @@ Respond ONLY with valid JSON:
 
             </div>{/* end home content wrapper */}
 
-                        {/* QUICK ACTIONS */}
-            <div className="panel" style={{marginBottom:'1.5rem'}}>
-              <h2>🚀 Quick Actions</h2>
-              <div className="quick-actions-grid">
-                <div className="quick-action-card" onClick={() => setActiveTab('single')}>
-                  <div className="action-icon">📊</div>
-                  <h3>Options Calculator</h3>
-                  <p>Calculate P&L, Greeks & breakeven</p>
-                </div>
-                <div className="quick-action-card" onClick={() => setActiveTab('markets')}>
-                  <div className="action-icon">⚡</div>
-                  <h3>Option Chain</h3>
-                  <p>Live NSE chain with OI & IV</p>
-                </div>
-                <div className="quick-action-card" onClick={() => setActiveTab('scanner')}>
-                  <div className="action-icon">🔍</div>
-                  <h3>Market Scanner</h3>
-                  <p>Live alerts & trade signals</p>
-                </div>
-                <div className="quick-action-card" onClick={() => setActiveTab('intelligence')}>
-                  <div className="action-icon">🧠</div>
-                  <h3>AI Intelligence</h3>
-                  <p>News analysis & market insights</p>
-                </div>
-              </div>
-            </div>
 
-            {/* ══ 6 INSIGHT CARDS ══ */}
+                        {/* ══ 6 INSIGHT CARDS ══ */}
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:'1rem',marginBottom:'2rem'}}>
 
               {/* CARD 1 — EXPIRY COUNTDOWN */}
