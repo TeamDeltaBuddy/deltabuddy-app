@@ -1175,62 +1175,81 @@ Respond ONLY with valid JSON:
   const fetchLivePrices = async () => {
     setIsPriceLoading(true);
     try {
-      // Core: NSE indices + Sensex + top FNO stocks for gainers/losers
+      // Complete symbols map — NSE indices + BSE indices + FNO stocks
       const symbols = {
-        // Core indices (always fetch)
-        'Nifty 50':        '^NSEI',
-        'Bank Nifty':      '^NSEBANK',
-        'Nifty IT':        'NIFTYIT.NS',
-        'Nifty Pharma':    'NIFTYPHARMA.NS',
-        'Nifty Auto':      'NIFTYAUTO.NS',
-        'Nifty Metal':     'NIFTYMETAL.NS',
-        'Nifty FMCG':      'NIFTYFMCG.NS',
-        'Nifty Realty':    'NIFTYREALTY.NS',
-        'Nifty Midcap 50': 'NIFTYMIDCAP50.NS',
-        'Sensex':          '^BSESN',
-        'BSE Midcap':      'BSEMID.BO',
-        'BSE Smallcap':    'BSESMALL.BO',
-        // Top FNO stocks for gainers/losers
+        // NSE Indices
+        'Nifty 50':                  '^NSEI',
+        'Bank Nifty':                '^NSEBANK',
+        'Nifty IT':                  'NIFTYIT.NS',
+        'Nifty Pharma':              'NIFTYPHARMA.NS',
+        'Nifty Auto':                'NIFTYAUTO.NS',
+        'Nifty Metal':               'NIFTYMETAL.NS',
+        'Nifty FMCG':                'NIFTYFMCG.NS',
+        'Nifty Realty':              'NIFTYREALTY.NS',
+        'Nifty Energy':              'NIFTYENERGY.NS',
+        'Nifty Midcap 50':           'NIFTYMIDCAP50.NS',
+        'Nifty Smallcap 50':         'NIFTYSMLCAP50.NS',
+        'Nifty Financial Services':  'CNXFINANCE.NS',
+        'Nifty Next 50':             'NIFTYJR.NS',
+        'Nifty 100':                 'NIFTY100.NS',
+        'Nifty 200':                 'NIFTY200.NS',
+        // BSE Indices
+        'Sensex':      '^BSESN',
+        'BSE 100':     'BSE100.BO',
+        'BSE 200':     'BSE200.BO',
+        'BSE 500':     'BSE500.BO',
+        'BSE Midcap':  'BSEMID.BO',
+        'BSE Smallcap':'BSESMALL.BO',
+        // FNO Stocks
         'Reliance':      'RELIANCE.NS',
         'TCS':           'TCS.NS',
         'HDFC Bank':     'HDFCBANK.NS',
         'Infosys':       'INFY.NS',
         'ICICI Bank':    'ICICIBANK.NS',
-        'SBI':           'SBIN.NS',
-        'Axis Bank':     'AXISBANK.NS',
-        'Bajaj Finance': 'BAJFINANCE.NS',
-        'Maruti Suzuki': 'MARUTI.NS',
-        'Tata Motors':   'TATAMOTORS.NS',
-        'Sun Pharma':    'SUNPHARMA.NS',
-        'HCL Tech':      'HCLTECH.NS',
-        'Wipro':         'WIPRO.NS',
+        'Bharti Airtel': 'BHARTIARTL.NS',
         'ITC':           'ITC.NS',
+        'SBI':           'SBIN.NS',
         'LT':            'LT.NS',
-        'Titan':         'TITAN.NS',
         'Kotak Bank':    'KOTAKBANK.NS',
+        'HCL Tech':      'HCLTECH.NS',
+        'Axis Bank':     'AXISBANK.NS',
+        'Maruti Suzuki': 'MARUTI.NS',
+        'Titan':         'TITAN.NS',
+        'Bajaj Finance': 'BAJFINANCE.NS',
+        'Wipro':         'WIPRO.NS',
+        'Sun Pharma':    'SUNPHARMA.NS',
+        'Tata Motors':   'TATAMOTORS.NS',
+        'Asian Paints':  'ASIANPAINT.NS',
         'Adani Ports':   'ADANIPORTS.NS',
-        'NTPC': 'NTPC.NS',
-        'Tata Steel': 'TATASTEEL.NS',
-        'JSW Steel': 'JSWSTEEL.NS',
-        'Coal India': 'COALINDIA.NS',
-        'ONGC': 'ONGC.NS',
-        'IOC': 'IOC.NS',
-        'Hindalco': 'HINDALCO.NS',
-        'Grasim': 'GRASIM.NS',
-        'UPL': 'UPL.NS',
-        'Britannia': 'BRITANNIA.NS',
-        'Div Lab': 'DIVISLAB.NS',
-        'Dr Reddy': 'DRREDDY.NS',
-        'Cipla': 'CIPLA.NS',
-        'Eicher Motors': 'EICHERMOT.NS',
+        'ONGC':          'ONGC.NS',
+        'NTPC':          'NTPC.NS',
+        'Power Grid':    'POWERGRID.NS',
+        'M&M':           'M&M.NS',
+        'Tech Mahindra': 'TECHM.NS',
+        'Tata Steel':    'TATASTEEL.NS',
+        'JSW Steel':     'JSWSTEEL.NS',
+        'Coal India':    'COALINDIA.NS',
+        'Dr Reddy':      'DRREDDY.NS',
+        'Cipla':         'CIPLA.NS',
+        'Bajaj Auto':    'BAJAJ-AUTO.NS',
         'Hero MotoCorp': 'HEROMOTOCO.NS',
-        'Bajaj Auto': 'BAJAJ-AUTO.NS',
+        'Eicher Motors': 'EICHERMOT.NS',
+        'Hindalco':      'HINDALCO.NS',
+        'Britannia':     'BRITANNIA.NS',
+        'Div Lab':       'DIVISLAB.NS',
+        'UPL':           'UPL.NS',
       };
 
       const results = {};
-      
-      // Fetch only selected indices to avoid rate limits
-      const toFetch = selectedIndices.length > 0 ? selectedIndices : ['Nifty 50', 'Bank Nifty', 'Nifty IT'];
+
+      // Fetch ALL watchlist items + core gainers/losers stocks
+      const toFetch = [...new Set([
+        ...watchNSE, ...watchBSE, ...watchStocks,
+        'Nifty 50','Bank Nifty','Reliance','TCS','HDFC Bank','Infosys',
+        'ICICI Bank','SBI','Axis Bank','Bajaj Finance','Maruti Suzuki',
+        'Tata Motors','Sun Pharma','HCL Tech','Wipro','ITC','LT','Titan',
+        'Kotak Bank','Adani Ports','NTPC','Bharti Airtel',
+      ])];
       
       await Promise.all(
         toFetch.map(async (name) => {
@@ -1245,10 +1264,13 @@ Respond ONLY with valid JSON:
             const change = prevClose ? (((price - prevClose) / prevClose) * 100).toFixed(2) : 0;
 
             if (price) {
-              results[name] = { value: Math.round(price), change: parseFloat(change) };
+              // Use regularMarketChangePercent directly — more reliable than calculating from prevClose
+              const pctChange = data?.chart?.result?.[0]?.meta?.regularMarketChangePercent;
+              const chg = pctChange != null ? parseFloat(pctChange.toFixed(2)) : parseFloat(change);
+              results[name] = { value: Math.round(price), change: chg };
             }
           } catch (e) {
-            console.log(`Could not fetch ${name}`);
+            console.log('Could not fetch ' + name);
           }
         })
       );
@@ -2072,7 +2094,7 @@ Respond ONLY with valid JSON:
         </div>
       </nav>
 
-      <div className="container main-content">
+      <div style={{minHeight:'80vh'}}>
         {showSaveModal && (
           <div className="modal-overlay" onClick={() => setShowSaveModal(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -2327,6 +2349,9 @@ Respond ONLY with valid JSON:
               </div>
             </div>
 
+            {/* HOME CONTENT */}
+            <div style={{maxWidth:'1280px',margin:'0 auto',padding:'1.5rem 2rem'}}>
+
             {/* ── AI INSIGHT + MARKET PULSE (compact, side-by-side like localhost) ── */}
             <div style={{background:'linear-gradient(135deg,#0a1628 0%,#0f2744 50%,#0a1628 100%)',border:'1px solid #1e3a5f',borderRadius:'16px',padding:'1.5rem',marginBottom:'1.5rem',position:'relative',overflow:'hidden'}}>
               <div style={{position:'absolute',top:0,right:0,width:'300px',height:'100%',background:'radial-gradient(ellipse at top right,rgba(0,255,136,0.08),transparent 70%)',pointerEvents:'none'}}/>
@@ -2394,47 +2419,6 @@ Respond ONLY with valid JSON:
               </div>
             </div>
 
-            {/* ── NSE INDEX COMPARISON ── */}
-            <div style={{marginBottom:'1.5rem'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem'}}>
-                <h3 style={{margin:0,fontSize:'1.1rem',fontWeight:700,color:'#f0f9ff'}}>📊 NSE Indices — Today vs Prev Close</h3>
-                <button onClick={fetchLivePrices} style={{background:'transparent',border:'1px solid #1e3a5f',color:'#4ade80',borderRadius:'6px',padding:'0.25rem 0.75rem',fontSize:'0.8rem',cursor:'pointer'}}>🔄 Refresh</button>
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:'0.75rem'}}>
-                {[
-                  {name:'Nifty 50',       icon:'📈'},
-                  {name:'Bank Nifty',     icon:'🏦'},
-                  {name:'Nifty IT',       icon:'💻'},
-                  {name:'Nifty Pharma',   icon:'💊'},
-                  {name:'Nifty Auto',     icon:'🚗'},
-                  {name:'Nifty Metal',    icon:'⚙️'},
-                  {name:'Nifty FMCG',     icon:'🛒'},
-                  {name:'Nifty Realty',   icon:'🏠'},
-                  {name:'Sensex',         icon:'📉'},
-                  {name:'Nifty Midcap 50',icon:'🔹'},
-                ].map(({name,icon})=>{
-                  const val = livePrices[name];
-                  const chg = liveChanges[name];
-                  const hasData = val && chg !== undefined;
-                  const isPos = (chg||0) >= 0;
-                  const pts = val && chg ? Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0) : null;
-                  return (
-                    <div key={name} style={{background:'#0d1b2e',border:`1px solid ${!hasData?'#1e293b':isPos?'rgba(74,222,128,0.2)':'rgba(248,113,113,0.2)'}`,borderRadius:'12px',padding:'0.85rem 1rem',transition:'border-color 0.3s'}}>
-                      <div style={{fontSize:'0.78rem',color:'#64748b',fontWeight:600,marginBottom:'0.3rem'}}>{icon} {name}</div>
-                      <div style={{fontSize:'1.2rem',fontWeight:800,color:'#f0f9ff'}}>{val?val.toLocaleString():<span style={{color:'#334155'}}>—</span>}</div>
-                      {hasData ? (
-                        <div style={{marginTop:'0.25rem',display:'flex',alignItems:'center',gap:'0.4rem'}}>
-                          <span style={{fontSize:'0.85rem',fontWeight:700,color:isPos?'#4ade80':'#f87171'}}>{isPos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
-                          <span style={{fontSize:'0.75rem',color:isPos?'#4ade80':'#f87171',opacity:0.8}}>{isPos?'+':'-'}{pts}</span>
-                        </div>
-                      ) : (
-                        <div style={{fontSize:'0.75rem',color:'#334155',marginTop:'0.25rem'}}>Click Refresh</div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
 
             {/* ══ TRACK YOUR INDICES & STOCKS ══ */}
             <div className="panel" style={{marginBottom:'1.5rem'}}>
@@ -2476,12 +2460,15 @@ Respond ONLY with valid JSON:
                       return (
                         <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+(has?(pos?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'):'var(--border)'),borderRadius:'12px',padding:'0.9rem 1rem',position:'relative'}}>
                           <button onClick={()=>setWatchNSE(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.35rem',right:'0.5rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
-                          <div style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.25rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.03em'}}>{name}</div>
-                          <div style={{fontSize:'1.25rem',fontWeight:800,color:'var(--text-main)'}}>{has ? val.toLocaleString() : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>—</span>}</div>
+                          <div style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.3rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
+                          <div style={{fontSize:'1.3rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em'}}>{has ? val.toLocaleString() : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>Loading…</span>}</div>
                           {has ? (
-                            <div style={{display:'flex',gap:'0.5rem',marginTop:'0.3rem',alignItems:'baseline'}}>
-                              <span style={{fontSize:'0.85rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
-                              <span style={{fontSize:'0.75rem',color:pos?'var(--green)':'var(--red)',opacity:0.8}}>{pos?'+':'−'}{pts} pts</span>
+                            <div style={{marginTop:'0.3rem'}}>
+                              <div style={{display:'flex',gap:'0.4rem',alignItems:'center'}}>
+                                <span style={{fontSize:'0.88rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
+                                <span style={{fontSize:'0.78rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}{pts} pts</span>
+                              </div>
+                              <div style={{fontSize:'0.68rem',color:'var(--text-muted)',marginTop:'0.15rem'}}>vs prev close</div>
                             </div>
                           ) : (
                             <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>
@@ -2515,12 +2502,15 @@ Respond ONLY with valid JSON:
                       return (
                         <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+(has?(pos?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'):'var(--border)'),borderRadius:'12px',padding:'0.9rem 1rem',position:'relative'}}>
                           <button onClick={()=>setWatchBSE(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.35rem',right:'0.5rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
-                          <div style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.25rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.03em'}}>{name}</div>
-                          <div style={{fontSize:'1.25rem',fontWeight:800,color:'var(--text-main)'}}>{has ? val.toLocaleString() : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>—</span>}</div>
+                          <div style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.3rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
+                          <div style={{fontSize:'1.3rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em'}}>{has ? val.toLocaleString() : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>Loading…</span>}</div>
                           {has ? (
-                            <div style={{display:'flex',gap:'0.5rem',marginTop:'0.3rem',alignItems:'baseline'}}>
-                              <span style={{fontSize:'0.85rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
-                              <span style={{fontSize:'0.75rem',color:pos?'var(--green)':'var(--red)',opacity:0.8}}>{pos?'+':'−'}{pts} pts</span>
+                            <div style={{marginTop:'0.3rem'}}>
+                              <div style={{display:'flex',gap:'0.4rem',alignItems:'center'}}>
+                                <span style={{fontSize:'0.88rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
+                                <span style={{fontSize:'0.78rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}{pts} pts</span>
+                              </div>
+                              <div style={{fontSize:'0.68rem',color:'var(--text-muted)',marginTop:'0.15rem'}}>vs prev close</div>
                             </div>
                           ) : (
                             <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>
@@ -2538,32 +2528,62 @@ Respond ONLY with valid JSON:
                   <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'1rem',flexWrap:'wrap'}}>
                     <select value="" onChange={e=>{if(e.target.value&&!watchStocks.includes(e.target.value))setWatchStocks(p=>[...p,e.target.value]);}} style={{background:'var(--bg-surface)',border:'1px solid var(--border-light)',color:'var(--text-main)',borderRadius:'8px',padding:'0.45rem 0.85rem',fontSize:'0.875rem',cursor:'pointer',minWidth:'210px',fontFamily:'inherit'}}>
                       <option value="">+ Add FNO Stock</option>
-                      {['Reliance','TCS','HDFC Bank','Infosys','ICICI Bank','Bharti Airtel','ITC','SBI','LT','Kotak Bank','HCL Tech','Axis Bank','Maruti Suzuki','Titan','Bajaj Finance','Wipro','Sun Pharma','Tata Motors','Asian Paints','Adani Ports','ONGC','NTPC','Power Grid','M&M','Tech Mahindra'].filter(n=>!watchStocks.includes(n)).map(n=>(
+                      {['Reliance','TCS','HDFC Bank','Infosys','ICICI Bank','Bharti Airtel','ITC','SBI','LT','Kotak Bank','HCL Tech','Axis Bank','Maruti Suzuki','Titan','Bajaj Finance','Wipro','Sun Pharma','Tata Motors','Asian Paints','Adani Ports','ONGC','NTPC','Power Grid','M&M','Tech Mahindra','Bajaj Auto','Hero MotoCorp','Eicher Motors','Dr Reddy','Cipla','Tata Steel','JSW Steel','Coal India','Hindalco','Britannia'].filter(n=>!watchStocks.includes(n)).map(n=>(
                         <option key={n} value={n}>{n}</option>
                       ))}
                     </select>
                     <span style={{fontSize:'0.78rem',color:'var(--text-muted)'}}>Click × on a card to remove</span>
                   </div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:'0.75rem'}}>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:'0.85rem'}}>
                     {watchStocks.length===0 && <div style={{color:'var(--text-muted)',fontSize:'0.875rem',gridColumn:'1/-1'}}>Add stocks from dropdown above.</div>}
                     {watchStocks.map(name=>{
                       const val=livePrices[name], chg=liveChanges[name];
                       const has=val!=null&&chg!=null;
                       const pos=(chg||0)>=0;
                       const pts=has?Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0):null;
+                      // Find AI insight for this stock from news
+                      const newsHit=intelligentNews.find(n=>n.analysis?.affectedStocks?.some(s=>s.toLowerCase().includes(name.toLowerCase()))||n.title.toLowerCase().includes(name.toLowerCase().split(' ')[0]));
+                      const sentiment=newsHit?.analysis?.sentiment;
+                      const sentColor=sentiment==='bullish'?'var(--green)':sentiment==='bearish'?'var(--red)':'var(--text-muted)';
+                      const sentEmoji=sentiment==='bullish'?'🟢':sentiment==='bearish'?'🔴':'⚪';
                       return (
-                        <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+(has?(pos?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'):'var(--border)'),borderRadius:'12px',padding:'0.9rem 1rem',position:'relative'}}>
-                          <button onClick={()=>setWatchStocks(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.35rem',right:'0.5rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
-                          <div style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.25rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.03em'}}>{name}</div>
-                          <div style={{fontSize:'1.25rem',fontWeight:800,color:'var(--text-main)'}}>{'₹'+(has ? val.toLocaleString() : '—')}</div>
+                        <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+(has?(pos?'rgba(74,222,128,0.22)':'rgba(248,113,113,0.22)'):'var(--border)'),borderRadius:'12px',padding:'1rem',position:'relative'}}>
+                          <button onClick={()=>setWatchStocks(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.4rem',right:'0.6rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
+                          {/* Stock name + price */}
+                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'0.5rem',paddingRight:'1rem'}}>
+                            <div style={{fontSize:'0.8rem',color:'var(--text-dim)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
+                            {has && <div style={{fontSize:'0.72rem',background:pos?'rgba(74,222,128,0.12)':'rgba(248,113,113,0.12)',color:pos?'var(--green)':'var(--red)',padding:'1px 6px',borderRadius:'4px',fontWeight:700}}>{pos?'▲':'▼'}{Math.abs(chg).toFixed(2)}%</div>}
+                          </div>
+                          <div style={{fontSize:'1.5rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em',marginBottom:'0.2rem'}}>
+                            {has ? '₹'+val.toLocaleString() : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>Loading…</span>}
+                          </div>
                           {has ? (
-                            <div style={{display:'flex',gap:'0.5rem',marginTop:'0.3rem',alignItems:'baseline'}}>
-                              <span style={{fontSize:'0.85rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
-                              <span style={{fontSize:'0.75rem',color:pos?'var(--green)':'var(--red)',opacity:0.8}}>{pos?'+':'−'}₹{pts}</span>
+                            <div style={{display:'flex',gap:'0.5rem',alignItems:'center',marginBottom:'0.6rem'}}>
+                              <span style={{fontSize:'0.78rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}₹{pts} pts vs prev close</span>
                             </div>
                           ) : (
-                            <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>
+                            <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginBottom:'0.6rem'}}>Click Refresh ↑</div>
                           )}
+                          {/* AI Report Card */}
+                          <div style={{borderTop:'1px solid var(--border)',paddingTop:'0.5rem',marginTop:'0.25rem'}}>
+                            <div style={{fontSize:'0.65rem',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.05em',marginBottom:'0.3rem'}}>🤖 AI SIGNAL</div>
+                            {newsHit ? (
+                              <div>
+                                <div style={{display:'flex',alignItems:'center',gap:'0.35rem',marginBottom:'0.25rem'}}>
+                                  <span style={{fontSize:'0.78rem',fontWeight:700,color:sentColor}}>{sentEmoji} {(sentiment||'neutral').toUpperCase()}</span>
+                                  {newsHit.analysis?.impact==='high' && <span style={{fontSize:'0.65rem',background:'rgba(239,68,68,0.12)',color:'var(--red)',padding:'1px 5px',borderRadius:'4px',fontWeight:600}}>HIGH IMPACT</span>}
+                                </div>
+                                <div style={{fontSize:'0.75rem',color:'var(--text-dim)',lineHeight:1.4}}>
+                                  {newsHit.analysis?.keyInsight ? newsHit.analysis.keyInsight.slice(0,80)+'…' : newsHit.title.slice(0,70)+'…'}
+                                </div>
+                                {newsHit.analysis?.tradingIdea?.strategy && (
+                                  <div style={{fontSize:'0.7rem',color:'var(--accent)',marginTop:'0.3rem',fontWeight:600}}>Strategy: {newsHit.analysis.tradingIdea.strategy}</div>
+                                )}
+                              </div>
+                            ) : (
+                              <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>No news signal today</div>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -2613,6 +2633,8 @@ Respond ONLY with valid JSON:
             })()}
 
                         {/* Market data → go to Markets tab */}
+
+            </div>{/* end home content wrapper */}
 
                         {/* QUICK ACTIONS */}
             <div className="panel">
