@@ -857,7 +857,8 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     bankNifty: { value: 54000, change: 1.2 },
     vix: { value: 14.2, change: -2.1 }
   });
-  const [liveChanges,  setLiveChanges]  = useState({});
+  const [liveChanges,   setLiveChanges]   = useState({});
+  const [livePrevClose, setLivePrevClose] = useState({});
   const [watchNSE,     setWatchNSE]     = useState(['Nifty 50','Bank Nifty','Nifty IT']);
   const [watchBSE,     setWatchBSE]     = useState(['Sensex','BSE Midcap']);
   const [watchStocks,  setWatchStocks]  = useState(['Reliance','TCS','HDFC Bank']);
@@ -1175,134 +1176,77 @@ Respond ONLY with valid JSON:
   const fetchLivePrices = async () => {
     setIsPriceLoading(true);
     try {
-      // Complete symbols map — NSE indices + BSE indices + FNO stocks
-      const symbols = {
-        // NSE Indices
-        'Nifty 50':                  '^NSEI',
-        'Bank Nifty':                '^NSEBANK',
-        'Nifty IT':                  'NIFTYIT.NS',
-        'Nifty Pharma':              'NIFTYPHARMA.NS',
-        'Nifty Auto':                'NIFTYAUTO.NS',
-        'Nifty Metal':               'NIFTYMETAL.NS',
-        'Nifty FMCG':                'NIFTYFMCG.NS',
-        'Nifty Realty':              'NIFTYREALTY.NS',
-        'Nifty Energy':              'NIFTYENERGY.NS',
-        'Nifty Midcap 50':           'NIFTYMIDCAP50.NS',
-        'Nifty Smallcap 50':         'NIFTYSMLCAP50.NS',
-        'Nifty Financial Services':  'CNXFINANCE.NS',
-        'Nifty Next 50':             'NIFTYJR.NS',
-        'Nifty 100':                 'NIFTY100.NS',
-        'Nifty 200':                 'NIFTY200.NS',
-        // BSE Indices
-        'Sensex':      '^BSESN',
-        'BSE 100':     'BSE100.BO',
-        'BSE 200':     'BSE200.BO',
-        'BSE 500':     'BSE500.BO',
-        'BSE Midcap':  'BSEMID.BO',
-        'BSE Smallcap':'BSESMALL.BO',
-        // FNO Stocks
-        'Reliance':      'RELIANCE.NS',
-        'TCS':           'TCS.NS',
-        'HDFC Bank':     'HDFCBANK.NS',
-        'Infosys':       'INFY.NS',
-        'ICICI Bank':    'ICICIBANK.NS',
-        'Bharti Airtel': 'BHARTIARTL.NS',
-        'ITC':           'ITC.NS',
-        'SBI':           'SBIN.NS',
-        'LT':            'LT.NS',
-        'Kotak Bank':    'KOTAKBANK.NS',
-        'HCL Tech':      'HCLTECH.NS',
-        'Axis Bank':     'AXISBANK.NS',
-        'Maruti Suzuki': 'MARUTI.NS',
-        'Titan':         'TITAN.NS',
-        'Bajaj Finance': 'BAJFINANCE.NS',
-        'Wipro':         'WIPRO.NS',
-        'Sun Pharma':    'SUNPHARMA.NS',
-        'Tata Motors':   'TATAMOTORS.NS',
-        'Asian Paints':  'ASIANPAINT.NS',
-        'Adani Ports':   'ADANIPORTS.NS',
-        'ONGC':          'ONGC.NS',
-        'NTPC':          'NTPC.NS',
-        'Power Grid':    'POWERGRID.NS',
-        'M&M':           'M&M.NS',
-        'Tech Mahindra': 'TECHM.NS',
-        'Tata Steel':    'TATASTEEL.NS',
-        'JSW Steel':     'JSWSTEEL.NS',
-        'Coal India':    'COALINDIA.NS',
-        'Dr Reddy':      'DRREDDY.NS',
-        'Cipla':         'CIPLA.NS',
-        'Bajaj Auto':    'BAJAJ-AUTO.NS',
-        'Hero MotoCorp': 'HEROMOTOCO.NS',
-        'Eicher Motors': 'EICHERMOT.NS',
-        'Hindalco':      'HINDALCO.NS',
-        'Britannia':     'BRITANNIA.NS',
-        'Div Lab':       'DIVISLAB.NS',
-        'UPL':           'UPL.NS',
+      // All symbols we ever need: watchlists + core gainers list
+      const SYMBOL_MAP = {
+        'Nifty 50':'^NSEI','Bank Nifty':'^NSEBANK','Nifty IT':'NIFTYIT.NS',
+        'Nifty Pharma':'NIFTYPHARMA.NS','Nifty Auto':'NIFTYAUTO.NS','Nifty Metal':'NIFTYMETAL.NS',
+        'Nifty FMCG':'NIFTYFMCG.NS','Nifty Realty':'NIFTYREALTY.NS','Nifty Energy':'NIFTYENERGY.NS',
+        'Nifty Midcap 50':'NIFTYMIDCAP50.NS','Nifty Smallcap 50':'NIFTYSMLCAP50.NS',
+        'Nifty Financial Services':'CNXFINANCE.NS','Nifty Next 50':'NIFTYJR.NS',
+        'Nifty 100':'NIFTY100.NS','Nifty 200':'NIFTY200.NS',
+        'Sensex':'^BSESN','BSE 100':'BSE100.BO','BSE 200':'BSE200.BO',
+        'BSE 500':'BSE500.BO','BSE Midcap':'BSEMID.BO','BSE Smallcap':'BSESMALL.BO',
+        'Reliance':'RELIANCE.NS','TCS':'TCS.NS','HDFC Bank':'HDFCBANK.NS',
+        'Infosys':'INFY.NS','ICICI Bank':'ICICIBANK.NS','Bharti Airtel':'BHARTIARTL.NS',
+        'ITC':'ITC.NS','SBI':'SBIN.NS','LT':'LT.NS','Kotak Bank':'KOTAKBANK.NS',
+        'HCL Tech':'HCLTECH.NS','Axis Bank':'AXISBANK.NS','Maruti Suzuki':'MARUTI.NS',
+        'Titan':'TITAN.NS','Bajaj Finance':'BAJFINANCE.NS','Wipro':'WIPRO.NS',
+        'Sun Pharma':'SUNPHARMA.NS','Tata Motors':'TATAMOTORS.NS','Asian Paints':'ASIANPAINT.NS',
+        'Adani Ports':'ADANIPORTS.NS','ONGC':'ONGC.NS','NTPC':'NTPC.NS',
+        'Power Grid':'POWERGRID.NS','M&M':'MM.NS','Tech Mahindra':'TECHM.NS',
+        'Tata Steel':'TATASTEEL.NS','JSW Steel':'JSWSTEEL.NS','Coal India':'COALINDIA.NS',
+        'Dr Reddy':'DRREDDY.NS','Cipla':'CIPLA.NS','Bajaj Auto':'BAJAJ-AUTO.NS',
+        'Hero MotoCorp':'HEROMOTOCO.NS','Eicher Motors':'EICHERMOT.NS',
+        'Hindalco':'HINDALCO.NS','Britannia':'BRITANNIA.NS',
       };
+      // Collect all needed names (watchlists + core gainers)
+      const CORE = ['Nifty 50','Bank Nifty','Reliance','TCS','HDFC Bank','Infosys',
+        'ICICI Bank','SBI','Axis Bank','Bajaj Finance','Maruti Suzuki','Tata Motors',
+        'Sun Pharma','HCL Tech','Wipro','ITC','LT','Titan','Kotak Bank','Adani Ports',
+        'NTPC','Bharti Airtel','Bharti Airtel'];
+      const allNames = [...new Set([...watchNSE,...watchBSE,...watchStocks,...CORE])];
+      // Build symbol list string for batch endpoint
+      const symbolsParam = allNames.map(n=>SYMBOL_MAP[n]).filter(Boolean).join(',');
+      if (!symbolsParam) return;
 
-      const results = {};
+      const res = await fetch(`${BACKEND_URL}/api/prices?symbols=${encodeURIComponent(symbolsParam)}`);
+      if (!res.ok) throw new Error(`Prices endpoint ${res.status}`);
+      const raw = await res.json(); // { 'RELIANCE.NS': {price, change, prevClose}, ... }
 
-      // Fetch ALL watchlist items + core gainers/losers stocks
-      const toFetch = [...new Set([
-        ...watchNSE, ...watchBSE, ...watchStocks,
-        'Nifty 50','Bank Nifty','Reliance','TCS','HDFC Bank','Infosys',
-        'ICICI Bank','SBI','Axis Bank','Bajaj Finance','Maruti Suzuki',
-        'Tata Motors','Sun Pharma','HCL Tech','Wipro','ITC','LT','Titan',
-        'Kotak Bank','Adani Ports','NTPC','Bharti Airtel',
-      ])];
-      
-      await Promise.all(
-        toFetch.map(async (name) => {
-          const symbol = symbols[name];
-          if (!symbol) return;
-          
-          try {
-            const res = await fetch(`${YAHOO}/chart/${symbol}?interval=1d&range=1d`);
-            const data = await res.json();
-            const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-            const prevClose = data?.chart?.result?.[0]?.meta?.previousClose;
-            const change = prevClose ? (((price - prevClose) / prevClose) * 100).toFixed(2) : 0;
+      // Build reverse map: yahoo symbol → display name
+      const reverseMap = {};
+      allNames.forEach(n => { if (SYMBOL_MAP[n]) reverseMap[SYMBOL_MAP[n]] = n; });
 
-            if (price) {
-              // Use regularMarketChangePercent directly — more reliable than calculating from prevClose
-              const pctChange = data?.chart?.result?.[0]?.meta?.regularMarketChangePercent;
-              const chg = pctChange != null ? parseFloat(pctChange.toFixed(2)) : parseFloat(change);
-              results[name] = { value: Math.round(price), change: chg };
-            }
-          } catch (e) {
-            console.log('Could not fetch ' + name);
-          }
-        })
-      );
-
-      // Update market data display
-      if (results['Nifty 50'] || results['Bank Nifty']) {
-        setMarketData(prev => ({
-          nifty    : results['Nifty 50']   || prev.nifty,
-          bankNifty: results['Bank Nifty'] || prev.bankNifty,
-          vix      : prev.vix
-        }));
-      }
-
-      // Update live prices + changes
-      const priceMap = {}, changeMap = {};
-      Object.entries(results).forEach(([name, data]) => {
-        priceMap[name] = data.value;
-        if (data.change !== undefined) changeMap[name] = data.change;
+      const priceMap = {}, changeMap = {}, prevCloseMap = {};
+      Object.entries(raw).forEach(([sym, d]) => {
+        const name = reverseMap[sym];
+        if (!name || !d?.price) return;
+        priceMap[name]    = d.price;
+        changeMap[name]   = d.change != null ? d.change : 0;
+        if (d.prevClose)  prevCloseMap[name] = d.prevClose;
       });
-      if (Object.keys(priceMap).length > 0) {
-        setLivePrices(prev => ({ ...prev, ...priceMap }));
-        setLiveChanges(prev => ({ ...prev, ...changeMap }));
-      }
 
-    } catch (error) {
-      console.error('Error fetching live prices:', error);
+      if (Object.keys(priceMap).length > 0) {
+        setLivePrices(prev   => ({ ...prev,   ...priceMap    }));
+        setLiveChanges(prev  => ({ ...prev,   ...changeMap   }));
+        setLivePrevClose(prev=> ({ ...prev,   ...prevCloseMap}));
+        // Update market data (Nifty / BankNifty)
+        if (priceMap['Nifty 50'] || priceMap['Bank Nifty']) {
+          setMarketData(prev => ({
+            nifty    : priceMap['Nifty 50']   ? { value: priceMap['Nifty 50'],   change: changeMap['Nifty 50']   || prev.nifty.change,    vix: prev.nifty.vix    } : prev.nifty,
+            bankNifty: priceMap['Bank Nifty'] ? { value: priceMap['Bank Nifty'], change: changeMap['Bank Nifty'] || prev.bankNifty.change, vix: prev.bankNifty.vix} : prev.bankNifty,
+            vix      : prev.vix,
+          }));
+        }
+      }
+    } catch (err) {
+      console.error('fetchLivePrices error:', err.message);
     } finally {
       setIsPriceLoading(false);
     }
   };
 
-  // Fetch Global Indices (Real-time from Yahoo Finance)
+    // Fetch Global Indices (Real-time from Yahoo Finance)
   const fetchGlobalIndices = async () => {
     try {
       const symbols = {
@@ -1728,15 +1672,21 @@ Respond ONLY with valid JSON:
     setMaxPainData({ maxPain: maxPainStrike, currentSpot: spot });
   }, [optionChainData, spot]);
 
-  // Build OI Chart data from option chain
+  // Build OI Chart data from liveOptionChain (real NSE data)
   useEffect(() => {
-    const chartData = optionChainData.map(d => ({
-      strike: d.strike,
-      ceOI: Math.round(d.ceOI / 1000),
-      peOI: Math.round(d.peOI / 1000),
-    }));
+    if (liveOptionChain.length === 0) return;
+    const chartData = liveOptionChain
+      .filter(d => d.strike)
+      .map(d => ({
+        strike: d.strike,
+        ce:    Math.round((d.ce?.oi    || 0) / 1000),
+        pe:    Math.round((d.pe?.oi    || 0) / 1000),
+        ceVol: Math.round((d.ce?.volume|| 0) / 1000),
+        peVol: Math.round((d.pe?.volume|| 0) / 1000),
+      }))
+      .sort((a,b) => (b.ce+b.pe) - (a.ce+a.pe));
     setOiChartData(chartData);
-  }, [optionChainData]);
+  }, [liveOptionChain]);
 
 
   const saveStrategy = () => {
@@ -2453,26 +2403,29 @@ Respond ONLY with valid JSON:
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:'0.75rem'}}>
                     {watchNSE.length===0 && <div style={{color:'var(--text-muted)',fontSize:'0.875rem',gridColumn:'1/-1'}}>Add indices from dropdown above.</div>}
                     {watchNSE.map(name=>{
-                      const val=livePrices[name], chg=liveChanges[name];
-                      const has=val!=null&&chg!=null;
+                      const val=livePrices[name];
+                      const chg=liveChanges[name]; // may be 0, which is valid
+                      const prev=livePrevClose[name];
                       const pos=(chg||0)>=0;
-                      const pts=has?Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0):null;
+                      const pts=val&&chg!=null?Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0):(val&&prev?Math.abs(val-prev).toFixed(0):null);
+                      const border=val!=null?(pos?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'):'var(--border)';
                       return (
-                        <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+(has?(pos?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'):'var(--border)'),borderRadius:'12px',padding:'0.9rem 1rem',position:'relative'}}>
+                        <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+border,borderRadius:'12px',padding:'0.9rem 1rem',position:'relative'}}>
                           <button onClick={()=>setWatchNSE(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.35rem',right:'0.5rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
                           <div style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.3rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
-                          <div style={{fontSize:'1.3rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em'}}>{has ? val.toLocaleString() : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>Loading…</span>}</div>
-                          {has ? (
+                          <div style={{fontSize:'1.3rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em'}}>{val!=null ? val.toLocaleString() : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>Loading…</span>}</div>
+                          {val!=null && (
                             <div style={{marginTop:'0.3rem'}}>
-                              <div style={{display:'flex',gap:'0.4rem',alignItems:'center'}}>
-                                <span style={{fontSize:'0.88rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
-                                <span style={{fontSize:'0.78rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}{pts} pts</span>
-                              </div>
-                              <div style={{fontSize:'0.68rem',color:'var(--text-muted)',marginTop:'0.15rem'}}>vs prev close</div>
+                              {chg!=null ? (
+                                <div style={{display:'flex',gap:'0.4rem',alignItems:'baseline'}}>
+                                  <span style={{fontSize:'0.88rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
+                                  {pts && <span style={{fontSize:'0.78rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}{pts} pts</span>}
+                                </div>
+                              ) : <div style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>—</div>}
+                              {prev && <div style={{fontSize:'0.65rem',color:'var(--text-muted)',marginTop:'0.1rem'}}>Prev: {prev.toLocaleString()}</div>}
                             </div>
-                          ) : (
-                            <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>
                           )}
+                          {val==null && <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>}
                         </div>
                       );
                     })}
@@ -2495,26 +2448,29 @@ Respond ONLY with valid JSON:
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:'0.75rem'}}>
                     {watchBSE.length===0 && <div style={{color:'var(--text-muted)',fontSize:'0.875rem',gridColumn:'1/-1'}}>Add indices from dropdown above.</div>}
                     {watchBSE.map(name=>{
-                      const val=livePrices[name], chg=liveChanges[name];
-                      const has=val!=null&&chg!=null;
+                      const val=livePrices[name];
+                      const chg=liveChanges[name];
+                      const prev=livePrevClose[name];
                       const pos=(chg||0)>=0;
-                      const pts=has?Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0):null;
+                      const pts=val&&chg!=null?Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0):(val&&prev?Math.abs(val-prev).toFixed(0):null);
+                      const border=val!=null?(pos?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'):'var(--border)';
                       return (
-                        <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+(has?(pos?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'):'var(--border)'),borderRadius:'12px',padding:'0.9rem 1rem',position:'relative'}}>
+                        <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+border,borderRadius:'12px',padding:'0.9rem 1rem',position:'relative'}}>
                           <button onClick={()=>setWatchBSE(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.35rem',right:'0.5rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
                           <div style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.3rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
-                          <div style={{fontSize:'1.3rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em'}}>{has ? val.toLocaleString() : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>Loading…</span>}</div>
-                          {has ? (
+                          <div style={{fontSize:'1.3rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em'}}>{val!=null ? val.toLocaleString() : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>Loading…</span>}</div>
+                          {val!=null && (
                             <div style={{marginTop:'0.3rem'}}>
-                              <div style={{display:'flex',gap:'0.4rem',alignItems:'center'}}>
-                                <span style={{fontSize:'0.88rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
-                                <span style={{fontSize:'0.78rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}{pts} pts</span>
-                              </div>
-                              <div style={{fontSize:'0.68rem',color:'var(--text-muted)',marginTop:'0.15rem'}}>vs prev close</div>
+                              {chg!=null ? (
+                                <div style={{display:'flex',gap:'0.4rem',alignItems:'baseline'}}>
+                                  <span style={{fontSize:'0.88rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
+                                  {pts && <span style={{fontSize:'0.78rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}{pts} pts</span>}
+                                </div>
+                              ) : <div style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>—</div>}
+                              {prev && <div style={{fontSize:'0.65rem',color:'var(--text-muted)',marginTop:'0.1rem'}}>Prev: {prev.toLocaleString()}</div>}
                             </div>
-                          ) : (
-                            <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>
                           )}
+                          {val==null && <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>}
                         </div>
                       );
                     })}
@@ -2537,33 +2493,34 @@ Respond ONLY with valid JSON:
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:'0.85rem'}}>
                     {watchStocks.length===0 && <div style={{color:'var(--text-muted)',fontSize:'0.875rem',gridColumn:'1/-1'}}>Add stocks from dropdown above.</div>}
                     {watchStocks.map(name=>{
-                      const val=livePrices[name], chg=liveChanges[name];
-                      const has=val!=null&&chg!=null;
+                      const val=livePrices[name];
+                      const chg=liveChanges[name];
+                      const prev=livePrevClose[name];
                       const pos=(chg||0)>=0;
-                      const pts=has?Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0):null;
+                      const pts=val&&chg!=null?Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0):(val&&prev?Math.abs(val-prev).toFixed(0):null);
                       // Find AI insight for this stock from news
                       const newsHit=intelligentNews.find(n=>n.analysis?.affectedStocks?.some(s=>s.toLowerCase().includes(name.toLowerCase()))||n.title.toLowerCase().includes(name.toLowerCase().split(' ')[0]));
                       const sentiment=newsHit?.analysis?.sentiment;
                       const sentColor=sentiment==='bullish'?'var(--green)':sentiment==='bearish'?'var(--red)':'var(--text-muted)';
                       const sentEmoji=sentiment==='bullish'?'🟢':sentiment==='bearish'?'🔴':'⚪';
                       return (
-                        <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+(has?(pos?'rgba(74,222,128,0.22)':'rgba(248,113,113,0.22)'):'var(--border)'),borderRadius:'12px',padding:'1rem',position:'relative'}}>
+                        <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+(val!=null?(pos?'rgba(74,222,128,0.22)':'rgba(248,113,113,0.22)'):'var(--border)'),borderRadius:'12px',padding:'1rem',position:'relative'}}>
                           <button onClick={()=>setWatchStocks(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.4rem',right:'0.6rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
                           {/* Stock name + price */}
                           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'0.5rem',paddingRight:'1rem'}}>
                             <div style={{fontSize:'0.8rem',color:'var(--text-dim)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
-                            {has && <div style={{fontSize:'0.72rem',background:pos?'rgba(74,222,128,0.12)':'rgba(248,113,113,0.12)',color:pos?'var(--green)':'var(--red)',padding:'1px 6px',borderRadius:'4px',fontWeight:700}}>{pos?'▲':'▼'}{Math.abs(chg).toFixed(2)}%</div>}
+                            {val!=null&&chg!=null && <div style={{fontSize:'0.72rem',background:pos?'rgba(74,222,128,0.12)':'rgba(248,113,113,0.12)',color:pos?'var(--green)':'var(--red)',padding:'1px 6px',borderRadius:'4px',fontWeight:700}}>{pos?'▲':'▼'}{Math.abs(chg).toFixed(2)}%</div>}
                           </div>
                           <div style={{fontSize:'1.5rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em',marginBottom:'0.2rem'}}>
-                            {has ? '₹'+val.toLocaleString() : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>Loading…</span>}
+                            {val!=null ? '₹'+val.toLocaleString() : <span style={{fontSize:'0.85rem',color:'var(--text-muted)'}}>Loading…</span>}
                           </div>
-                          {has ? (
-                            <div style={{display:'flex',gap:'0.5rem',alignItems:'center',marginBottom:'0.6rem'}}>
-                              <span style={{fontSize:'0.78rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}₹{pts} pts vs prev close</span>
-                            </div>
-                          ) : (
-                            <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginBottom:'0.6rem'}}>Click Refresh ↑</div>
-                          )}
+                          <div style={{marginBottom:'0.6rem'}}>
+                            {val!=null&&chg!=null ? (
+                              <span style={{fontSize:'0.78rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}₹{pts} pts vs prev close {prev?'('+prev.toLocaleString()+')':''}</span>
+                            ) : val!=null ? (
+                              <span style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>Click Refresh for change data</span>
+                            ) : null}
+                          </div>
                           {/* AI Report Card */}
                           <div style={{borderTop:'1px solid var(--border)',paddingTop:'0.5rem',marginTop:'0.25rem'}}>
                             <div style={{fontSize:'0.65rem',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.05em',marginBottom:'0.3rem'}}>🤖 AI SIGNAL</div>
@@ -3685,48 +3642,101 @@ Respond ONLY with valid JSON:
               </div>
             )}
 
-            {activeMarketsTab === 'oi-chart' && (
+            {activeMarketsTab === 'oi-chart' && (() => {
+              // Build OI data directly from liveOptionChain — always fresh, no stale state
+              const spot = selectedUnderlying==='NIFTY' ? marketData.nifty.value : marketData.bankNifty.value;
+              const chain = liveOptionChain.length > 0 ? liveOptionChain : [];
+              const oiRows = chain
+                .filter(d => d.strike && (d.ce?.oi > 0 || d.pe?.oi > 0))
+                .map(d => ({
+                  strike : d.strike,
+                  ce     : Math.round((d.ce?.oi     || 0) / 1000),
+                  pe     : Math.round((d.pe?.oi     || 0) / 1000),
+                  ceVol  : Math.round((d.ce?.volume || 0) / 1000),
+                  peVol  : Math.round((d.pe?.volume || 0) / 1000),
+                  isATM  : Math.abs(d.strike - spot) < (selectedUnderlying==='NIFTY' ? 26 : 51),
+                }))
+                .sort((a,b) => (b.ce + b.pe) - (a.ce + a.pe));
+              const maxOI = oiRows.length > 0 ? Math.max(...oiRows.map(r => Math.max(r.ce, r.pe))) : 1;
+              // Top CE strikes = resistance, top PE strikes = support
+              const topResistance = [...oiRows].sort((a,b)=>b.ce-a.ce)[0]?.strike;
+              const topSupport    = [...oiRows].sort((a,b)=>b.pe-a.pe)[0]?.strike;
+              return (
               <div className="panel">
-                <h2>📈 Open Interest Analysis</h2>
-                {oiChartData.length > 0 ? (
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:'0.5rem'}}>
+                  <h2 style={{margin:0}}>📈 Open Interest Analysis</h2>
+                  <button onClick={()=>generateLiveOptionChain(selectedUnderlying)} disabled={isLoadingChain}
+                    style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.35rem 0.9rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
+                    {isLoadingChain?'Loading...':'🔄 Refresh'}
+                  </button>
+                </div>
+                {oiRows.length === 0 ? (
+                  <div style={{textAlign:'center',padding:'2rem',color:'var(--text-dim)'}}>
+                    <p>Loading option chain data…</p>
+                    <button onClick={()=>generateLiveOptionChain(selectedUnderlying)}
+                      style={{marginTop:'0.5rem',background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer'}}>
+                      Load Now
+                    </button>
+                  </div>
+                ) : (
                   <div>
-                    <p style={{color:'var(--text-dim)',fontSize:'0.82rem',marginBottom:'1rem'}}>Top strikes by OI buildup. CE = resistance, PE = support.</p>
+                    {/* Summary cards */}
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:'0.75rem',marginBottom:'1.25rem'}}>
+                      {[
+                        {label:'🛡️ Key Support (Max PE OI)',  val:topSupport?.toLocaleString(),  col:'var(--green)'},
+                        {label:'🚧 Key Resistance (Max CE OI)',val:topResistance?.toLocaleString(),col:'var(--red)'},
+                        {label:'🎯 Spot',                      val:spot?.toLocaleString(),         col:'var(--accent)'},
+                        {label:'📊 Strikes Loaded',            val:oiRows.length,                  col:'var(--text-dim)'},
+                      ].map(c=>(
+                        <div key={c.label} style={{background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'10px',padding:'0.75rem 1rem'}}>
+                          <div style={{fontSize:'0.68rem',color:'var(--text-muted)',marginBottom:'0.2rem'}}>{c.label}</div>
+                          <div style={{fontSize:'1.2rem',fontWeight:800,color:c.col}}>{c.val||'—'}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* OI bar chart visual */}
+                    <p style={{color:'var(--text-dim)',fontSize:'0.8rem',marginBottom:'0.75rem'}}>Top 15 strikes by total OI. Bar width = relative OI size. CE = resistance zones, PE = support zones.</p>
                     <div style={{overflowX:'auto'}}>
-                      <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.85rem'}}>
+                      <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.84rem'}}>
                         <thead>
                           <tr style={{borderBottom:'2px solid var(--border)'}}>
-                            <th style={{padding:'0.5rem',textAlign:'left',color:'var(--text-dim)'}}>Strike</th>
-                            <th style={{padding:'0.5rem',textAlign:'right',color:'#f87171'}}>CE OI (K)</th>
-                            <th style={{padding:'0.5rem',textAlign:'right',color:'#4ade80'}}>PE OI (K)</th>
-                            <th style={{padding:'0.5rem',textAlign:'right',color:'var(--text-dim)'}}>CE Vol (K)</th>
-                            <th style={{padding:'0.5rem',textAlign:'right',color:'var(--text-dim)'}}>PE Vol (K)</th>
+                            <th style={{padding:'0.5rem 0.75rem',textAlign:'left',color:'var(--text-dim)',fontWeight:600}}>Strike</th>
+                            <th style={{padding:'0.5rem 0.75rem',color:'#f87171',fontWeight:600}}>CE OI (K) — Resistance</th>
+                            <th style={{padding:'0.5rem 0.75rem',color:'#4ade80',fontWeight:600}}>PE OI (K) — Support</th>
+                            <th style={{padding:'0.5rem 0.75rem',textAlign:'right',color:'var(--text-dim)',fontWeight:600}}>CE Vol</th>
+                            <th style={{padding:'0.5rem 0.75rem',textAlign:'right',color:'var(--text-dim)',fontWeight:600}}>PE Vol</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {oiChartData.slice(0,15).map((row,i)=>(
-                            <tr key={i} style={{borderBottom:'1px solid var(--border)',background:i%2===0?'transparent':'rgba(255,255,255,0.02)'}}>
-                              <td style={{padding:'0.4rem 0.5rem',fontWeight:700,color:'var(--text-main)'}}>{row.strike}</td>
-                              <td style={{padding:'0.4rem 0.5rem',textAlign:'right',color:'#f87171'}}>{(row.ce||0).toFixed(1)}</td>
-                              <td style={{padding:'0.4rem 0.5rem',textAlign:'right',color:'#4ade80'}}>{(row.pe||0).toFixed(1)}</td>
-                              <td style={{padding:'0.4rem 0.5rem',textAlign:'right',color:'var(--text-dim)'}}>{(row.ceVol||0).toFixed(1)}</td>
-                              <td style={{padding:'0.4rem 0.5rem',textAlign:'right',color:'var(--text-dim)'}}>{(row.peVol||0).toFixed(1)}</td>
+                          {oiRows.slice(0,15).map((row,i)=>(
+                            <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)',background:row.isATM?'rgba(249,115,22,0.08)':i%2===0?'transparent':'rgba(255,255,255,0.01)'}}>
+                              <td style={{padding:'0.45rem 0.75rem',fontWeight:700,color:row.isATM?'#f97316':'var(--text-main)'}}>
+                                {row.strike.toLocaleString()}{row.isATM&&<span style={{fontSize:'0.65rem',marginLeft:'4px',background:'#f97316',color:'#fff',borderRadius:'3px',padding:'1px 4px'}}>ATM</span>}
+                              </td>
+                              <td style={{padding:'0.45rem 0.75rem'}}>
+                                <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
+                                  <div style={{height:'8px',background:'rgba(248,113,113,0.7)',borderRadius:'2px',width:maxOI>0?Math.max(4,row.ce/maxOI*120)+'px':'4px',flexShrink:0}}/>
+                                  <span style={{color:'#f87171',fontWeight:600}}>{row.ce.toLocaleString()}</span>
+                                </div>
+                              </td>
+                              <td style={{padding:'0.45rem 0.75rem'}}>
+                                <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
+                                  <div style={{height:'8px',background:'rgba(74,222,128,0.7)',borderRadius:'2px',width:maxOI>0?Math.max(4,row.pe/maxOI*120)+'px':'4px',flexShrink:0}}/>
+                                  <span style={{color:'#4ade80',fontWeight:600}}>{row.pe.toLocaleString()}</span>
+                                </div>
+                              </td>
+                              <td style={{padding:'0.45rem 0.75rem',textAlign:'right',color:'var(--text-dim)'}}>{row.ceVol.toLocaleString()}</td>
+                              <td style={{padding:'0.45rem 0.75rem',textAlign:'right',color:'var(--text-dim)'}}>{row.peVol.toLocaleString()}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
                   </div>
-                ) : (
-                  <div style={{textAlign:'center',padding:'2rem',color:'var(--text-dim)'}}>
-                    <p>Load option chain first to see OI analysis.</p>
-                    <button onClick={()=>setActiveMarketsTab('option-chain')}
-                      style={{marginTop:'0.5rem',background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer'}}>
-                      Go to Option Chain →
-                    </button>
-                  </div>
                 )}
               </div>
-            )}
+              );
+            })()}
           </div>
         ) : activeTab === 'backtest' ? (
           <div>
