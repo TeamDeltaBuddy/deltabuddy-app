@@ -2009,7 +2009,8 @@ Respond ONLY with valid JSON:
     <div className="App">
       <nav className="navbar">
         <div className="container">
-          <div className="logo">
+          <div className="logo" onClick={()=>{setActiveTab('home');setShowMobileMenu(false);}}
+            style={{cursor:'pointer',userSelect:'none',borderBottom:activeTab==='home'?'2px solid var(--accent)':'2px solid transparent',paddingBottom:'2px',transition:'border-color 0.2s'}}>
             <span className="delta">Δ</span>
             <span>DeltaBuddy</span>
           </div>
@@ -2019,7 +2020,6 @@ Respond ONLY with valid JSON:
 
           <div className={`nav-links${showMobileMenu?' mobile-open':''}`} style={{display:'flex',alignItems:'center',gap:'0.1rem',flexWrap:'nowrap'}}>
             {[
-              ['home',         'Home'],
               ['markets',      'Markets'],
               ['intelligence', '🧠 Intelligence'],
               ['strategy',     '🎯 Strategy'],
@@ -2393,6 +2393,55 @@ Respond ONLY with valid JSON:
               </div>
             </div>
 
+
+            {/* ── MARKET PULSE BAR ── */}
+            <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'0.75rem 1.25rem',marginBottom:'1.25rem',display:'flex',flexWrap:'wrap',alignItems:'center',gap:'1.5rem',justifyContent:'space-between'}}>
+              <div style={{display:'flex',alignItems:'baseline',gap:'0.5rem'}}>
+                <span style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.05em'}}>NIFTY</span>
+                <span style={{fontSize:'1.1rem',fontWeight:800,color:'var(--text-main)'}}>{marketData.nifty?.value?.toLocaleString() || '—'}</span>
+                {marketData.nifty?.change != null && (
+                  <span style={{fontSize:'0.82rem',fontWeight:700,color:marketData.nifty.change>=0?'var(--green)':'var(--red)'}}>
+                    {marketData.nifty.change>=0?'▲':'▼'} {Math.abs(marketData.nifty.change).toFixed(2)}%
+                  </span>
+                )}
+              </div>
+              <div style={{width:'1px',height:'24px',background:'var(--border)',flexShrink:0}}/>
+              <div style={{display:'flex',alignItems:'baseline',gap:'0.5rem'}}>
+                <span style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.05em'}}>BANKNIFTY</span>
+                <span style={{fontSize:'1.1rem',fontWeight:800,color:'var(--text-main)'}}>{marketData.bankNifty?.value?.toLocaleString() || '—'}</span>
+                {marketData.bankNifty?.change != null && (
+                  <span style={{fontSize:'0.82rem',fontWeight:700,color:marketData.bankNifty.change>=0?'var(--green)':'var(--red)'}}>
+                    {marketData.bankNifty.change>=0?'▲':'▼'} {Math.abs(marketData.bankNifty.change).toFixed(2)}%
+                  </span>
+                )}
+              </div>
+              <div style={{width:'1px',height:'24px',background:'var(--border)',flexShrink:0}}/>
+              <div style={{display:'flex',alignItems:'baseline',gap:'0.5rem'}}>
+                <span style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.05em'}}>VIX</span>
+                <span style={{fontSize:'1.1rem',fontWeight:800,color:(marketData.nifty?.vix||14)<13?'var(--green)':(marketData.nifty?.vix||14)>18?'var(--red)':'#fbbf24'}}>
+                  {marketData.nifty?.vix || '—'}
+                </span>
+              </div>
+              <div style={{width:'1px',height:'24px',background:'var(--border)',flexShrink:0}}/>
+              <div style={{display:'flex',alignItems:'baseline',gap:'0.5rem'}}>
+                <span style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.05em'}}>PCR</span>
+                <span style={{fontSize:'1.1rem',fontWeight:800,color:pcrData.pcr>1.2?'var(--green)':pcrData.pcr<0.8?'var(--red)':'#fbbf24'}}>
+                  {pcrData.pcr?.toFixed(2) || '—'}
+                </span>
+                <span style={{fontSize:'0.75rem',fontWeight:600,color:pcrData.pcr>1.2?'var(--green)':pcrData.pcr<0.8?'var(--red)':'#fbbf24'}}>
+                  {pcrData.pcr>1.2?'BULLISH':pcrData.pcr<0.8?'BEARISH':'NEUTRAL'}
+                </span>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginLeft:'auto'}}>
+                <span style={{fontSize:'0.7rem',color:'var(--text-muted)'}}>
+                  Updated {lastUpdateTime.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}
+                </span>
+                <button onClick={()=>{fetchLivePrices();fetchGlobalIndices();}} disabled={isPriceLoading}
+                  style={{background:isPriceLoading?'var(--bg-surface)':'var(--accent)',color:isPriceLoading?'var(--text-muted)':'#000',border:'none',borderRadius:'6px',padding:'0.3rem 0.75rem',fontSize:'0.75rem',fontWeight:700,cursor:isPriceLoading?'not-allowed':'pointer'}}>
+                  {isPriceLoading ? '…' : '⟳ Refresh'}
+                </button>
+              </div>
+            </div>
 
             {/* ══ TRACK YOUR INDICES & STOCKS ══ */}
             <div className="panel" style={{marginBottom:'1.5rem'}}>
