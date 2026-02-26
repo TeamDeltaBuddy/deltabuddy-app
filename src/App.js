@@ -2014,11 +2014,8 @@ Respond ONLY with valid JSON:
             <span className="delta">Δ</span>
             <span>DeltaBuddy</span>
           </div>
-          <button onClick={()=>setShowMobileMenu(m=>!m)}
-            className="hamburger-btn" style={{background:'none',border:'none',color:'var(--text-main)',fontSize:'1.5rem',cursor:'pointer',padding:'0.25rem 0.5rem'}}
-            className="hamburger-btn" aria-label="Menu">{showMobileMenu?'✕':'☰'}</button>
-
-          <div className={`nav-links${showMobileMenu?' mobile-open':''}`} style={{display:'flex',alignItems:'center',gap:'0.1rem',flexWrap:'nowrap'}}>
+          {/* ── Nav links — desktop row / mobile slide-down ── */}
+          <div className={`nav-links${showMobileMenu?' mobile-open':''}`}>
             {[
               ['markets',      'Markets'],
               ['intelligence', '🧠 Intelligence'],
@@ -2028,42 +2025,51 @@ Respond ONLY with valid JSON:
               ['scanner',      'Scanner'],
               ['journal',      'Journal'],
             ].map(([tab,label])=>(
-              <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}} style={{padding:'0.55rem 1rem',fontSize:'1rem',whiteSpace:'nowrap',cursor:'pointer',fontWeight:activeTab===tab?700:500,color:activeTab===tab?'var(--accent)':'var(--text-dim)',borderBottom:activeTab===tab?'2px solid var(--accent)':'2px solid transparent'}}>
+              <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}>
                 {label}
               </span>
             ))}
-            <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginLeft:'0.5rem'}}>
-              {!authLoading && (currentUser ? (
-                <div style={{position:'relative',display:'flex',alignItems:'center',gap:'0.5rem'}}>
-                  {/* Telegram bell */}
-                  <button onClick={()=>setShowTgSetup(true)} title="Connect Telegram alerts"
-                    style={{background:'none',border:'none',cursor:'pointer',padding:'2px',fontSize:'1.1rem',opacity:tgChatId?1:0.5}}
-                    title={tgChatId?'Telegram connected — click to update':'Connect Telegram for alerts'}>
-                    {tgChatId ? '🔔' : '🔕'}
-                  </button>
-                  {/* Avatar → sign out */}
-                  <div style={{cursor:'pointer'}} onClick={handleSignOut} title="Click to sign out">
-                    {currentUser.photoURL
-                      ? <img src={currentUser.photoURL} alt="" style={{width:'30px',height:'30px',borderRadius:'50%',border:'2px solid var(--accent)',display:'block'}}/>
-                      : <div style={{width:'30px',height:'30px',borderRadius:'50%',background:'var(--accent)',color:'#000',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:'0.85rem'}}>{(currentUser.displayName||currentUser.email||'U')[0].toUpperCase()}</div>}
-                  </div>
+          </div>
+
+          {/* ── Right controls — ALWAYS visible on all screen sizes ── */}
+          <div className="navbar-right">
+            {!authLoading && (currentUser ? (
+              <>
+                <button onClick={()=>setShowTgSetup(true)}
+                  title={tgChatId?'Telegram connected — click to update':'Connect Telegram for alerts'}
+                  style={{background:'none',border:'none',cursor:'pointer',padding:'4px',fontSize:'1.2rem',lineHeight:1,opacity:tgChatId?1:0.6}}>
+                  {tgChatId ? '🔔' : '🔕'}
+                </button>
+                <div style={{cursor:'pointer'}} onClick={handleSignOut} title="Click to sign out">
+                  {currentUser.photoURL
+                    ? <img src={currentUser.photoURL} alt="" style={{width:'30px',height:'30px',borderRadius:'50%',border:'2px solid var(--accent)',display:'block',objectFit:'cover'}}/>
+                    : <div style={{width:'30px',height:'30px',borderRadius:'50%',background:'var(--accent)',color:'#000',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:'0.85rem'}}>{(currentUser.displayName||currentUser.email||'U')[0].toUpperCase()}</div>
+                  }
                 </div>
-              ) : (
-                <button onClick={()=>setShowAuthModal(true)} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.3rem 0.85rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>Sign In</button>
-              ))}
-              <a href="https://wa.me/917506218502?text=Hi%20DeltaBuddy%20Team%2C%20I%20need%20help%20with..."
-                target="_blank" rel="noreferrer"
-                title="Get help on WhatsApp"
-                style={{color:'#25D366',fontSize:'0.78rem',fontWeight:600,textDecoration:'none',padding:'0.25rem 0.4rem',borderRadius:'6px',border:'1px solid rgba(37,211,102,0.3)',whiteSpace:'nowrap'}}>
-                💬 Help
-              </a>
-              {isAdmin && (
-                <span title="Admin Settings" onClick={()=>{setShowSettings(s=>!s);setShowMobileMenu(false);}}
-                  style={{cursor:'pointer',fontSize:'1.1rem',padding:'0.25rem 0.5rem',borderRadius:'6px',background:showSettings?'var(--accent)':'transparent',lineHeight:1}}>
-                  ⚙️
-                </span>
-              )}
-            </div>
+              </>
+            ) : (
+              <button onClick={()=>setShowAuthModal(true)}
+                style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.35rem 0.85rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem',whiteSpace:'nowrap'}}>
+                Sign In
+              </button>
+            ))}
+            <a href="https://wa.me/917506218502?text=Hi%20DeltaBuddy%20Team%2C%20I%20need%20help%20with..."
+              target="_blank" rel="noreferrer"
+              title="Get help on WhatsApp"
+              className="help-link"
+              style={{color:'#25D366',fontSize:'0.78rem',fontWeight:600,textDecoration:'none',padding:'0.25rem 0.4rem',borderRadius:'6px',border:'1px solid rgba(37,211,102,0.3)',whiteSpace:'nowrap'}}>
+              💬 <span className="help-text">Help</span>
+            </a>
+            {isAdmin && (
+              <span title="Admin Settings" onClick={()=>setShowSettings(s=>!s)}
+                style={{cursor:'pointer',fontSize:'1.1rem',padding:'0.25rem 0.5rem',borderRadius:'6px',background:showSettings?'var(--accent)':'transparent',lineHeight:1}}>
+                ⚙️
+              </span>
+            )}
+            <button onClick={()=>setShowMobileMenu(m=>!m)}
+              className="hamburger-btn" aria-label="Menu">
+              {showMobileMenu ? '✕' : '☰'}
+            </button>
           </div>
         </div>
       </nav>
