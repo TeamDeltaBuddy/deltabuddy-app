@@ -4053,10 +4053,10 @@ Respond ONLY with valid JSON:
               );
             })()}
           </div>
+              </div>
+            </div>
           </div>
-          </div>
-          </div>
-          </div>
+        </div>
 
         ) : activeTab === 'backtest' ? (
           <div>
