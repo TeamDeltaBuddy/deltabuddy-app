@@ -22,7 +22,7 @@ const db          = getFirestore(firebaseApp);
 const googleProvider = new GoogleAuthProvider();
 
 // Railway backend URL — update after deploying
-const BACKEND_URL   = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL   = process.env.REACT_APP_BACKEND_URL || 'https://deltabuddy-backend.onrender.com';
 const ADMIN_EMAIL   = 'mirza.hassanuzzaman@gmail.com';
 
 // ── TradingView lightweight-charts loader ─────────────────────────────────────
