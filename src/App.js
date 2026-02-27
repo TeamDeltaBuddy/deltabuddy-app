@@ -39,176 +39,196 @@ const loadLWC = () => {
   return lwcPromise;
 };
 
-function TradingViewChart({ data, indicators, type, symbol, timeframe }) {
-  const containerRef = React.useRef(null);
-  const chartRef     = React.useRef(null);
-  const seriesRef    = React.useRef(null);
-  const lineRefs     = React.useRef({});
+function TradingViewChart({ data, indicators, candleType, symbol, timeframe }) {
+  const mainRef  = React.useRef(null);
+  const rsiRef   = React.useRef(null);
+  const macdRef  = React.useRef(null);
+  const chartRef = React.useRef(null);
+  const rsiChartRef  = React.useRef(null);
+  const macdChartRef = React.useRef(null);
 
-  // Build candle series data
-  const buildSeries = (raw) => raw
+  const showRSI  = indicators.includes('RSI');
+  const showMACD = indicators.includes('MACD');
+
+  // ── Helpers ───────────────────────────────────────────────────────────
+  const buildCandles = (raw) => raw
     .filter(d => d.open && d.close && d.high && d.low)
     .map(d => ({
-      time : Math.floor(new Date(d.time || d.date || d.timestamp).getTime() / 1000),
+      time : Math.floor((typeof d.time === 'string' ? new Date(d.time) : d.time instanceof Date ? d.time : new Date(d.time)).getTime() / 1000),
       open : parseFloat(d.open),
       high : parseFloat(d.high),
       low  : parseFloat(d.low),
       close: parseFloat(d.close),
+      volume: parseFloat(d.volume || 0),
     }))
-    .filter(d => !isNaN(d.time))
+    .filter(d => !isNaN(d.time) && d.close > 0)
     .sort((a, b) => a.time - b.time)
-    .filter((d, i, arr) => i === 0 || d.time !== arr[i - 1].time); // dedupe
+    .filter((d, i, arr) => i === 0 || d.time !== arr[i-1].time);
 
-  // SMA helper
-  const calcSMA = (candles, period=20) => {
-    return candles.map((c, i) => {
-      if (i < period - 1) return null;
-      const avg = candles.slice(i - period + 1, i + 1).reduce((s, x) => s + x.close, 0) / period;
-      return { time: c.time, value: avg };
-    }).filter(Boolean);
-  };
+  const calcSMA = (c, p=20) => c.map((x,i) => i < p-1 ? null : { time: x.time, value: c.slice(i-p+1,i+1).reduce((s,v)=>s+v.close,0)/p }).filter(Boolean);
+  const calcEMA = (c, p=20) => { const k=2/(p+1); let e=c[0]?.close||0; return c.map((x,i)=>{ if(i===0){e=x.close;return{time:x.time,value:e};} e=x.close*k+e*(1-k); return{time:x.time,value:e}; }); };
+  const calcWMA = (c, p=20) => c.map((x,i) => { if(i<p-1)return null; const sl=c.slice(i-p+1,i+1); const w=sl.reduce((s,v,j)=>s+(j+1)*v.close,0); const wd=p*(p+1)/2; return{time:x.time,value:w/wd}; }).filter(Boolean);
+  const calcBB  = (c, p=20, m=2) => { const up=[],md=[],lo=[]; c.forEach((x,i)=>{ if(i<p-1)return; const sl=c.slice(i-p+1,i+1).map(v=>v.close); const avg=sl.reduce((s,v)=>s+v,0)/p; const std=Math.sqrt(sl.reduce((s,v)=>s+Math.pow(v-avg,2),0)/p); up.push({time:x.time,value:avg+m*std}); md.push({time:x.time,value:avg}); lo.push({time:x.time,value:avg-m*std}); }); return{up,md,lo}; };
+  const calcVWAP = (c) => { let cv=0,cv2=0; return c.map(x=>{ const tp=(x.high+x.low+x.close)/3; cv+=tp*x.volume; cv2+=x.volume; return{time:x.time,value:cv2>0?cv/cv2:x.close}; }); };
+  const calcRSI  = (c, p=14) => { const ch=c.map((x,i)=>i===0?0:x.close-c[i-1].close); return c.map((x,i)=>{ if(i<p)return null; const sl=ch.slice(i-p+1,i+1); const ag=sl.filter(v=>v>0).reduce((s,v)=>s+v,0)/p; const al=sl.filter(v=>v<0).map(v=>Math.abs(v)).reduce((s,v)=>s+v,0)/p; const rs=ag/(al||0.001); return{time:x.time,value:100-(100/(1+rs))}; }).filter(Boolean); };
+  const calcMACD = (c) => { const e12=calcEMA(c,12),e26=calcEMA(c,26); const macdLine=e26.map((x,i)=>({time:x.time,value:(e12[i+12-26]?.value||x.value)-x.value})); const sig=calcEMA(macdLine.map(x=>({...x,close:x.value})),9); const hist=sig.map((x,i)=>({time:x.time,value:(macdLine[i]?.value||0)-x.value})); return{macdLine:macdLine.slice(26),signal:sig,hist}; };
+  const calcATR  = (c, p=14) => { const tr=c.map((x,i)=>i===0?x.high-x.low:Math.max(x.high-x.low,Math.abs(x.high-c[i-1].close),Math.abs(x.low-c[i-1].close))); return c.map((x,i)=>{ if(i<p)return null; return{time:x.time,value:tr.slice(i-p+1,i+1).reduce((s,v)=>s+v,0)/p}; }).filter(Boolean); };
+  const calcSuperTrend = (c, p=10, m=3) => { const atr=calcATR(c,p); const res=[]; let trend=1,lastST=0; c.slice(p).forEach((x,i)=>{ const a=atr[i]?.value||0; const ub=(x.high+x.low)/2+m*a; const lb=(x.high+x.low)/2-m*a; if(trend===1&&x.close<lastST){trend=-1;lastST=ub;} else if(trend===-1&&x.close>lastST){trend=1;lastST=lb;} else{lastST=trend===1?lb:ub;} res.push({time:x.time,value:lastST,color:trend===1?'#4ade80':'#f87171'}); }); return res; };
+  const calcIchimoku = (c) => { const high=(sl)=>Math.max(...sl.map(x=>x.high)); const low=(sl)=>Math.min(...sl.map(x=>x.low)); const conv=[],base=[],sA=[],sB=[]; c.forEach((x,i)=>{ if(i>=8){const h=high(c.slice(i-8,i+1)),l=low(c.slice(i-8,i+1));conv.push({time:x.time,value:(h+l)/2});} if(i>=25){const h=high(c.slice(i-25,i+1)),l=low(c.slice(i-25,i+1));base.push({time:x.time,value:(h+l)/2});} if(i>=25){sA.push({time:x.time,value:((conv[i-9]?.value||0)+(base[i-25]?.value||0))/2});} if(i>=51){const h=high(c.slice(i-51,i+1)),l=low(c.slice(i-51,i+1));sB.push({time:x.time,value:(h+l)/2});} }); return{conv,base,sA,sB}; };
 
-  // EMA helper
-  const calcEMA = (candles, period=20) => {
-    const k = 2 / (period + 1);
-    let ema = candles[0]?.close || 0;
-    return candles.map((c, i) => {
-      if (i === 0) { ema = c.close; return { time: c.time, value: ema }; }
-      ema = c.close * k + ema * (1 - k);
-      return { time: c.time, value: ema };
-    });
-  };
-
-  // Bollinger Bands helper
-  const calcBB = (candles, period=20, mult=2) => {
-    const upper = [], middle = [], lower = [];
-    candles.forEach((c, i) => {
-      if (i < period - 1) return;
-      const slice = candles.slice(i - period + 1, i + 1).map(x => x.close);
-      const avg = slice.reduce((s, v) => s + v, 0) / period;
-      const std = Math.sqrt(slice.reduce((s, v) => s + Math.pow(v - avg, 2), 0) / period);
-      upper.push({ time: c.time, value: avg + mult * std });
-      middle.push({ time: c.time, value: avg });
-      lower.push({ time: c.time, value: avg - mult * std });
-    });
-    return { upper, middle, lower };
-  };
+  const createSubChart = (container, LWC, h=120) => LWC.createChart(container, {
+    width: container.clientWidth, height: h,
+    layout: { background:{color:'#070d1a'}, textColor:'#94a3b8', fontSize:10 },
+    grid: { vertLines:{color:'rgba(100,116,139,0.08)'}, horzLines:{color:'rgba(100,116,139,0.08)'} },
+    rightPriceScale: { borderColor:'#1e293b', scaleMargins:{top:0.1,bottom:0.1} },
+    timeScale: { borderColor:'#1e293b', timeVisible:true, secondsVisible:false },
+    crosshair: { mode: LWC.CrosshairMode.Normal },
+    handleScroll: false, handleScale: false,
+  });
 
   React.useEffect(() => {
-    if (!data || data.length === 0 || !containerRef.current) return;
-    let chart;
+    if (!data?.length || !mainRef.current) return;
 
     loadLWC().then((LWC) => {
-      // Destroy old chart
-      if (chartRef.current) { chartRef.current.remove(); chartRef.current = null; }
+      // Destroy previous charts
+      [chartRef, rsiChartRef, macdChartRef].forEach(r => { if(r.current){r.current.remove();r.current=null;} });
 
-      chart = LWC.createChart(containerRef.current, {
-        width : containerRef.current.clientWidth,
-        height: 420,
-        layout: {
-          background: { color: '#070d1a' },
-          textColor : '#94a3b8',
-          fontSize  : 11,
-          fontFamily: "'Inter', sans-serif",
-        },
-        grid: {
-          vertLines  : { color: 'rgba(100,116,139,0.12)' },
-          horzLines  : { color: 'rgba(100,116,139,0.12)' },
-        },
+      const candles = buildCandles(data);
+      if (!candles.length) return;
+
+      // ── MAIN CHART ────────────────────────────────────────────────────
+      const mainHeight = showRSI || showMACD ? 340 : 440;
+      const chart = LWC.createChart(mainRef.current, {
+        width : mainRef.current.clientWidth,
+        height: mainHeight,
+        layout: { background:{color:'#070d1a'}, textColor:'#94a3b8', fontSize:11, fontFamily:"'Inter',sans-serif" },
+        grid:  { vertLines:{color:'rgba(100,116,139,0.12)'}, horzLines:{color:'rgba(100,116,139,0.12)'} },
         crosshair: { mode: LWC.CrosshairMode.Normal },
-        rightPriceScale: { borderColor: '#1e293b', scaleMargins: { top: 0.08, bottom: 0.22 } },
-        timeScale: { borderColor: '#1e293b', timeVisible: true, secondsVisible: false },
+        rightPriceScale: { borderColor:'#1e293b', scaleMargins:{top:0.06,bottom:0.22} },
+        timeScale: { borderColor:'#1e293b', timeVisible:true, secondsVisible:false },
       });
       chartRef.current = chart;
 
-      const candles = buildSeries(data);
-      if (candles.length === 0) return;
-
-      // Main series
+      // ── Main series (candle type) ─────────────────────────────────────
       let mainSeries;
-      if (type === 'line' || type === 'area') {
-        mainSeries = chart.addAreaSeries({
-          lineColor    : '#4ade80',
-          topColor     : 'rgba(74,222,128,0.18)',
-          bottomColor  : 'rgba(74,222,128,0)',
-          lineWidth    : 2,
-        });
-        mainSeries.setData(candles.map(c => ({ time: c.time, value: c.close })));
-      } else {
-        mainSeries = chart.addCandlestickSeries({
-          upColor  : '#4ade80', downColor: '#f87171',
-          borderUpColor: '#4ade80', borderDownColor: '#f87171',
-          wickUpColor  : '#4ade80', wickDownColor  : '#f87171',
-        });
-        mainSeries.setData(candles);
-      }
-      seriesRef.current = mainSeries;
-
-      // Volume histogram
-      const volSeries = chart.addHistogramSeries({
-        color: '#26a69a',
-        priceFormat: { type: 'volume' },
-        priceScaleId: 'vol',
-      });
-      chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
-      volSeries.setData(candles.map((c, i) => ({
-        time : c.time,
-        value: parseFloat(data[i]?.volume || 0),
-        color: c.close >= c.open ? 'rgba(74,222,128,0.4)' : 'rgba(248,113,113,0.4)',
-      })));
-
-      // Indicators
-      const newRefs = {};
-      if (indicators.includes('SMA')) {
-        const s = chart.addLineSeries({ color: '#f59e0b', lineWidth: 1.5, title: 'SMA 20' });
-        s.setData(calcSMA(candles));
-        newRefs.SMA = s;
-      }
-      if (indicators.includes('EMA')) {
-        const s = chart.addLineSeries({ color: '#818cf8', lineWidth: 1.5, title: 'EMA 20' });
-        s.setData(calcEMA(candles));
-        newRefs.EMA = s;
-      }
-      if (indicators.includes('VWAP')) {
-        // Simple VWAP approximation using close
-        const vwap = candles.map((c, i) => ({
-          time : c.time,
-          value: candles.slice(0, i + 1).reduce((s, x) => s + x.close, 0) / (i + 1),
-        }));
-        const s = chart.addLineSeries({ color: '#e879f9', lineWidth: 1.5, lineStyle: 1, title: 'VWAP' });
-        s.setData(vwap);
-        newRefs.VWAP = s;
-      }
-      if (indicators.includes('BB')) {
-        const bb = calcBB(candles);
-        ['upper','lower'].forEach((key, i) => {
-          const s = chart.addLineSeries({ color: 'rgba(96,165,250,0.7)', lineWidth: 1, lineStyle: 2 });
-          s.setData(bb[key]);
-          newRefs[`BB_${key}`] = s;
-        });
-        const sm = chart.addLineSeries({ color: 'rgba(96,165,250,0.4)', lineWidth: 1 });
-        sm.setData(bb.middle);
-        newRefs.BB_mid = sm;
-      }
-      lineRefs.current = newRefs;
-
-      // Fit & resize
-      chart.timeScale().fitContent();
-      const ro = new ResizeObserver(() => {
-        if (containerRef.current && chartRef.current) {
-          chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
+      switch(candleType) {
+        case 'heikinashi': {
+          const ha = candles.map((c,i) => {
+            const po = i>0 ? (candles[i-1].open+candles[i-1].close)/2 : (c.open+c.close)/2;
+            const hc = (c.open+c.high+c.low+c.close)/4;
+            const ho = (po+hc)/2;
+            return { time:c.time, open:ho, high:Math.max(c.high,ho,hc), low:Math.min(c.low,ho,hc), close:hc };
+          });
+          mainSeries = chart.addCandlestickSeries({ upColor:'#4ade80', downColor:'#f87171', borderUpColor:'#4ade80', borderDownColor:'#f87171', wickUpColor:'#4ade80', wickDownColor:'#f87171' });
+          mainSeries.setData(ha);
+          break;
         }
+        case 'line':
+          mainSeries = chart.addLineSeries({ color:'#4ade80', lineWidth:2 });
+          mainSeries.setData(candles.map(c=>({time:c.time,value:c.close})));
+          break;
+        case 'area':
+          mainSeries = chart.addAreaSeries({ lineColor:'#4ade80', topColor:'rgba(74,222,128,0.18)', bottomColor:'rgba(74,222,128,0)', lineWidth:2 });
+          mainSeries.setData(candles.map(c=>({time:c.time,value:c.close})));
+          break;
+        case 'bar':
+          mainSeries = chart.addBarSeries({ upColor:'#4ade80', downColor:'#f87171' });
+          mainSeries.setData(candles);
+          break;
+        case 'baseline': {
+          const avg = candles.reduce((s,c)=>s+c.close,0)/candles.length;
+          mainSeries = chart.addBaselineSeries({ baseValue:{type:'price',price:avg}, topLineColor:'#4ade80', bottomLineColor:'#f87171', topFillColor1:'rgba(74,222,128,0.15)', topFillColor2:'rgba(74,222,128,0.02)', bottomFillColor1:'rgba(248,113,113,0.02)', bottomFillColor2:'rgba(248,113,113,0.15)' });
+          mainSeries.setData(candles.map(c=>({time:c.time,value:c.close})));
+          break;
+        }
+        default: // candlestick
+          mainSeries = chart.addCandlestickSeries({ upColor:'#4ade80', downColor:'#f87171', borderUpColor:'#4ade80', borderDownColor:'#f87171', wickUpColor:'#4ade80', wickDownColor:'#f87171' });
+          mainSeries.setData(candles);
+      }
+
+      // ── Volume ────────────────────────────────────────────────────────
+      const vol = chart.addHistogramSeries({ color:'#26a69a', priceFormat:{type:'volume'}, priceScaleId:'vol' });
+      chart.priceScale('vol').applyOptions({ scaleMargins:{top:0.82,bottom:0} });
+      vol.setData(candles.map(c=>({ time:c.time, value:c.volume, color:c.close>=c.open?'rgba(74,222,128,0.35)':'rgba(248,113,113,0.35)' })));
+
+      // ── Overlay indicators ────────────────────────────────────────────
+      if (indicators.includes('SMA20'))  { const s=chart.addLineSeries({color:'#f59e0b',lineWidth:1.5,title:'SMA 20'});  s.setData(calcSMA(candles,20)); }
+      if (indicators.includes('SMA50'))  { const s=chart.addLineSeries({color:'#fb923c',lineWidth:1.5,title:'SMA 50'});  s.setData(calcSMA(candles,50)); }
+      if (indicators.includes('SMA200')) { const s=chart.addLineSeries({color:'#f43f5e',lineWidth:2,title:'SMA 200'}); s.setData(calcSMA(candles,200)); }
+      if (indicators.includes('EMA9'))   { const s=chart.addLineSeries({color:'#a3e635',lineWidth:1.5,title:'EMA 9'});   s.setData(calcEMA(candles,9)); }
+      if (indicators.includes('EMA20'))  { const s=chart.addLineSeries({color:'#818cf8',lineWidth:1.5,title:'EMA 20'});  s.setData(calcEMA(candles,20)); }
+      if (indicators.includes('EMA50'))  { const s=chart.addLineSeries({color:'#c084fc',lineWidth:1.5,title:'EMA 50'});  s.setData(calcEMA(candles,50)); }
+      if (indicators.includes('WMA'))    { const s=chart.addLineSeries({color:'#34d399',lineWidth:1.5,title:'WMA 20'});  s.setData(calcWMA(candles,20)); }
+      if (indicators.includes('VWAP'))   { const s=chart.addLineSeries({color:'#e879f9',lineWidth:1.5,lineStyle:1,title:'VWAP'}); s.setData(calcVWAP(candles)); }
+      if (indicators.includes('BB')) {
+        const bb=calcBB(candles);
+        chart.addLineSeries({color:'rgba(96,165,250,0.7)',lineWidth:1,lineStyle:2,title:'BB Upper'}).setData(bb.up);
+        chart.addLineSeries({color:'rgba(96,165,250,0.4)',lineWidth:1,title:'BB Mid'}).setData(bb.md);
+        chart.addLineSeries({color:'rgba(96,165,250,0.7)',lineWidth:1,lineStyle:2,title:'BB Lower'}).setData(bb.lo);
+      }
+      if (indicators.includes('SuperTrend')) {
+        const st=calcSuperTrend(candles);
+        const stSeries=chart.addLineSeries({lineWidth:2,title:'SuperTrend'});
+        stSeries.setData(st.map(x=>({time:x.time,value:x.value})));
+        // Color segments
+        st.forEach((x,i)=>{ if(i===0)return; stSeries.setMarkers?.([{time:x.time,position:'inBar',color:x.color,shape:'circle',size:0.01}]); });
+      }
+      if (indicators.includes('Ichimoku')) {
+        const ic=calcIchimoku(candles);
+        chart.addLineSeries({color:'rgba(96,165,250,0.8)',lineWidth:1,title:'Tenkan'}).setData(ic.conv);
+        chart.addLineSeries({color:'rgba(248,113,113,0.8)',lineWidth:1,title:'Kijun'}).setData(ic.base);
+        chart.addLineSeries({color:'rgba(74,222,128,0.4)',lineWidth:1,lineStyle:2,title:'Senkou A'}).setData(ic.sA);
+        chart.addLineSeries({color:'rgba(248,113,113,0.4)',lineWidth:1,lineStyle:2,title:'Senkou B'}).setData(ic.sB);
+      }
+
+      chart.timeScale().fitContent();
+
+      // ── RSI sub-chart ─────────────────────────────────────────────────
+      if (showRSI && rsiRef.current) {
+        const rsiChart = createSubChart(rsiRef.current, LWC, 110);
+        rsiChartRef.current = rsiChart;
+        const rsiData = calcRSI(candles);
+        const rsiSeries = rsiChart.addLineSeries({ color:'#a78bfa', lineWidth:2, title:'RSI 14' });
+        rsiSeries.setData(rsiData);
+        rsiChart.addLineSeries({color:'rgba(248,113,113,0.5)',lineWidth:1,lineStyle:2,lastValueVisible:false,priceLineVisible:false}).setData(rsiData.map(x=>({time:x.time,value:70})));
+        rsiChart.addLineSeries({color:'rgba(74,222,128,0.5)',lineWidth:1,lineStyle:2,lastValueVisible:false,priceLineVisible:false}).setData(rsiData.map(x=>({time:x.time,value:30})));
+        // Sync time scales
+        chart.timeScale().subscribeVisibleLogicalRangeChange(range => { rsiChart.timeScale().setVisibleLogicalRange(range); });
+        rsiChart.timeScale().subscribeVisibleLogicalRangeChange(range => { chart.timeScale().setVisibleLogicalRange(range); });
+        rsiChart.timeScale().fitContent();
+      }
+
+      // ── MACD sub-chart ────────────────────────────────────────────────
+      if (showMACD && macdRef.current) {
+        const macdChart = createSubChart(macdRef.current, LWC, 110);
+        macdChartRef.current = macdChart;
+        const { macdLine, signal, hist } = calcMACD(candles);
+        macdChart.addLineSeries({color:'#60a5fa',lineWidth:1.5,title:'MACD'}).setData(macdLine);
+        macdChart.addLineSeries({color:'#f97316',lineWidth:1.5,title:'Signal'}).setData(signal);
+        const histSeries = macdChart.addHistogramSeries({ priceScaleId:'right' });
+        histSeries.setData(hist.map(x=>({time:x.time,value:x.value,color:x.value>=0?'rgba(74,222,128,0.6)':'rgba(248,113,113,0.6)'})));
+        chart.timeScale().subscribeVisibleLogicalRangeChange(range => { macdChart.timeScale().setVisibleLogicalRange(range); });
+        macdChart.timeScale().subscribeVisibleLogicalRangeChange(range => { chart.timeScale().setVisibleLogicalRange(range); });
+        macdChart.timeScale().fitContent();
+      }
+
+      // ── Resize observer ───────────────────────────────────────────────
+      const ro = new ResizeObserver(() => {
+        [{ ref: mainRef, chart: chartRef }, { ref: rsiRef, chart: rsiChartRef }, { ref: macdRef, chart: macdChartRef }]
+          .forEach(({ ref, chart: cRef }) => { if(ref.current && cRef.current) cRef.current.applyOptions({ width: ref.current.clientWidth }); });
       });
-      ro.observe(containerRef.current);
+      if (mainRef.current) ro.observe(mainRef.current);
       return () => ro.disconnect();
     });
 
-    return () => { if (chartRef.current) { chartRef.current.remove(); chartRef.current = null; } };
-  }, [data, indicators, type]);
+    return () => { [chartRef, rsiChartRef, macdChartRef].forEach(r=>{ if(r.current){r.current.remove();r.current=null;} }); };
+  }, [data, indicators, candleType]);
 
   return (
-    <div style={{position:'relative',background:'#070d1a'}}>
-      <div ref={containerRef} style={{width:'100%',height:'420px'}}/>
+    <div style={{background:'#070d1a',borderRadius:'8px',overflow:'hidden'}}>
+      <div ref={mainRef} style={{width:'100%'}}/>
+      {showRSI  && <><div style={{height:'1px',background:'#1e293b'}}/><div style={{padding:'2px 8px',fontSize:'0.65rem',color:'#a78bfa',background:'#070d1a',fontWeight:700}}>RSI 14</div><div ref={rsiRef}  style={{width:'100%'}}/></>}
+      {showMACD && <><div style={{height:'1px',background:'#1e293b'}}/><div style={{padding:'2px 8px',fontSize:'0.65rem',color:'#60a5fa',background:'#070d1a',fontWeight:700}}>MACD (12,26,9)</div><div ref={macdRef} style={{width:'100%'}}/></>}
     </div>
   );
 }
@@ -1017,9 +1037,9 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
 
   // CANDLESTICK CHART STATE
   const [selectedChartSymbol, setSelectedChartSymbol] = useState('NIFTY');
-  const [chartTimeframe, setChartTimeframe] = useState('5m'); // 1D, 5D, 1M, 3M, 6M, 1Y
+  const [chartTimeframe, setChartTimeframe] = useState('15m');
   const [candlestickType, setCandlestickType] = useState('candlestick');
-  const [chartIndicators, setChartIndicators] = useState(['SMA', 'RSI']);
+  const [chartIndicators, setChartIndicators] = useState(['EMA20', 'RSI']);
   const [lastChartUpdate, setLastChartUpdate] = useState(new Date()); // SMA, EMA, RSI, MACD, BB
   const [candlestickData, setCandlestickData] = useState([]);
 
@@ -3924,44 +3944,144 @@ Respond ONLY with valid JSON:
               </div>
             )}
 
-            {activeMarketsTab === 'candlestick' && (
-              <div style={{background:'var(--bg-card)',borderRadius:'12px',padding:'1rem',border:'1px solid var(--border)'}}>
-                <div style={{display:'flex',gap:'0.5rem',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap'}}>
-                  <select value={selectedChartSymbol} onChange={e=>{setSelectedChartSymbol(e.target.value);generateCandlestickData(e.target.value,chartTimeframe);}}
-                    style={{background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.3rem 0.5rem',fontWeight:700}}>
-                    {['NIFTY','BANKNIFTY','FINNIFTY','RELIANCE','TCS','HDFCBANK','INFY','ICICIBANK','SBIN','BAJFINANCE','ITC','WIPRO','AXISBANK','TATAMOTORS'].map(s=><option key={s}>{s}</option>)}
+            {activeMarketsTab === 'candlestick' && (() => {
+              const TF_GROUPS = [
+                { label:'Intraday', tfs:['1m','3m','5m','15m','30m'] },
+                { label:'Swing',    tfs:['1H','4H','1D'] },
+                { label:'Long',     tfs:['1W','1M'] },
+              ];
+              const TF_LABELS = {'1m':'1m','3m':'3m','5m':'5m','15m':'15m','30m':'30m','1H':'1H','4H':'4H','1D':'1D','1W':'1W','1M':'1M'};
+              const CANDLE_TYPES = [
+                {v:'candlestick', l:'🕯 Candle'},
+                {v:'heikinashi',  l:'🕯 Heikin-Ashi'},
+                {v:'bar',         l:'▣ Bar'},
+                {v:'line',        l:'📈 Line'},
+                {v:'area',        l:'🏔 Area'},
+                {v:'baseline',    l:'⚖ Baseline'},
+              ];
+              const INDICATOR_GROUPS = [
+                { label:'Moving Averages', items:[
+                  {v:'EMA9',   l:'EMA 9',   col:'#a3e635'},
+                  {v:'EMA20',  l:'EMA 20',  col:'#818cf8'},
+                  {v:'EMA50',  l:'EMA 50',  col:'#c084fc'},
+                  {v:'SMA20',  l:'SMA 20',  col:'#f59e0b'},
+                  {v:'SMA50',  l:'SMA 50',  col:'#fb923c'},
+                  {v:'SMA200', l:'SMA 200', col:'#f43f5e'},
+                  {v:'WMA',    l:'WMA 20',  col:'#34d399'},
+                ]},
+                { label:'Bands & Channels', items:[
+                  {v:'BB',         l:'Bollinger Bands', col:'#60a5fa'},
+                  {v:'VWAP',       l:'VWAP',            col:'#e879f9'},
+                  {v:'Ichimoku',   l:'Ichimoku Cloud',  col:'#94a3b8'},
+                  {v:'SuperTrend', l:'SuperTrend',      col:'#4ade80'},
+                ]},
+                { label:'Oscillators', items:[
+                  {v:'RSI',  l:'RSI 14',       col:'#a78bfa'},
+                  {v:'MACD', l:'MACD 12,26,9', col:'#60a5fa'},
+                ]},
+              ];
+              const toggleIndicator = (v) => setChartIndicators(prev =>
+                prev.includes(v) ? prev.filter(x=>x!==v) : [...prev, v]
+              );
+              const ctrlBtn = (active) => ({
+                padding:'0.28rem 0.65rem', borderRadius:'6px', border:'none', cursor:'pointer',
+                fontSize:'0.75rem', fontWeight: active?700:400,
+                background: active?'var(--accent)':'var(--bg-surface)',
+                color: active?'#000':'var(--text-dim)',
+              });
+              const indBtn = (v, col) => {
+                const active = chartIndicators.includes(v);
+                return {
+                  padding:'0.25rem 0.6rem', borderRadius:'99px', border:`1px solid ${active?col:'var(--border)'}`,
+                  cursor:'pointer', fontSize:'0.72rem', fontWeight: active?700:400,
+                  background: active?`${col}22`:'transparent',
+                  color: active?col:'var(--text-dim)',
+                };
+              };
+              return (
+              <div style={{background:'var(--bg-card)',borderRadius:'12px',border:'1px solid var(--border)',overflow:'hidden'}}>
+
+                {/* ── Row 1: Symbol + Candle type + Refresh ── */}
+                <div style={{display:'flex',gap:'0.5rem',alignItems:'center',padding:'0.75rem 1rem',borderBottom:'1px solid var(--border)',flexWrap:'wrap'}}>
+                  <select value={selectedChartSymbol}
+                    onChange={e=>{setSelectedChartSymbol(e.target.value);generateCandlestickData(e.target.value,chartTimeframe);}}
+                    style={{background:'var(--bg-surface)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.3rem 0.6rem',fontWeight:700,fontSize:'0.85rem'}}>
+                    {['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY',
+                      'RELIANCE','TCS','HDFCBANK','INFY','ICICIBANK','SBIN','BAJFINANCE',
+                      'ITC','WIPRO','AXISBANK','TATAMOTORS','HCLTECH','LT','KOTAKBANK',
+                      'MARUTI','SUNPHARMA','ADANIENT','TITAN','NESTLEIND','POWERGRID',
+                      'NTPC','ONGC','TATASTEEL','JSWSTEEL','HINDALCO','DRREDDY'].map(s=>
+                      <option key={s}>{s}</option>
+                    )}
                   </select>
-                  {['5m','15m','1H','1D','1W'].map(tf=>(
-                    <button key={tf} onClick={()=>{setChartTimeframe(tf);generateCandlestickData(selectedChartSymbol,tf);}}
-                      style={{padding:'0.25rem 0.6rem',borderRadius:'6px',border:'none',cursor:'pointer',fontSize:'0.78rem',
-                        background:chartTimeframe===tf?'var(--accent)':'var(--bg-dark)',color:chartTimeframe===tf?'#000':'var(--text-dim)',fontWeight:chartTimeframe===tf?700:400}}>
-                      {tf}
-                    </button>
-                  ))}
-                  <select value={chartIndicators[0]||'SMA'} onChange={e=>setChartIndicators([e.target.value])}
-                    style={{background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.25rem 0.5rem',fontSize:'0.78rem'}}>
-                    <option value="SMA">SMA</option>
-                    <option value="EMA">EMA</option>
-                    <option value="BB">Bollinger Bands</option>
-                    <option value="VWAP">VWAP</option>
-                    <option value="RSI">RSI</option>
-                  </select>
-                  <button onClick={()=>generateCandlestickData(selectedChartSymbol,chartTimeframe)} style={{marginLeft:'auto',background:'var(--bg-dark)',border:'1px solid var(--border)',color:'var(--text-dim)',borderRadius:'6px',padding:'0.25rem 0.6rem',cursor:'pointer',fontSize:'0.78rem'}}>🔄 Refresh</button>
+                  <div style={{display:'flex',gap:'0.25rem',flexWrap:'wrap'}}>
+                    {CANDLE_TYPES.map(({v,l})=>(
+                      <button key={v} onClick={()=>setCandlestickType(v)} style={ctrlBtn(candlestickType===v)}>{l}</button>
+                    ))}
+                  </div>
+                  <button onClick={()=>generateCandlestickData(selectedChartSymbol,chartTimeframe)}
+                    style={{marginLeft:'auto',background:'var(--bg-surface)',border:'1px solid var(--border)',color:'var(--text-dim)',borderRadius:'6px',padding:'0.28rem 0.75rem',cursor:'pointer',fontSize:'0.78rem'}}>
+                    🔄 Refresh
+                  </button>
                 </div>
+
+                {/* ── Row 2: Timeframes grouped ── */}
+                <div style={{display:'flex',gap:'0.75rem',alignItems:'center',padding:'0.5rem 1rem',borderBottom:'1px solid var(--border)',flexWrap:'wrap'}}>
+                  {TF_GROUPS.map(({label,tfs})=>(
+                    <div key={label} style={{display:'flex',alignItems:'center',gap:'0.25rem'}}>
+                      <span style={{fontSize:'0.65rem',color:'var(--text-muted)',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em',marginRight:'2px'}}>{label}</span>
+                      {tfs.map(tf=>(
+                        <button key={tf} onClick={()=>{setChartTimeframe(tf);generateCandlestickData(selectedChartSymbol,tf);}}
+                          style={ctrlBtn(chartTimeframe===tf)}>
+                          {TF_LABELS[tf]}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+
+                {/* ── Row 3: Indicators ── */}
+                <div style={{padding:'0.5rem 1rem',borderBottom:'1px solid var(--border)',background:'var(--bg-surface)'}}>
+                  <div style={{display:'flex',gap:'1rem',flexWrap:'wrap',alignItems:'flex-start'}}>
+                    {INDICATOR_GROUPS.map(({label,items})=>(
+                      <div key={label} style={{display:'flex',alignItems:'center',gap:'0.3rem',flexWrap:'wrap'}}>
+                        <span style={{fontSize:'0.62rem',color:'var(--text-muted)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',whiteSpace:'nowrap'}}>{label}:</span>
+                        {items.map(({v,l,col})=>(
+                          <button key={v} onClick={()=>toggleIndicator(v)} style={indBtn(v,col)}>{l}</button>
+                        ))}
+                      </div>
+                    ))}
+                    {chartIndicators.length > 0 && (
+                      <button onClick={()=>setChartIndicators([])}
+                        style={{marginLeft:'auto',fontSize:'0.7rem',color:'var(--text-muted)',background:'none',border:'none',cursor:'pointer',padding:'0.2rem 0.4rem'}}>
+                        ✕ Clear all
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Chart ── */}
                 {candlestickData && candlestickData.length > 0 ? (
-                  <TradingViewChart data={candlestickData} indicators={chartIndicators} symbol={selectedChartSymbol} timeframe={chartTimeframe}/>
+                  <TradingViewChart
+                    data={candlestickData}
+                    indicators={chartIndicators}
+                    candleType={candlestickType}
+                    symbol={selectedChartSymbol}
+                    timeframe={chartTimeframe}
+                  />
                 ) : (
-                  <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>
-                    <div style={{fontSize:'2rem',marginBottom:'0.5rem'}}>📊</div>
-                    <div>Click Load Chart to view candlestick data</div>
+                  <div style={{textAlign:'center',padding:'4rem 2rem',color:'var(--text-dim)'}}>
+                    <div style={{fontSize:'3rem',marginBottom:'0.75rem'}}>📊</div>
+                    <div style={{fontSize:'0.9rem',marginBottom:'1.25rem'}}>Select a symbol and timeframe, then load the chart</div>
                     <button onClick={()=>generateCandlestickData(selectedChartSymbol,chartTimeframe)}
-                      style={{marginTop:'1rem',background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.5rem 1.5rem',fontWeight:700,cursor:'pointer'}}>
+                      style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 2rem',fontWeight:700,cursor:'pointer',fontSize:'0.9rem'}}>
                       📈 Load Chart
                     </button>
                   </div>
                 )}
               </div>
-            )}
+              );
+            })()}
 
             {activeMarketsTab === 'oi-chart' && (() => {
               // Build OI data directly from liveOptionChain — always fresh, no stale state
@@ -4056,6 +4176,7 @@ Respond ONLY with valid JSON:
                   </div>
                 )}
               </div>
+            </div>
               );
             })()}
           </div>
