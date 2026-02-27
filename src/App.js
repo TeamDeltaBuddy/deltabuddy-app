@@ -4174,7 +4174,6 @@ Respond ONLY with valid JSON:
                       </table>
                     </div>
                   </div>
-                </div>
                 )}
               </div>
               );
