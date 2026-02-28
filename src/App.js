@@ -461,7 +461,7 @@ function App() {
   const [showPositionSizing, setShowPositionSizing] = useState(false);
 
   // NEWS INTELLIGENCE SYSTEM
-  const NEWS_API_KEY = 'c14ca467b8574c3b8091d20368031139';
+  // News fetched via backend RSS proxy — no API key needed
   const [intelligentNews, setIntelligentNews] = useState([]);
   const [isLoadingNews, setIsLoadingNews] = useState(false);
 
@@ -1423,20 +1423,19 @@ Respond ONLY with valid JSON:
   const fetchBusinessNews = async () => {
     setIsLoadingBusinessNews(true);
     try {
-      const query = 'business OR economy OR markets OR companies OR earnings OR IPO';
-      const response = await fetch(
-`${BACKEND_URL}/api/news?q=${encodeURIComponent(query)}&pageSize=20&apiKey=c14ca467b8574c3b8091d20368031139`
-      );
+      // Use free RSS feeds — no API key needed
+      const RSS_PROXY = `${BACKEND_URL}/api/rss-news`;
+      const response = await fetch(RSS_PROXY);
       const data = await response.json();
       if (data.articles) {
         setBusinessNews(data.articles.map(article => ({
           id: article.url,
           title: article.title,
           description: article.description,
-          source: article.source.name,
+          source: article.source,
           publishedAt: new Date(article.publishedAt),
           url: article.url,
-          image: article.urlToImage
+          image: null,
         })));
       }
     } catch (error) {
@@ -1541,8 +1540,7 @@ Respond ONLY with valid JSON:
   const fetchIntelligentNews = async () => {
     setIsLoadingNews(true);
     try {
-      const query = 'nifty OR sensex OR "bank nifty" OR "india market" OR RBI OR "crude oil" OR "india pakistan" OR geopolitical OR "fed rate"';
-      const response = await fetch(`${BACKEND_URL}/api/news?q=${encodeURIComponent(query)}&pageSize=10&sortBy=publishedAt&apiKey=c14ca467b8574c3b8091d20368031139`);
+      const response = await fetch(`${BACKEND_URL}/api/rss-news`);
       const data = await response.json();
       if (!data.articles) throw new Error('No articles');
       const analyzed = await Promise.all(data.articles.map(async (article) => {
@@ -2183,6 +2181,16 @@ Respond ONLY with valid JSON:
                     await testTelegram();
                     if(currentUser) {
                       try { await setDoc(doc(db,'users',currentUser.uid),{tgChatId,updatedAt:serverTimestamp()},{merge:true}); } catch(e){}
+                    }
+                    // Subscribe to backend alert engine for 24/7 alerts
+                    if (tgChatId) {
+                      try {
+                        await fetch(`${BACKEND_URL}/api/alert-subscribe`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ chat_id: tgChatId }),
+                        });
+                      } catch(e) {}
                     }
                   }}
                   disabled={!tgChatId||tgStatus==='testing'}
