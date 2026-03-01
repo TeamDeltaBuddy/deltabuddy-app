@@ -2027,21 +2027,23 @@ Respond ONLY with valid JSON:
     <div className="App">
       <nav className="navbar">
         <div className="container">
+          {/* Logo */}
           <div className="logo" onClick={()=>{setActiveTab('home');setShowMobileMenu(false);}}
             style={{cursor:'pointer',userSelect:'none',borderBottom:activeTab==='home'?'2px solid var(--accent)':'2px solid transparent',paddingBottom:'2px',transition:'border-color 0.2s'}}>
             <span className="delta">Δ</span>
             <span>DeltaBuddy</span>
           </div>
-          {/* ── Nav links — desktop row / mobile slide-down ── */}
+
+          {/* Nav links — desktop row / mobile full-screen slide-down */}
           <div className={`nav-links${showMobileMenu?' mobile-open':''}`}>
             {[
-              ['markets',      'Markets'],
+              ['markets',      '📊 Markets'],
               ['intelligence', '🧠 Intelligence'],
               ['strategy',     '🎯 Strategy'],
               ['backtest',     '📈 Backtest'],
-              ['single',       'Calculator'],
-              ['scanner',      'Scanner'],
-              ['journal',      'Journal'],
+              ['single',       '🧮 Calculator'],
+              ['scanner',      '🔍 Scanner'],
+              ['journal',      '📓 Journal'],
             ].map(([tab,label])=>(
               <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}>
                 {label}
@@ -2049,7 +2051,7 @@ Respond ONLY with valid JSON:
             ))}
           </div>
 
-          {/* ── Right controls — ALWAYS visible on all screen sizes ── */}
+          {/* Right controls — always visible */}
           <div className="navbar-right">
             {!authLoading && (currentUser ? (
               <>
@@ -2072,10 +2074,7 @@ Respond ONLY with valid JSON:
               </button>
             ))}
             <a href="https://wa.me/917506218502?text=Hi%20DeltaBuddy%20Team%2C%20I%20need%20help%20with..."
-              target="_blank" rel="noreferrer"
-              title="Get help on WhatsApp"
-              className="help-link"
-              style={{color:'#25D366',fontSize:'0.78rem',fontWeight:600,textDecoration:'none',padding:'0.25rem 0.4rem',borderRadius:'6px',border:'1px solid rgba(37,211,102,0.3)',whiteSpace:'nowrap'}}>
+              target="_blank" rel="noreferrer" className="help-link">
               💬 <span className="help-text">Help</span>
             </a>
             {isAdmin && (
@@ -2084,8 +2083,10 @@ Respond ONLY with valid JSON:
                 ⚙️
               </span>
             )}
+            {/* Hamburger — mobile only */}
             <button onClick={()=>setShowMobileMenu(m=>!m)}
-              className="hamburger-btn" aria-label="Menu">
+              className="hamburger-btn" aria-label="Toggle menu"
+              style={{fontSize:'1.4rem'}}>
               {showMobileMenu ? '✕' : '☰'}
             </button>
           </div>
