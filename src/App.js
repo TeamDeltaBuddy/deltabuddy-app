@@ -510,10 +510,19 @@ function App() {
   const [groqStatus,       setGroqStatus]       = useState('idle');
   const [notifyHighImpact, setNotifyHighImpact] = useState(() => localStorage.getItem('db_notify_hi') !== 'false');
   const [notifyScanner,    setNotifyScanner]    = useState(() => localStorage.getItem('db_notify_sc') !== 'false');
+  // Paper Trading state
+  const [paperBalance,     setPaperBalance]     = useState(() => parseFloat(localStorage.getItem('db_paper_balance') || '100000'));
+  const [paperPositions,   setPaperPositions]   = useState(() => { try { return JSON.parse(localStorage.getItem('db_paper_positions') || '[]'); } catch(e) { return []; } });
+  const [paperHistory,     setPaperHistory]     = useState(() => { try { return JSON.parse(localStorage.getItem('db_paper_history') || '[]'); } catch(e) { return []; } });
+  const [paperOrder,       setPaperOrder]       = useState({ symbol:'NIFTY', type:'BUY', qty:1, price:'', orderType:'MARKET' });
+  const [paperMsg,         setPaperMsg]         = useState('');
   useEffect(() => { localStorage.setItem('db_groq_key',  groqApiKey);       }, [groqApiKey]);
   useEffect(() => { localStorage.setItem('db_tg_chatid', tgChatId);         }, [tgChatId]);
   useEffect(() => { localStorage.setItem('db_notify_hi', notifyHighImpact); }, [notifyHighImpact]);
   useEffect(() => { localStorage.setItem('db_notify_sc', notifyScanner);    }, [notifyScanner]);
+  useEffect(() => { localStorage.setItem('db_paper_balance',   paperBalance.toString()); }, [paperBalance]);
+  useEffect(() => { localStorage.setItem('db_paper_positions', JSON.stringify(paperPositions)); }, [paperPositions]);
+  useEffect(() => { localStorage.setItem('db_paper_history',   JSON.stringify(paperHistory)); }, [paperHistory]);
 
 
   // ── Stock Deep Dive ──────────────────────────────────────────────────────
@@ -1106,6 +1115,73 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
       setSavedStrategies(JSON.parse(saved));
     }
   }, []);
+  // ── Paper Trading ────────────────────────────────────────────────────────
+  const executePaperOrder = async () => {
+    const { symbol, type, qty, price, orderType } = paperOrder;
+    if (!symbol || !qty || qty <= 0) { setPaperMsg('❌ Enter valid symbol and quantity'); return; }
+
+    // Fetch live price
+    let ltp = parseFloat(price);
+    if (orderType === 'MARKET' || !ltp) {
+      try {
+        const sym = symbol.toUpperCase().includes('NIFTY') ? '^NSEI' :
+                    symbol.toUpperCase().includes('BANKNIFTY') ? '^NSEBANK' :
+                    `${symbol.toUpperCase()}.NS`;
+        const r = await fetch(`${BACKEND_URL}/api/stock-price?symbol=${encodeURIComponent(sym)}`);
+        const d = await r.json();
+        ltp = d.price || d.regularMarketPrice || 0;
+      } catch(e) { ltp = parseFloat(price) || 0; }
+    }
+    if (!ltp) { setPaperMsg('❌ Could not fetch price. Enter manually.'); return; }
+
+    const cost = ltp * qty;
+    if (type === 'BUY' && cost > paperBalance) { setPaperMsg(`❌ Insufficient balance. Need ₹${cost.toLocaleString('en-IN')}`); return; }
+
+    // Check if selling existing position
+    if (type === 'SELL') {
+      const pos = paperPositions.find(p => p.symbol === symbol.toUpperCase());
+      if (!pos || pos.qty < qty) { setPaperMsg('❌ No open position to sell'); return; }
+      const pnl = (ltp - pos.avgPrice) * qty;
+      setPaperPositions(prev => {
+        const updated = prev.map(p => p.symbol === symbol.toUpperCase()
+          ? { ...p, qty: p.qty - qty }
+          : p
+        ).filter(p => p.qty > 0);
+        return updated;
+      });
+      setPaperBalance(b => b + cost);
+      const trade = { id: Date.now(), symbol: symbol.toUpperCase(), type: 'SELL', qty, price: ltp, pnl, time: new Date().toLocaleString('en-IN') };
+      setPaperHistory(h => [trade, ...h].slice(0, 100));
+      setPaperMsg(`✅ SELL executed @ ₹${ltp.toFixed(2)} | P&L: ${pnl >= 0 ? '+' : ''}₹${pnl.toFixed(2)}`);
+    } else {
+      // BUY
+      setPaperBalance(b => b - cost);
+      setPaperPositions(prev => {
+        const existing = prev.find(p => p.symbol === symbol.toUpperCase());
+        if (existing) {
+          return prev.map(p => p.symbol === symbol.toUpperCase()
+            ? { ...p, qty: p.qty + qty, avgPrice: (p.avgPrice * p.qty + ltp * qty) / (p.qty + qty) }
+            : p
+          );
+        }
+        return [...prev, { symbol: symbol.toUpperCase(), qty, avgPrice: ltp, buyTime: new Date().toLocaleString('en-IN') }];
+      });
+      const trade = { id: Date.now(), symbol: symbol.toUpperCase(), type: 'BUY', qty, price: ltp, pnl: null, time: new Date().toLocaleString('en-IN') };
+      setPaperHistory(h => [trade, ...h].slice(0, 100));
+      setPaperMsg(`✅ BUY executed @ ₹${ltp.toFixed(2)} | Cost: ₹${cost.toLocaleString('en-IN')}`);
+    }
+    setTimeout(() => setPaperMsg(''), 4000);
+  };
+
+  const resetPaperAccount = () => {
+    if (!window.confirm('Reset paper trading account? All positions and history will be cleared.')) return;
+    setPaperBalance(100000);
+    setPaperPositions([]);
+    setPaperHistory([]);
+    setPaperMsg('✅ Account reset to ₹1,00,000');
+    setTimeout(() => setPaperMsg(''), 3000);
+  };
+
   // Telegram
   const sendTelegramMessage = async (text, dedupeKey) => {
     if (!tgChatId) return;
@@ -1639,6 +1715,19 @@ Respond ONLY with valid JSON:
 
   // Auto-refresh news and prices - LIVE MODE
   useEffect(() => {
+    // Register PWA service worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+    }
+    // Re-subscribe to backend alert engine on every load
+    const chatId = localStorage.getItem('db_tg_chatid');
+    if (chatId) {
+      fetch(`${BACKEND_URL}/api/alert-subscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId }),
+      }).catch(() => {});
+    }
     fetchLivePrices();
     fetchBanList();
     fetchIntelligentNews();
@@ -2044,6 +2133,7 @@ Respond ONLY with valid JSON:
               ['single',       '🧮 Calculator'],
               ['scanner',      '🔍 Scanner'],
               ['journal',      '📓 Journal'],
+              ['paper',        '📝 Paper Trade'],
             ].map(([tab,label])=>(
               <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}>
                 {label}
@@ -2110,6 +2200,7 @@ Respond ONLY with valid JSON:
             ['single',       '🧮 Calculator'],
             ['scanner',      '🔍 Scanner'],
             ['journal',      '📓 Journal'],
+            ['paper',        '📝 Paper Trade'],
           ].map(([tab,label])=>(
             <div key={tab}
               onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}
@@ -2356,6 +2447,61 @@ Respond ONLY with valid JSON:
         )}
 {activeTab === 'home' ? (
           <>
+            {/* ── TELEGRAM ONBOARDING BANNER — shown if not connected ── */}
+            {!tgChatId && currentUser && (
+              <div style={{
+                background:'linear-gradient(135deg,rgba(34,158,217,0.15),rgba(0,255,136,0.08))',
+                border:'1px solid rgba(34,158,217,0.4)',
+                borderRadius:'12px',
+                padding:'1rem 1.25rem',
+                margin:'1rem 1.5rem 0',
+                display:'flex',
+                alignItems:'center',
+                justifyContent:'space-between',
+                gap:'1rem',
+                flexWrap:'wrap',
+              }}>
+                <div style={{display:'flex',alignItems:'center',gap:'0.75rem'}}>
+                  <span style={{fontSize:'1.8rem'}}>🔔</span>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:'0.95rem',color:'#f0f9ff'}}>Get instant market alerts on Telegram</div>
+                    <div style={{fontSize:'0.82rem',color:'#94a3b8',marginTop:'2px'}}>Breaking news · Scanner signals · Risk alerts — delivered 24/7, even when you're away</div>
+                  </div>
+                </div>
+                <button
+                  onClick={()=>setShowTgSetup(true)}
+                  style={{background:'#229ED9',color:'white',border:'none',borderRadius:'8px',padding:'0.6rem 1.25rem',fontWeight:700,fontSize:'0.88rem',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
+                  ⚡ Connect in 60s
+                </button>
+              </div>
+            )}
+            {!currentUser && (
+              <div style={{
+                background:'linear-gradient(135deg,rgba(249,115,22,0.12),rgba(0,255,136,0.06))',
+                border:'1px solid rgba(249,115,22,0.3)',
+                borderRadius:'12px',
+                padding:'1rem 1.25rem',
+                margin:'1rem 1.5rem 0',
+                display:'flex',
+                alignItems:'center',
+                justifyContent:'space-between',
+                gap:'1rem',
+                flexWrap:'wrap',
+              }}>
+                <div style={{display:'flex',alignItems:'center',gap:'0.75rem'}}>
+                  <span style={{fontSize:'1.8rem'}}>👋</span>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:'0.95rem',color:'#f0f9ff'}}>Welcome to DeltaBuddy</div>
+                    <div style={{fontSize:'0.82rem',color:'#94a3b8',marginTop:'2px'}}>Sign in to save strategies, get Telegram alerts, and access all features</div>
+                  </div>
+                </div>
+                <button
+                  onClick={()=>setShowAuthModal(true)}
+                  style={{background:'#f97316',color:'white',border:'none',borderRadius:'8px',padding:'0.6rem 1.25rem',fontWeight:700,fontSize:'0.88rem',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
+                  Sign In Free →
+                </button>
+              </div>
+            )}
             {/* GLOBAL INDICES TICKER */}
             <div className="global-ticker-bar">
               <div className="ticker-header">
@@ -5038,6 +5184,156 @@ Respond ONLY with valid JSON:
                 {trade.notes && <div style={{marginTop:'0.4rem',fontSize:'0.8rem',color:'#93c5fd',fontStyle:'italic'}}>💬 {trade.notes}</div>}
               </div>
             ))}
+          </div>
+        ) : activeTab === 'paper' ? (
+          <div className="main-content">
+            <div className="page-header">
+              <h1>📝 Paper Trading</h1>
+              <p className="subtitle">Practice with virtual money — zero real capital at risk</p>
+            </div>
+
+            {/* Stats */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'1rem',marginBottom:'1.5rem'}}>
+              {[
+                { label:'Virtual Balance', value:`₹${paperBalance.toLocaleString('en-IN',{maximumFractionDigits:0})}`, color:'var(--accent)' },
+                { label:'Open Positions', value:paperPositions.length, color:'var(--blue)' },
+                { label:'Total Trades', value:paperHistory.length, color:'var(--yellow)' },
+                { label:'Realised P&L', value:`${paperHistory.filter(t=>t.pnl!=null).reduce((s,t)=>s+t.pnl,0)>=0?'+':''}₹${paperHistory.filter(t=>t.pnl!=null).reduce((s,t)=>s+t.pnl,0).toLocaleString('en-IN',{maximumFractionDigits:0})}`, color: paperHistory.filter(t=>t.pnl!=null).reduce((s,t)=>s+t.pnl,0)>=0?'var(--green)':'var(--red)' },
+              ].map(({label,value,color})=>(
+                <div key={label} style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1rem',textAlign:'center'}}>
+                  <div style={{fontSize:'0.75rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'0.4rem'}}>{label}</div>
+                  <div style={{fontSize:'1.4rem',fontWeight:800,color}}>{value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Order Form */}
+            <div className="panel" style={{marginBottom:'1.5rem'}}>
+              <h3 style={{marginBottom:'1rem'}}>📤 Place Order</h3>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'0.75rem',marginBottom:'1rem'}}>
+                <div>
+                  <label style={{fontSize:'0.78rem',color:'var(--text-dim)',display:'block',marginBottom:'0.3rem'}}>Symbol</label>
+                  <input className="input-field" value={paperOrder.symbol}
+                    onChange={e=>setPaperOrder(o=>({...o,symbol:e.target.value.toUpperCase()}))}
+                    placeholder="NIFTY / RELIANCE" />
+                </div>
+                <div>
+                  <label style={{fontSize:'0.78rem',color:'var(--text-dim)',display:'block',marginBottom:'0.3rem'}}>Action</label>
+                  <select className="input-field" value={paperOrder.type} onChange={e=>setPaperOrder(o=>({...o,type:e.target.value}))}>
+                    <option value="BUY">BUY</option>
+                    <option value="SELL">SELL</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{fontSize:'0.78rem',color:'var(--text-dim)',display:'block',marginBottom:'0.3rem'}}>Quantity</label>
+                  <input className="input-field" type="number" min="1" value={paperOrder.qty}
+                    onChange={e=>setPaperOrder(o=>({...o,qty:parseInt(e.target.value)||1}))} />
+                </div>
+                <div>
+                  <label style={{fontSize:'0.78rem',color:'var(--text-dim)',display:'block',marginBottom:'0.3rem'}}>Order Type</label>
+                  <select className="input-field" value={paperOrder.orderType} onChange={e=>setPaperOrder(o=>({...o,orderType:e.target.value}))}>
+                    <option value="MARKET">MARKET (live price)</option>
+                    <option value="LIMIT">LIMIT (enter price)</option>
+                  </select>
+                </div>
+                {paperOrder.orderType === 'LIMIT' && (
+                  <div>
+                    <label style={{fontSize:'0.78rem',color:'var(--text-dim)',display:'block',marginBottom:'0.3rem'}}>Price ₹</label>
+                    <input className="input-field" type="number" value={paperOrder.price}
+                      onChange={e=>setPaperOrder(o=>({...o,price:e.target.value}))} placeholder="0.00" />
+                  </div>
+                )}
+              </div>
+              <div style={{display:'flex',gap:'0.75rem',alignItems:'center',flexWrap:'wrap'}}>
+                <button onClick={executePaperOrder}
+                  style={{background:paperOrder.type==='BUY'?'#22c55e':'#ef4444',color:'white',border:'none',borderRadius:'8px',padding:'0.65rem 1.5rem',fontWeight:700,fontSize:'0.95rem',cursor:'pointer'}}>
+                  {paperOrder.type==='BUY'?'🟢 BUY':'🔴 SELL'} {paperOrder.symbol}
+                </button>
+                <button onClick={resetPaperAccount}
+                  style={{background:'var(--bg-surface)',color:'var(--text-dim)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.65rem 1rem',fontSize:'0.85rem',cursor:'pointer'}}>
+                  🔄 Reset Account
+                </button>
+                {paperMsg && (
+                  <span style={{fontSize:'0.9rem',fontWeight:600,color:paperMsg.startsWith('✅')?'var(--green)':'var(--red)',flex:1}}>
+                    {paperMsg}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Open Positions */}
+            {paperPositions.length > 0 && (
+              <div className="panel" style={{marginBottom:'1.5rem'}}>
+                <h3 style={{marginBottom:'1rem'}}>📊 Open Positions</h3>
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse'}}>
+                    <thead>
+                      <tr>
+                        {['Symbol','Qty','Avg Price','Entered','Action'].map(h=>(
+                          <th key={h} style={{padding:'0.6rem 0.85rem',textAlign:'left',color:'var(--text-dim)',fontSize:'0.78rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',borderBottom:'1px solid var(--border)',background:'var(--bg-surface)'}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paperPositions.map(pos=>(
+                        <tr key={pos.symbol} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                          <td style={{padding:'0.65rem 0.85rem',fontWeight:700,color:'var(--accent)'}}>{pos.symbol}</td>
+                          <td style={{padding:'0.65rem 0.85rem'}}>{pos.qty}</td>
+                          <td style={{padding:'0.65rem 0.85rem'}}>₹{pos.avgPrice.toFixed(2)}</td>
+                          <td style={{padding:'0.65rem 0.85rem',fontSize:'0.82rem',color:'var(--text-dim)'}}>{pos.buyTime}</td>
+                          <td style={{padding:'0.65rem 0.85rem'}}>
+                            <button onClick={()=>setPaperOrder({symbol:pos.symbol,type:'SELL',qty:pos.qty,price:'',orderType:'MARKET'})}
+                              style={{background:'var(--red-dim)',color:'var(--red)',border:'none',borderRadius:'6px',padding:'0.3rem 0.8rem',fontSize:'0.82rem',cursor:'pointer',fontWeight:700}}>
+                              Close Position
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Trade History */}
+            {paperHistory.length > 0 ? (
+              <div className="panel">
+                <h3 style={{marginBottom:'1rem'}}>📋 Trade History</h3>
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse'}}>
+                    <thead>
+                      <tr>
+                        {['Time','Symbol','Type','Qty','Price','P&L'].map(h=>(
+                          <th key={h} style={{padding:'0.6rem 0.85rem',textAlign:'left',color:'var(--text-dim)',fontSize:'0.78rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',borderBottom:'1px solid var(--border)',background:'var(--bg-surface)'}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paperHistory.slice(0,50).map(t=>(
+                        <tr key={t.id} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                          <td style={{padding:'0.6rem 0.85rem',fontSize:'0.8rem',color:'var(--text-dim)'}}>{t.time}</td>
+                          <td style={{padding:'0.6rem 0.85rem',fontWeight:700}}>{t.symbol}</td>
+                          <td style={{padding:'0.6rem 0.85rem'}}>
+                            <span style={{color:t.type==='BUY'?'var(--green)':'var(--red)',fontWeight:700,fontSize:'0.85rem'}}>{t.type}</span>
+                          </td>
+                          <td style={{padding:'0.6rem 0.85rem'}}>{t.qty}</td>
+                          <td style={{padding:'0.6rem 0.85rem'}}>₹{t.price.toFixed(2)}</td>
+                          <td style={{padding:'0.6rem 0.85rem',fontWeight:700,color:t.pnl==null?'var(--text-muted)':t.pnl>=0?'var(--green)':'var(--red)'}}>
+                            {t.pnl==null?'OPEN':`${t.pnl>=0?'+':''}₹${t.pnl.toFixed(2)}`}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : paperPositions.length === 0 && (
+              <div style={{textAlign:'center',padding:'3rem 1rem',color:'var(--text-muted)'}}>
+                <div style={{fontSize:'3rem',marginBottom:'1rem'}}>📝</div>
+                <div style={{fontSize:'1.15rem',fontWeight:700,marginBottom:'0.5rem',color:'var(--text-main)'}}>No trades yet</div>
+                <div style={{fontSize:'0.9rem'}}>Place your first order above. You start with ₹1,00,000 virtual balance.</div>
+              </div>
+            )}
           </div>
         ) : null}
 
