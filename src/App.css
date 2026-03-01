@@ -49,11 +49,10 @@ a{color:var(--accent);text-decoration:none}
 
 /* NAVBAR */
 .navbar{position:sticky;top:0;z-index:100;background:rgba(7,13,26,0.96);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);height:64px;display:flex;align-items:center;padding:0 2rem;width:100%}
-.navbar .container{display:flex;align-items:center;justify-content:space-between;padding:0}
+.navbar .container{display:flex;align-items:center;gap:0.5rem;padding:0;width:100%}
 .logo{display:flex;align-items:center;gap:0.4rem;cursor:pointer;user-select:none;flex-shrink:0}
 .logo .delta{font-size:1.6rem;color:var(--accent);font-weight:900;line-height:1}
 .logo span:last-child{font-size:1.4rem;font-weight:800;color:var(--text-main);letter-spacing:-0.01em}
-.navbar .container{display:flex;align-items:center;gap:0.5rem}
 .nav-links{display:flex;align-items:center;gap:0.1rem;flex:1}
 .nav-links span{font-size:1rem;font-weight:500;color:var(--text-dim);padding:0.5rem 0.95rem;border-radius:var(--radius-sm);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:color 0.15s,background 0.15s}
 .nav-links span:hover{color:var(--text-main);background:var(--bg-hover)}
