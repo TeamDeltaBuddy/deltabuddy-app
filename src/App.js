@@ -2034,8 +2034,8 @@ Respond ONLY with valid JSON:
             <span>DeltaBuddy</span>
           </div>
 
-          {/* Nav links — desktop row / mobile full-screen slide-down */}
-          <div className={`nav-links${showMobileMenu?' mobile-open':''}`}>
+          {/* Nav links — desktop only */}
+          <div className="nav-links">
             {[
               ['markets',      '📊 Markets'],
               ['intelligence', '🧠 Intelligence'],
@@ -2092,6 +2092,43 @@ Respond ONLY with valid JSON:
           </div>
         </div>
       </nav>
+
+      {/* ── MOBILE MENU — rendered outside navbar to avoid clipping ── */}
+      {showMobileMenu && (
+        <div style={{
+          position:'fixed', top:'56px', left:0, right:0, bottom:0,
+          background:'#070d1a', zIndex:9998,
+          display:'flex', flexDirection:'column',
+          borderTop:'2px solid #f97316',
+          overflowY:'auto',
+        }}>
+          {[
+            ['markets',      '📊 Markets'],
+            ['intelligence', '🧠 Intelligence'],
+            ['strategy',     '🎯 Strategy'],
+            ['backtest',     '📈 Backtest'],
+            ['single',       '🧮 Calculator'],
+            ['scanner',      '🔍 Scanner'],
+            ['journal',      '📓 Journal'],
+          ].map(([tab,label])=>(
+            <div key={tab}
+              onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}
+              style={{
+                padding:'1.1rem 1.5rem',
+                borderBottom:'1px solid rgba(255,255,255,0.07)',
+                fontSize:'1.05rem',
+                fontWeight: activeTab===tab ? 700 : 500,
+                color: activeTab===tab ? '#f97316' : '#e2e8f0',
+                background: activeTab===tab ? 'rgba(249,115,22,0.08)' : 'transparent',
+                cursor:'pointer',
+                display:'flex', alignItems:'center', gap:'0.5rem',
+              }}>
+              {label}
+              {activeTab===tab && <span style={{marginLeft:'auto',color:'#f97316'}}>●</span>}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{minHeight:'80vh'}}>
         {showSaveModal && (

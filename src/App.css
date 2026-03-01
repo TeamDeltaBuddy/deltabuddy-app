@@ -48,7 +48,7 @@ a{color:var(--accent);text-decoration:none}
 .main-content{flex:1;padding:1.5rem 2rem;width:100%}
 
 /* NAVBAR */
-.navbar{position:sticky;top:0;z-index:100;background:rgba(7,13,26,0.96);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);height:64px;display:flex;align-items:center;padding:0 2rem;width:100%}
+.navbar{position:sticky;top:0;z-index:1000;background:rgba(7,13,26,0.96);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);height:64px;display:flex;align-items:center;padding:0 2rem;width:100%;box-sizing:border-box}
 .navbar .container{display:flex;align-items:center;gap:0.5rem;padding:0;width:100%}
 .logo{display:flex;align-items:center;gap:0.4rem;cursor:pointer;user-select:none;flex-shrink:0}
 .logo .delta{font-size:1.6rem;color:var(--accent);font-weight:900;line-height:1}
@@ -272,10 +272,33 @@ tr.atm-row td{background:rgba(0,255,136,0.05);border-left:3px solid var(--accent
   .panel{padding:1rem}
   .global-ticker-bar{padding:0.4rem 1rem}
   .ticker-update-time{display:none}
+  .navbar{padding:0 1rem;height:56px;position:relative}
   .hamburger-btn{display:flex;align-items:center;justify-content:center}
-  .nav-links{display:none;flex-direction:column;position:fixed;top:56px;left:0;right:0;bottom:0;background:var(--bg-base);z-index:999;padding:0.5rem 0;border-top:1px solid var(--border);overflow-y:auto;gap:0}
+  .nav-links{
+    display:none;
+    position:absolute;
+    top:56px;
+    left:0;
+    right:0;
+    background:#070d1a;
+    border-top:1px solid var(--border);
+    border-bottom:2px solid var(--accent);
+    flex-direction:column;
+    z-index:9999;
+    padding:0.5rem 0;
+    box-shadow:0 8px 32px rgba(0,0,0,0.6);
+  }
   .nav-links.mobile-open{display:flex}
-  .nav-links span{padding:1rem 1.5rem;font-size:1.05rem;border-bottom:1px solid var(--border);border-radius:0;width:100%;box-sizing:border-box}
+  .nav-links span{
+    padding:1rem 1.5rem;
+    font-size:1rem;
+    border-bottom:1px solid rgba(255,255,255,0.06);
+    border-radius:0;
+    width:100%;
+    box-sizing:border-box;
+    white-space:normal;
+  }
+  .nav-links span:last-child{border-bottom:none}
   .navbar-right{gap:0.3rem}
   .help-text{display:none}
   .quick-actions-grid{grid-template-columns:repeat(2,1fr)}
