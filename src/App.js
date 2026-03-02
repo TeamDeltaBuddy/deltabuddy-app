@@ -516,6 +516,19 @@ function App() {
   const [paperHistory,     setPaperHistory]     = useState(() => { try { return JSON.parse(localStorage.getItem('db_paper_history') || '[]'); } catch(e) { return []; } });
   const [paperOrder,       setPaperOrder]       = useState({ symbol:'NIFTY', type:'BUY', qty:1, price:'', orderType:'MARKET' });
   const [paperMsg,         setPaperMsg]         = useState('');
+  // Portfolio / Broker state
+  const [portfolio,        setPortfolio]        = useState(null);
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
+  const [portfolioError,   setPortfolioError]   = useState('');
+  const [portfolioRefresh, setPortfolioRefresh] = useState(0);
+  const [orderMsg,         setOrderMsg]         = useState('');
+  const [orderLoading,     setOrderLoading]     = useState(false);
+  const [quickOrder,       setQuickOrder]       = useState(null); // {symbol,token,exchange,type}
+  // Expiry tools state
+  const [expiryData,       setExpiryData]       = useState(null);
+  const [expiryLoading,    setExpiryLoading]    = useState(false);
+  const [expirySymbol,     setExpirySymbol]     = useState('NIFTY');
+  const [expiryInterval,   setExpiryInterval]   = useState(null);
   useEffect(() => { localStorage.setItem('db_groq_key',  groqApiKey);       }, [groqApiKey]);
   useEffect(() => { localStorage.setItem('db_tg_chatid', tgChatId);         }, [tgChatId]);
   useEffect(() => { localStorage.setItem('db_notify_hi', notifyHighImpact); }, [notifyHighImpact]);
@@ -1247,6 +1260,58 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     if (isPro) { callback(); return; }
     setShowPaywall(true);
   };
+
+  // ── Portfolio / Broker Functions ──────────────────────────────────────────────
+  const fetchPortfolio = async () => {
+    setPortfolioLoading(true);
+    setPortfolioError('');
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/angel/portfolio`);
+      const data = await r.json();
+      if (data.error) { setPortfolioError(data.error); setPortfolio(null); }
+      else setPortfolio(data);
+    } catch(e) { setPortfolioError('Could not connect to backend'); }
+    finally { setPortfolioLoading(false); }
+  };
+
+  // Black-Scholes Greeks calculator
+  const calcGreeks = (S, K, T, sigma, type) => {
+    if (!S||!K||!T||!sigma||sigma<=0) return {delta:0,gamma:0,theta:0,vega:0};
+    const r = 0.065; // risk-free rate ~6.5%
+    const d1 = (Math.log(S/K)+(r+0.5*sigma*sigma)*T)/(sigma*Math.sqrt(T));
+    const d2 = d1-sigma*Math.sqrt(T);
+    const cdf = x => { const a=1/(1+0.2316419*Math.abs(x)); const k=((((1.330274429*a-1.821255978)*a+1.781477937)*a-0.356563782)*a+0.319381530)*a; return x>=0?1-0.3989422803*Math.exp(-0.5*x*x)*k:0.3989422803*Math.exp(-0.5*x*x)*k; };
+    const pdf = x => Math.exp(-0.5*x*x)/Math.sqrt(2*Math.PI);
+    const delta = type==='CE' ? cdf(d1) : cdf(d1)-1;
+    const gamma = pdf(d1)/(S*sigma*Math.sqrt(T));
+    const theta = (-(S*pdf(d1)*sigma)/(2*Math.sqrt(T))-r*K*Math.exp(-r*T)*(type==='CE'?cdf(d2):cdf(-d2)))/365;
+    const vega  = S*pdf(d1)*Math.sqrt(T)/100;
+    return {delta:+delta.toFixed(4),gamma:+gamma.toFixed(6),theta:+theta.toFixed(2),vega:+vega.toFixed(2)};
+  };
+
+  const placeRealOrder = async (orderData) => {
+    setOrderLoading(true);
+    setOrderMsg('');
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/angel/place-order`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(orderData)});
+      const data = await r.json();
+      if (data.ok) { setOrderMsg(`✅ Order placed! ID: ${data.orderId}`); setTimeout(()=>{setOrderMsg('');setQuickOrder(null);fetchPortfolio();},3000); }
+      else setOrderMsg(`❌ ${data.error||'Order failed'}`);
+    } catch(e) { setOrderMsg('❌ Network error'); }
+    finally { setOrderLoading(false); }
+  };
+
+  // ── Expiry Tools ──────────────────────────────────────────────────────────────
+  const fetchExpiryData = async (sym) => {
+    setExpiryLoading(true);
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/expiry-tools?symbol=${sym||expirySymbol}`);
+      const data = await r.json();
+      if (!data.error) setExpiryData(data);
+    } catch(e) {}
+    finally { setExpiryLoading(false); }
+  };
+
   const executePaperOrder = async () => {
     const { symbol, type, qty, price, orderType } = paperOrder;
     if (!symbol || !qty || qty <= 0) { setPaperMsg('❌ Enter valid symbol and quantity'); return; }
@@ -1844,6 +1909,22 @@ Respond ONLY with valid JSON:
     setAlerts(newAlerts);
   };
 
+  // Auto-refresh portfolio when on portfolio tab
+  useEffect(() => {
+    if (activeTab !== 'portfolio') return;
+    fetchPortfolio();
+    const iv = setInterval(fetchPortfolio, 30000);
+    return () => clearInterval(iv);
+  }, [activeTab]); // eslint-disable-line
+
+  // Auto-refresh expiry data when on expiry tab
+  useEffect(() => {
+    if (activeTab !== 'expiry') return;
+    fetchExpiryData(expirySymbol);
+    const iv = setInterval(() => fetchExpiryData(expirySymbol), 60000);
+    return () => clearInterval(iv);
+  }, [activeTab, expirySymbol]); // eslint-disable-line
+
   // Auto-refresh news and prices - LIVE MODE
   useEffect(() => {
     // Register PWA service worker
@@ -2265,6 +2346,8 @@ Respond ONLY with valid JSON:
               ['scanner',      '🔍 Scanner'],
               ['journal',      '📓 Journal'],
               ['paper',        '📝 Paper Trade'],
+              ['portfolio',    '💼 Portfolio'],
+              ['expiry',       '⏰ Expiry'],
             ].map(([tab,label])=>(
               <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}>
                 {label}
@@ -2350,6 +2433,8 @@ Respond ONLY with valid JSON:
             ['scanner',      '🔍 Scanner'],
             ['journal',      '📓 Journal'],
             ['paper',        '📝 Paper Trade'],
+            ['portfolio',    '💼 Portfolio'],
+            ['expiry',       '⏰ Expiry Day'],
           ].map(([tab,label])=>(
             <div key={tab}
               onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}
@@ -5705,6 +5790,402 @@ Respond ONLY with valid JSON:
               </div>
             )}
           </div>
+
+        ) : activeTab === 'portfolio' ? (
+          <div className="main-content">
+            <div className="page-header" style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'1rem'}}>
+              <div>
+                <h1>💼 Live Portfolio</h1>
+                <p className="subtitle">Real positions from Angel One — live P&L, Greeks, risk exposure</p>
+              </div>
+              <button onClick={fetchPortfolio} disabled={portfolioLoading}
+                style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1.2rem',fontWeight:700,cursor:'pointer',fontSize:'0.9rem'}}>
+                {portfolioLoading ? '⏳ Loading...' : '🔄 Refresh'}
+              </button>
+            </div>
+
+            {!angelConnected && (
+              <div style={{background:'rgba(251,191,36,0.1)',border:'1px solid rgba(251,191,36,0.4)',borderRadius:'12px',padding:'1.25rem',marginBottom:'1.5rem',display:'flex',gap:'1rem',alignItems:'flex-start'}}>
+                <span style={{fontSize:'1.5rem'}}>⚠️</span>
+                <div>
+                  <div style={{fontWeight:700,marginBottom:'0.25rem'}}>Angel One not connected</div>
+                  <div style={{fontSize:'0.85rem',color:'var(--text-dim)'}}>Set ANGEL_API_KEY, ANGEL_CLIENT_ID, ANGEL_MPIN, ANGEL_TOTP_KEY in your Render environment variables to sync live positions.</div>
+                  <a href="https://deltabuddy-backend.onrender.com/api/angel/relogin" target="_blank" rel="noreferrer"
+                    style={{color:'var(--accent)',fontSize:'0.85rem',marginTop:'0.4rem',display:'inline-block'}}>
+                    Try reconnect →
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {portfolioError && (
+              <div style={{background:'var(--red-dim)',border:'1px solid rgba(248,113,113,0.3)',borderRadius:'10px',padding:'1rem',marginBottom:'1.5rem',color:'var(--red)',fontSize:'0.9rem'}}>
+                ❌ {portfolioError}
+              </div>
+            )}
+
+            {portfolio && (
+              <>
+                {/* Funds summary */}
+                {portfolio.funds && (
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:'1rem',marginBottom:'1.5rem'}}>
+                    {[
+                      {label:'Available Cash',  value:`₹${(portfolio.funds.availablecash||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`, color:'var(--accent)'},
+                      {label:'Net P&L Today',   value:`₹${(portfolio.funds.realizedpnl||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`,   color:(portfolio.funds.realizedpnl||0)>=0?'var(--green)':'var(--red)'},
+                      {label:'Used Margin',     value:`₹${(portfolio.funds.utilisedmargin||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`, color:'var(--blue)'},
+                      {label:'Total Value',     value:`₹${(portfolio.funds.totalmargin||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`,    color:'var(--text-main)'},
+                    ].map(({label,value,color})=>(
+                      <div key={label} style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1rem',textAlign:'center'}}>
+                        <div style={{fontSize:'0.72rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'0.35rem'}}>{label}</div>
+                        <div style={{fontSize:'1.3rem',fontWeight:800,color}}>{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Positions with Greeks */}
+                {portfolio.positions && portfolio.positions.length > 0 && (
+                  <div className="panel" style={{marginBottom:'1.5rem'}}>
+                    <h3 style={{marginBottom:'1rem'}}>📊 Open Positions + Greeks</h3>
+
+                    {/* Portfolio-level Greeks aggregate */}
+                    {(() => {
+                      let totalDelta=0, totalGamma=0, totalTheta=0, totalVega=0, totalPnL=0;
+                      portfolio.positions.forEach(pos => {
+                        const qty    = Math.abs(parseInt(pos.netqty)||0);
+                        const dir    = parseInt(pos.netqty)>=0 ? 1 : -1;
+                        const ltp    = parseFloat(pos.ltp)||0;
+                        const avgBuy = parseFloat(pos.averageprice)||0;
+                        const iv     = (parseFloat(pos.impliedvolatility)||25)/100;
+                        const T      = Math.max(1, (pos.expirydate ? (new Date(pos.expirydate)-new Date()) : 7*24*3600*1000)) / (365*24*3600*1000);
+                        const S      = 24000; // approx Nifty spot — would need live
+                        const K      = parseFloat(pos.strikeprice)||S;
+                        const g      = calcGreeks(S, K, T, iv, pos.optiontype||'CE');
+                        totalDelta  += g.delta * qty * dir;
+                        totalGamma  += g.gamma * qty * dir;
+                        totalTheta  += g.theta * qty * dir;
+                        totalVega   += g.vega  * qty * dir;
+                        totalPnL    += (ltp - avgBuy) * qty * dir;
+                      });
+                      return (
+                        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:'0.75rem',marginBottom:'1.25rem',background:'var(--bg-surface)',padding:'1rem',borderRadius:'10px'}}>
+                          {[
+                            {label:'Portfolio Δ Delta',  value:totalDelta.toFixed(2),  desc:'Direction bias',         color:'var(--blue)'},
+                            {label:'Portfolio Γ Gamma',  value:totalGamma.toFixed(4),  desc:'Delta sensitivity',      color:'var(--yellow)'},
+                            {label:'Portfolio Θ Theta',  value:`₹${totalTheta.toFixed(0)}/day`, desc:'Daily time decay', color:'var(--red)'},
+                            {label:'Portfolio ν Vega',   value:totalVega.toFixed(2),   desc:'IV sensitivity (1%)',    color:'var(--accent)'},
+                            {label:'Unrealised P&L',     value:`₹${totalPnL.toFixed(0)}`, desc:'vs avg price',        color:totalPnL>=0?'var(--green)':'var(--red)'},
+                          ].map(({label,value,desc,color})=>(
+                            <div key={label} style={{textAlign:'center'}}>
+                              <div style={{fontSize:'0.68rem',color:'var(--text-muted)',marginBottom:'0.2rem',textTransform:'uppercase'}}>{label}</div>
+                              <div style={{fontSize:'1.1rem',fontWeight:700,color}}>{value}</div>
+                              <div style={{fontSize:'0.68rem',color:'var(--text-muted)'}}>{desc}</div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+
+                    <div style={{overflowX:'auto'}}>
+                      <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.88rem'}}>
+                        <thead>
+                          <tr style={{background:'var(--bg-surface)'}}>
+                            {['Symbol','Qty','Avg','LTP','P&L','Δ Delta','Θ Theta','Action'].map(h=>(
+                              <th key={h} style={{padding:'0.6rem 0.75rem',textAlign:'left',color:'var(--text-dim)',fontSize:'0.72rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {portfolio.positions.map((pos, i) => {
+                            const qty    = parseInt(pos.netqty)||0;
+                            const ltp    = parseFloat(pos.ltp)||0;
+                            const avg    = parseFloat(pos.averageprice)||0;
+                            const pnl    = (ltp-avg)*qty;
+                            const iv     = (parseFloat(pos.impliedvolatility)||25)/100;
+                            const T      = 7/(365);
+                            const greeks = calcGreeks(24000, parseFloat(pos.strikeprice)||24000, T, iv, pos.optiontype||'CE');
+                            return (
+                              <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                                <td style={{padding:'0.65rem 0.75rem',fontWeight:700,fontSize:'0.82rem',maxWidth:'160px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={pos.tradingsymbol}>{pos.tradingsymbol}</td>
+                                <td style={{padding:'0.65rem 0.75rem',color:qty>=0?'var(--green)':'var(--red)',fontWeight:700}}>{qty>0?'+':''}{qty}</td>
+                                <td style={{padding:'0.65rem 0.75rem'}}>₹{avg.toFixed(2)}</td>
+                                <td style={{padding:'0.65rem 0.75rem',fontWeight:700}}>₹{ltp.toFixed(2)}</td>
+                                <td style={{padding:'0.65rem 0.75rem',fontWeight:700,color:pnl>=0?'var(--green)':'var(--red)'}}>{pnl>=0?'+':''}₹{pnl.toFixed(0)}</td>
+                                <td style={{padding:'0.65rem 0.75rem',color:'var(--blue)'}}>{greeks.delta}</td>
+                                <td style={{padding:'0.65rem 0.75rem',color:'var(--red)'}}>₹{greeks.theta}/d</td>
+                                <td style={{padding:'0.65rem 0.75rem'}}>
+                                  <button
+                                    onClick={()=>setQuickOrder({symbol:pos.tradingsymbol,token:pos.symboltoken,exchange:pos.exchange,type:qty>0?'SELL':'BUY',qty:Math.abs(qty)})}
+                                    style={{background:'var(--red-dim)',color:'var(--red)',border:'none',borderRadius:'6px',padding:'0.3rem 0.65rem',fontSize:'0.78rem',cursor:'pointer',fontWeight:700}}>
+                                    {qty>0?'Exit Long':'Exit Short'}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Holdings */}
+                {portfolio.holdings && portfolio.holdings.length > 0 && (
+                  <div className="panel">
+                    <h3 style={{marginBottom:'1rem'}}>📈 Holdings (Equity)</h3>
+                    <div style={{overflowX:'auto'}}>
+                      <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.88rem'}}>
+                        <thead>
+                          <tr style={{background:'var(--bg-surface)'}}>
+                            {['Stock','Qty','Avg Buy','LTP','Value','P&L','Return'].map(h=>(
+                              <th key={h} style={{padding:'0.6rem 0.75rem',textAlign:'left',color:'var(--text-dim)',fontSize:'0.72rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {portfolio.holdings.map((h, i) => {
+                            const ltp  = parseFloat(h.ltp)||0;
+                            const avg  = parseFloat(h.averageprice)||0;
+                            const qty  = parseInt(h.quantity)||0;
+                            const pnl  = (ltp-avg)*qty;
+                            const ret  = avg ? ((ltp-avg)/avg*100) : 0;
+                            return (
+                              <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                                <td style={{padding:'0.65rem 0.75rem',fontWeight:700}}>{h.tradingsymbol}</td>
+                                <td style={{padding:'0.65rem 0.75rem'}}>{qty}</td>
+                                <td style={{padding:'0.65rem 0.75rem'}}>₹{avg.toFixed(2)}</td>
+                                <td style={{padding:'0.65rem 0.75rem',fontWeight:700}}>₹{ltp.toFixed(2)}</td>
+                                <td style={{padding:'0.65rem 0.75rem'}}>₹{(ltp*qty).toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
+                                <td style={{padding:'0.65rem 0.75rem',fontWeight:700,color:pnl>=0?'var(--green)':'var(--red)'}}>{pnl>=0?'+':''}₹{pnl.toFixed(0)}</td>
+                                <td style={{padding:'0.65rem 0.75rem',fontWeight:700,color:ret>=0?'var(--green)':'var(--red)'}}>{ret>=0?'+':''}{ret.toFixed(2)}%</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {portfolio.positions?.length===0 && portfolio.holdings?.length===0 && (
+                  <div style={{textAlign:'center',padding:'3rem',color:'var(--text-muted)'}}>
+                    <div style={{fontSize:'3rem',marginBottom:'1rem'}}>💼</div>
+                    <div style={{fontWeight:700,color:'var(--text-main)',marginBottom:'0.5rem'}}>No open positions</div>
+                    <div style={{fontSize:'0.9rem'}}>Your Angel One portfolio is empty or market is closed.</div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Quick Order Modal */}
+            {quickOrder && (
+              <div className="modal-overlay" onClick={()=>setQuickOrder(null)}>
+                <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'360px',width:'95%'}}>
+                  <h3 style={{margin:'0 0 1rem'}}>⚡ Quick Order</h3>
+                  <div style={{background:'var(--bg-surface)',borderRadius:'8px',padding:'0.75rem',marginBottom:'1rem',fontSize:'0.88rem'}}>
+                    <div style={{fontWeight:700,marginBottom:'0.25rem'}}>{quickOrder.symbol}</div>
+                    <div style={{color:'var(--text-dim)'}}>Exchange: {quickOrder.exchange}</div>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.75rem',marginBottom:'1rem'}}>
+                    <div>
+                      <label style={{fontSize:'0.78rem',color:'var(--text-dim)',display:'block',marginBottom:'0.3rem'}}>Type</label>
+                      <div style={{fontWeight:700,fontSize:'1rem',color:quickOrder.type==='BUY'?'var(--green)':'var(--red)'}}>{quickOrder.type}</div>
+                    </div>
+                    <div>
+                      <label style={{fontSize:'0.78rem',color:'var(--text-dim)',display:'block',marginBottom:'0.3rem'}}>Quantity</label>
+                      <input type="number" value={quickOrder.qty}
+                        onChange={e=>setQuickOrder(o=>({...o,qty:parseInt(e.target.value)||1}))}
+                        className="input-field" style={{padding:'0.4rem 0.6rem'}} />
+                    </div>
+                  </div>
+                  {orderMsg && <div style={{fontSize:'0.88rem',fontWeight:600,color:orderMsg.startsWith('✅')?'var(--green)':'var(--red)',marginBottom:'0.75rem'}}>{orderMsg}</div>}
+                  <div style={{display:'flex',gap:'0.75rem'}}>
+                    <button onClick={()=>placeRealOrder({variety:'NORMAL',tradingsymbol:quickOrder.symbol,symboltoken:quickOrder.token,transactiontype:quickOrder.type,exchange:quickOrder.exchange||'NFO',ordertype:'MARKET',producttype:'INTRADAY',duration:'DAY',price:'0',squareoff:'0',stoploss:'0',quantity:quickOrder.qty.toString()})}
+                      disabled={orderLoading}
+                      style={{flex:1,background:quickOrder.type==='BUY'?'#22c55e':'#ef4444',color:'white',border:'none',borderRadius:'8px',padding:'0.7rem',fontWeight:800,cursor:'pointer'}}>
+                      {orderLoading?'⏳ Placing...':quickOrder.type==='BUY'?'🟢 Buy Market':'🔴 Sell Market'}
+                    </button>
+                    <button onClick={()=>setQuickOrder(null)} style={{background:'var(--bg-surface)',color:'var(--text-dim)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.7rem 1rem',cursor:'pointer'}}>Cancel</button>
+                  </div>
+                  <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.75rem',textAlign:'center'}}>⚠️ This places a REAL order on Angel One. Confirm before executing.</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+        ) : activeTab === 'expiry' ? (
+          <div className="main-content">
+            {/* Expiry Day Header */}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'1rem',marginBottom:'1.5rem'}}>
+              <div>
+                <h1>⏰ Expiry Day Tools</h1>
+                <p className="subtitle">Max pain · PCR · Key strikes · Expected move — auto-refreshes every 60s</p>
+              </div>
+              <div style={{display:'flex',gap:'0.75rem',alignItems:'center',flexWrap:'wrap'}}>
+                <select value={expirySymbol} onChange={e=>{setExpirySymbol(e.target.value);fetchExpiryData(e.target.value);}}
+                  style={{background:'var(--bg-card)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.5rem 0.85rem',fontSize:'0.9rem'}}>
+                  {['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY'].map(s=><option key={s}>{s}</option>)}
+                </select>
+                <button onClick={()=>fetchExpiryData(expirySymbol)} disabled={expiryLoading}
+                  style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.5rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.88rem'}}>
+                  {expiryLoading?'⏳ Loading...':'🔄 Refresh'}
+                </button>
+              </div>
+            </div>
+
+            {/* Today is expiry banner */}
+            {new Date().getDay()===4 && (
+              <div style={{background:'linear-gradient(135deg,rgba(249,115,22,0.15),rgba(251,191,36,0.1))',border:'1px solid rgba(249,115,22,0.4)',borderRadius:'12px',padding:'1rem 1.25rem',marginBottom:'1.5rem',display:'flex',alignItems:'center',gap:'0.75rem'}}>
+                <span style={{fontSize:'1.6rem'}}>🔥</span>
+                <div>
+                  <div style={{fontWeight:700,color:'#f97316'}}>Today is Expiry Day!</div>
+                  <div style={{fontSize:'0.82rem',color:'var(--text-dim)'}}>Weekly options expire today. Watch max pain and ATM strikes closely.</div>
+                </div>
+              </div>
+            )}
+
+            {expiryData ? (
+              <>
+                {/* Key metrics row */}
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'1rem',marginBottom:'1.5rem'}}>
+                  {[
+                    {label:'Spot Price',       value:`₹${expiryData.spotPrice?.toLocaleString('en-IN')}`,      color:'var(--text-main)', sub:'Current'},
+                    {label:'Max Pain',          value:`₹${expiryData.maxPain?.strike?.toLocaleString('en-IN')}`, color:'#f97316',          sub:`${expiryData.maxPain?.pct}% from spot`},
+                    {label:'PCR (OI)',          value:expiryData.pcr?.oi,                                        color:expiryData.pcr?.oi>1.2?'var(--green)':expiryData.pcr?.oi<0.8?'var(--red)':'var(--yellow)', sub:expiryData.pcr?.bias},
+                    {label:'ATM Straddle',      value:`₹${expiryData.straddlePremium}`,                          color:'var(--blue)',       sub:'Expected move premium'},
+                    {label:'Expected Up',       value:`₹${expiryData.expectedMove?.up?.toLocaleString('en-IN')}`,  color:'var(--green)',    sub:'Straddle breakeven ↑'},
+                    {label:'Expected Down',     value:`₹${expiryData.expectedMove?.down?.toLocaleString('en-IN')}`, color:'var(--red)',     sub:'Straddle breakeven ↓'},
+                    {label:'ATM IV',            value:`${expiryData.atmIV}%`,                                    color:'var(--yellow)',     sub:'Implied volatility'},
+                    {label:'Expiry',            value:expiryData.nearExpiry,                                     color:'var(--text-dim)',   sub:'Nearest expiry'},
+                  ].map(({label,value,color,sub})=>(
+                    <div key={label} style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1rem'}}>
+                      <div style={{fontSize:'0.7rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'0.3rem'}}>{label}</div>
+                      <div style={{fontSize:'1.2rem',fontWeight:800,color,marginBottom:'0.15rem'}}>{value}</div>
+                      <div style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>{sub}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Max Pain visual */}
+                <div className="panel" style={{marginBottom:'1.5rem'}}>
+                  <h3 style={{marginBottom:'1.25rem'}}>🎯 Max Pain vs Spot</h3>
+                  <div style={{position:'relative',height:'48px',background:'var(--bg-surface)',borderRadius:'8px',overflow:'hidden',marginBottom:'0.75rem'}}>
+                    {(() => {
+                      const spot   = expiryData.spotPrice||24000;
+                      const pain   = expiryData.maxPain?.strike||spot;
+                      const minS   = Math.min(spot,pain)*0.98;
+                      const maxS   = Math.max(spot,pain)*1.02;
+                      const range  = maxS-minS;
+                      const spotPct  = ((spot-minS)/range*100).toFixed(1);
+                      const painPct  = ((pain-minS)/range*100).toFixed(1);
+                      return (
+                        <>
+                          <div style={{position:'absolute',left:`${spotPct}%`,top:0,bottom:0,width:'3px',background:'var(--accent)',transform:'translateX(-50%)'}}/>
+                          <div style={{position:'absolute',left:`${spotPct}%`,top:'6px',transform:'translateX(-50%)',fontSize:'0.7rem',color:'var(--accent)',fontWeight:700,whiteSpace:'nowrap'}}>SPOT ₹{spot.toLocaleString()}</div>
+                          <div style={{position:'absolute',left:`${painPct}%`,top:0,bottom:0,width:'3px',background:'#f97316',transform:'translateX(-50%)'}}/>
+                          <div style={{position:'absolute',left:`${painPct}%`,bottom:'6px',transform:'translateX(-50%)',fontSize:'0.7rem',color:'#f97316',fontWeight:700,whiteSpace:'nowrap'}}>MAX PAIN ₹{pain.toLocaleString()}</div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                  <div style={{fontSize:'0.82rem',color:'var(--text-dim)'}}>
+                    Market tends to gravitate towards max pain at expiry. {expiryData.spotPrice > expiryData.maxPain?.strike ? `Spot is ${Math.abs(expiryData.maxPain?.pct)}% above max pain — mild downward pull expected.` : `Spot is ${Math.abs(expiryData.maxPain?.pct)}% below max pain — mild upward pull expected.`}
+                  </div>
+                </div>
+
+                {/* OI Chart */}
+                {expiryData.oiChartData?.length > 0 && (
+                  <div className="panel" style={{marginBottom:'1.5rem'}}>
+                    <h3 style={{marginBottom:'1rem'}}>📊 OI Distribution (Near Strikes)</h3>
+                    <div style={{overflowX:'auto'}}>
+                      <div style={{minWidth:'500px'}}>
+                        {expiryData.oiChartData.slice(0,12).map(d => {
+                          const maxOI = Math.max(...expiryData.oiChartData.map(x=>Math.max(x.ceOI,x.peOI)));
+                          const ceW = maxOI ? (d.ceOI/maxOI*100).toFixed(1) : 0;
+                          const peW = maxOI ? (d.peOI/maxOI*100).toFixed(1) : 0;
+                          const isATM = d.strike === expiryData.atmStrike;
+                          const isPain = d.strike === expiryData.maxPain?.strike;
+                          return (
+                            <div key={d.strike} style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.4rem',background:isATM?'rgba(0,255,136,0.06)':isPain?'rgba(249,115,22,0.06)':'transparent',borderRadius:'6px',padding:'0.25rem 0.4rem'}}>
+                              <div style={{width:'72px',textAlign:'right',fontSize:'0.78rem',fontWeight:isATM||isPain?700:400,color:isATM?'var(--accent)':isPain?'#f97316':'var(--text-dim)'}}>
+                                {d.strike}{isATM?' ★':''}
+                              </div>
+                              <div style={{flex:1,display:'flex',flexDirection:'column',gap:'2px'}}>
+                                <div style={{display:'flex',alignItems:'center',gap:'4px'}}>
+                                  <div style={{width:`${ceW}%`,height:'8px',background:'#93c5fd',borderRadius:'2px',transition:'width 0.3s'}}/>
+                                  <span style={{fontSize:'0.68rem',color:'#93c5fd',whiteSpace:'nowrap'}}>{(d.ceOI/100000).toFixed(1)}L</span>
+                                </div>
+                                <div style={{display:'flex',alignItems:'center',gap:'4px'}}>
+                                  <div style={{width:`${peW}%`,height:'8px',background:'#f9a8d4',borderRadius:'2px',transition:'width 0.3s'}}/>
+                                  <span style={{fontSize:'0.68rem',color:'#f9a8d4',whiteSpace:'nowrap'}}>{(d.peOI/100000).toFixed(1)}L</span>
+                                </div>
+                              </div>
+                              <div style={{width:'80px',textAlign:'right',fontSize:'0.72rem',color:'var(--text-muted)'}}>
+                                <div style={{color:'#93c5fd'}}>CE ₹{d.ceLTP}</div>
+                                <div style={{color:'#f9a8d4'}}>PE ₹{d.peLTP}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <div style={{display:'flex',gap:'1rem',marginTop:'0.5rem',paddingLeft:'80px'}}>
+                          <span style={{fontSize:'0.72rem',color:'#93c5fd'}}>■ CE OI (Resistance)</span>
+                          <span style={{fontSize:'0.72rem',color:'#f9a8d4'}}>■ PE OI (Support)</span>
+                          <span style={{fontSize:'0.72rem',color:'var(--accent)'}}>★ ATM</span>
+                          <span style={{fontSize:'0.72rem',color:'#f97316'}}>■ Max Pain</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Key levels */}
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem'}}>
+                  <div className="panel">
+                    <h3 style={{marginBottom:'1rem',color:'#93c5fd'}}>🔵 Resistance (High CE OI)</h3>
+                    {expiryData.resistance?.map((r,i)=>(
+                      <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'0.6rem 0',borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
+                        <span style={{fontWeight:700,fontSize:'0.95rem'}}>₹{r.strike}</span>
+                        <div style={{textAlign:'right'}}>
+                          <div style={{fontSize:'0.82rem',color:'#93c5fd'}}>{(r.oi/100000).toFixed(2)}L OI</div>
+                          <div style={{fontSize:'0.75rem',color:'var(--text-dim)'}}>LTP ₹{r.ltp} · IV {r.iv}%</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="panel">
+                    <h3 style={{marginBottom:'1rem',color:'#f9a8d4'}}>🔴 Support (High PE OI)</h3>
+                    {expiryData.support?.map((r,i)=>(
+                      <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'0.6rem 0',borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
+                        <span style={{fontWeight:700,fontSize:'0.95rem'}}>₹{r.strike}</span>
+                        <div style={{textAlign:'right'}}>
+                          <div style={{fontSize:'0.82rem',color:'#f9a8d4'}}>{(r.oi/100000).toFixed(2)}L OI</div>
+                          <div style={{fontSize:'0.75rem',color:'var(--text-dim)'}}>LTP ₹{r.ltp} · IV {r.iv}%</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{fontSize:'0.8rem',color:'var(--text-muted)',marginTop:'1rem',textAlign:'center'}}>
+                  Last updated: {expiryData.fetchedAt ? new Date(expiryData.fetchedAt).toLocaleTimeString('en-IN') : '—'} · Auto-refreshes every 60s
+                </div>
+              </>
+            ) : expiryLoading ? (
+              <div style={{textAlign:'center',padding:'4rem',color:'var(--text-dim)'}}>
+                <div style={{fontSize:'2rem',marginBottom:'1rem',animation:'pulse 1s infinite'}}>⏳</div>
+                <div>Loading expiry data from NSE...</div>
+              </div>
+            ) : (
+              <div style={{textAlign:'center',padding:'4rem',color:'var(--text-muted)'}}>
+                <div style={{fontSize:'3rem',marginBottom:'1rem'}}>⏰</div>
+                <div style={{fontWeight:700,color:'var(--text-main)',marginBottom:'0.5rem'}}>No data yet</div>
+                <button onClick={()=>fetchExpiryData(expirySymbol)} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.65rem 1.5rem',fontWeight:700,cursor:'pointer'}}>
+                  Load Expiry Data
+                </button>
+              </div>
+            )}
+          </div>
+
         ) : null}
 
         {/* ── FOOTER ── */}
