@@ -1,316 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
-
-// ── Firebase ──────────────────────────────────────────────────────────────────
-import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, collection, addDoc, getDocs, deleteDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
-
-// 🔴 REPLACE with your Firebase project config from console.firebase.google.com
-const firebaseConfig = {
-  apiKey           : process.env.REACT_APP_FIREBASE_API_KEY        || "YOUR_API_KEY",
-  authDomain       : process.env.REACT_APP_FIREBASE_AUTH_DOMAIN    || "YOUR_PROJECT.firebaseapp.com",
-  projectId        : process.env.REACT_APP_FIREBASE_PROJECT_ID     || "YOUR_PROJECT_ID",
-  storageBucket    : process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "YOUR_PROJECT.appspot.com",
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_ID   || "YOUR_MESSAGING_ID",
-  appId            : process.env.REACT_APP_FIREBASE_APP_ID         || "YOUR_APP_ID",
-};
-
-const firebaseApp = initializeApp(firebaseConfig);
-const auth        = getAuth(firebaseApp);
-const db          = getFirestore(firebaseApp);
-const googleProvider = new GoogleAuthProvider();
-
-// Railway backend URL — update after deploying
-const BACKEND_URL   = process.env.REACT_APP_BACKEND_URL || 'https://deltabuddy-backend.onrender.com';
-const ADMIN_EMAIL   = 'mirza.hassanuzzaman@gmail.com';
-
-
-// ── TradingView lightweight-charts loader ─────────────────────────────────────
-let lwcPromise = null;
-const loadLWC = () => {
-  if (lwcPromise) return lwcPromise;
-  lwcPromise = new Promise((resolve) => {
-    if (window.LightweightCharts) { resolve(window.LightweightCharts); return; }
-    const s = document.createElement('script');
-    s.src = 'https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js';
-    s.onload = () => resolve(window.LightweightCharts);
-    document.head.appendChild(s);
-  });
-  return lwcPromise;
-};
-
-function TradingViewChart({ data, indicators, candleType, symbol, timeframe }) {
-  const mainRef  = React.useRef(null);
-  const rsiRef   = React.useRef(null);
-  const macdRef  = React.useRef(null);
-  const chartRef = React.useRef(null);
-  const rsiChartRef  = React.useRef(null);
-  const macdChartRef = React.useRef(null);
-
-  const showRSI  = indicators.includes('RSI');
-  const showMACD = indicators.includes('MACD');
-
-  // ── Helpers ───────────────────────────────────────────────────────────
-  const buildCandles = (raw) => raw
-    .filter(d => d.open && d.close && d.high && d.low)
-    .map(d => ({
-      time : Math.floor((typeof d.time === 'string' ? new Date(d.time) : d.time instanceof Date ? d.time : new Date(d.time)).getTime() / 1000),
-      open : parseFloat(d.open),
-      high : parseFloat(d.high),
-      low  : parseFloat(d.low),
-      close: parseFloat(d.close),
-      volume: parseFloat(d.volume || 0),
-    }))
-    .filter(d => !isNaN(d.time) && d.close > 0)
-    .sort((a, b) => a.time - b.time)
-    .filter((d, i, arr) => i === 0 || d.time !== arr[i-1].time);
-
-  const calcSMA = (c, p=20) => c.map((x,i) => i < p-1 ? null : { time: x.time, value: c.slice(i-p+1,i+1).reduce((s,v)=>s+v.close,0)/p }).filter(Boolean);
-  const calcEMA = (c, p=20) => { const k=2/(p+1); let e=c[0]?.close||0; return c.map((x,i)=>{ if(i===0){e=x.close;return{time:x.time,value:e};} e=x.close*k+e*(1-k); return{time:x.time,value:e}; }); };
-  const calcWMA = (c, p=20) => c.map((x,i) => { if(i<p-1)return null; const sl=c.slice(i-p+1,i+1); const w=sl.reduce((s,v,j)=>s+(j+1)*v.close,0); const wd=p*(p+1)/2; return{time:x.time,value:w/wd}; }).filter(Boolean);
-  const calcBB  = (c, p=20, m=2) => { const up=[],md=[],lo=[]; c.forEach((x,i)=>{ if(i<p-1)return; const sl=c.slice(i-p+1,i+1).map(v=>v.close); const avg=sl.reduce((s,v)=>s+v,0)/p; const std=Math.sqrt(sl.reduce((s,v)=>s+Math.pow(v-avg,2),0)/p); up.push({time:x.time,value:avg+m*std}); md.push({time:x.time,value:avg}); lo.push({time:x.time,value:avg-m*std}); }); return{up,md,lo}; };
-  const calcVWAP = (c) => { let cv=0,cv2=0; return c.map(x=>{ const tp=(x.high+x.low+x.close)/3; cv+=tp*x.volume; cv2+=x.volume; return{time:x.time,value:cv2>0?cv/cv2:x.close}; }); };
-  const calcRSI  = (c, p=14) => { const ch=c.map((x,i)=>i===0?0:x.close-c[i-1].close); return c.map((x,i)=>{ if(i<p)return null; const sl=ch.slice(i-p+1,i+1); const ag=sl.filter(v=>v>0).reduce((s,v)=>s+v,0)/p; const al=sl.filter(v=>v<0).map(v=>Math.abs(v)).reduce((s,v)=>s+v,0)/p; const rs=ag/(al||0.001); return{time:x.time,value:100-(100/(1+rs))}; }).filter(Boolean); };
-  const calcMACD = (c) => { const e12=calcEMA(c,12),e26=calcEMA(c,26); const macdLine=e26.map((x,i)=>({time:x.time,value:(e12[i+12-26]?.value||x.value)-x.value})); const sig=calcEMA(macdLine.map(x=>({...x,close:x.value})),9); const hist=sig.map((x,i)=>({time:x.time,value:(macdLine[i]?.value||0)-x.value})); return{macdLine:macdLine.slice(26),signal:sig,hist}; };
-  const calcATR  = (c, p=14) => { const tr=c.map((x,i)=>i===0?x.high-x.low:Math.max(x.high-x.low,Math.abs(x.high-c[i-1].close),Math.abs(x.low-c[i-1].close))); return c.map((x,i)=>{ if(i<p)return null; return{time:x.time,value:tr.slice(i-p+1,i+1).reduce((s,v)=>s+v,0)/p}; }).filter(Boolean); };
-  const calcSuperTrend = (c, p=10, m=3) => { const atr=calcATR(c,p); const res=[]; let trend=1,lastST=0; c.slice(p).forEach((x,i)=>{ const a=atr[i]?.value||0; const ub=(x.high+x.low)/2+m*a; const lb=(x.high+x.low)/2-m*a; if(trend===1&&x.close<lastST){trend=-1;lastST=ub;} else if(trend===-1&&x.close>lastST){trend=1;lastST=lb;} else{lastST=trend===1?lb:ub;} res.push({time:x.time,value:lastST,color:trend===1?'#4ade80':'#f87171'}); }); return res; };
-  const calcIchimoku = (c) => { const high=(sl)=>Math.max(...sl.map(x=>x.high)); const low=(sl)=>Math.min(...sl.map(x=>x.low)); const conv=[],base=[],sA=[],sB=[]; c.forEach((x,i)=>{ if(i>=8){const h=high(c.slice(i-8,i+1)),l=low(c.slice(i-8,i+1));conv.push({time:x.time,value:(h+l)/2});} if(i>=25){const h=high(c.slice(i-25,i+1)),l=low(c.slice(i-25,i+1));base.push({time:x.time,value:(h+l)/2});} if(i>=25){sA.push({time:x.time,value:((conv[i-9]?.value||0)+(base[i-25]?.value||0))/2});} if(i>=51){const h=high(c.slice(i-51,i+1)),l=low(c.slice(i-51,i+1));sB.push({time:x.time,value:(h+l)/2});} }); return{conv,base,sA,sB}; };
-
-  const createSubChart = (container, LWC, h=120) => LWC.createChart(container, {
-    width: container.clientWidth, height: h,
-    layout: { background:{color:'#070d1a'}, textColor:'#94a3b8', fontSize:10 },
-    grid: { vertLines:{color:'rgba(100,116,139,0.08)'}, horzLines:{color:'rgba(100,116,139,0.08)'} },
-    rightPriceScale: { borderColor:'#1e293b', scaleMargins:{top:0.1,bottom:0.1} },
-    timeScale: { borderColor:'#1e293b', timeVisible:true, secondsVisible:false },
-    crosshair: { mode: LWC.CrosshairMode.Normal },
-    handleScroll: false, handleScale: false,
-  });
-
-  React.useEffect(() => {
-    if (!data?.length || !mainRef.current) return;
-
-    loadLWC().then((LWC) => {
-      // Destroy previous charts
-      [chartRef, rsiChartRef, macdChartRef].forEach(r => { if(r.current){r.current.remove();r.current=null;} });
-
-      const candles = buildCandles(data);
-      if (!candles.length) return;
-
-      // ── MAIN CHART ────────────────────────────────────────────────────
-      const mainHeight = showRSI || showMACD ? 340 : 440;
-      const chart = LWC.createChart(mainRef.current, {
-        width : mainRef.current.clientWidth,
-        height: mainHeight,
-        layout: { background:{color:'#070d1a'}, textColor:'#94a3b8', fontSize:11, fontFamily:"'Inter',sans-serif" },
-        grid:  { vertLines:{color:'rgba(100,116,139,0.12)'}, horzLines:{color:'rgba(100,116,139,0.12)'} },
-        crosshair: { mode: LWC.CrosshairMode.Normal },
-        rightPriceScale: { borderColor:'#1e293b', scaleMargins:{top:0.06,bottom:0.22} },
-        timeScale: { borderColor:'#1e293b', timeVisible:true, secondsVisible:false },
-      });
-      chartRef.current = chart;
-
-      // ── Main series (candle type) ─────────────────────────────────────
-      let mainSeries;
-      switch(candleType) {
-        case 'heikinashi': {
-          const ha = candles.map((c,i) => {
-            const po = i>0 ? (candles[i-1].open+candles[i-1].close)/2 : (c.open+c.close)/2;
-            const hc = (c.open+c.high+c.low+c.close)/4;
-            const ho = (po+hc)/2;
-            return { time:c.time, open:ho, high:Math.max(c.high,ho,hc), low:Math.min(c.low,ho,hc), close:hc };
-          });
-          mainSeries = chart.addCandlestickSeries({ upColor:'#4ade80', downColor:'#f87171', borderUpColor:'#4ade80', borderDownColor:'#f87171', wickUpColor:'#4ade80', wickDownColor:'#f87171' });
-          mainSeries.setData(ha);
-          break;
-        }
-        case 'line':
-          mainSeries = chart.addLineSeries({ color:'#4ade80', lineWidth:2 });
-          mainSeries.setData(candles.map(c=>({time:c.time,value:c.close})));
-          break;
-        case 'area':
-          mainSeries = chart.addAreaSeries({ lineColor:'#4ade80', topColor:'rgba(74,222,128,0.18)', bottomColor:'rgba(74,222,128,0)', lineWidth:2 });
-          mainSeries.setData(candles.map(c=>({time:c.time,value:c.close})));
-          break;
-        case 'bar':
-          mainSeries = chart.addBarSeries({ upColor:'#4ade80', downColor:'#f87171' });
-          mainSeries.setData(candles);
-          break;
-        case 'baseline': {
-          const avg = candles.reduce((s,c)=>s+c.close,0)/candles.length;
-          mainSeries = chart.addBaselineSeries({ baseValue:{type:'price',price:avg}, topLineColor:'#4ade80', bottomLineColor:'#f87171', topFillColor1:'rgba(74,222,128,0.15)', topFillColor2:'rgba(74,222,128,0.02)', bottomFillColor1:'rgba(248,113,113,0.02)', bottomFillColor2:'rgba(248,113,113,0.15)' });
-          mainSeries.setData(candles.map(c=>({time:c.time,value:c.close})));
-          break;
-        }
-        default: // candlestick
-          mainSeries = chart.addCandlestickSeries({ upColor:'#4ade80', downColor:'#f87171', borderUpColor:'#4ade80', borderDownColor:'#f87171', wickUpColor:'#4ade80', wickDownColor:'#f87171' });
-          mainSeries.setData(candles);
-      }
-
-      // ── Volume ────────────────────────────────────────────────────────
-      const vol = chart.addHistogramSeries({ color:'#26a69a', priceFormat:{type:'volume'}, priceScaleId:'vol' });
-      chart.priceScale('vol').applyOptions({ scaleMargins:{top:0.82,bottom:0} });
-      vol.setData(candles.map(c=>({ time:c.time, value:c.volume, color:c.close>=c.open?'rgba(74,222,128,0.35)':'rgba(248,113,113,0.35)' })));
-
-      // ── Overlay indicators ────────────────────────────────────────────
-      if (indicators.includes('SMA20'))  { const s=chart.addLineSeries({color:'#f59e0b',lineWidth:1.5,title:'SMA 20'});  s.setData(calcSMA(candles,20)); }
-      if (indicators.includes('SMA50'))  { const s=chart.addLineSeries({color:'#fb923c',lineWidth:1.5,title:'SMA 50'});  s.setData(calcSMA(candles,50)); }
-      if (indicators.includes('SMA200')) { const s=chart.addLineSeries({color:'#f43f5e',lineWidth:2,title:'SMA 200'}); s.setData(calcSMA(candles,200)); }
-      if (indicators.includes('EMA9'))   { const s=chart.addLineSeries({color:'#a3e635',lineWidth:1.5,title:'EMA 9'});   s.setData(calcEMA(candles,9)); }
-      if (indicators.includes('EMA20'))  { const s=chart.addLineSeries({color:'#818cf8',lineWidth:1.5,title:'EMA 20'});  s.setData(calcEMA(candles,20)); }
-      if (indicators.includes('EMA50'))  { const s=chart.addLineSeries({color:'#c084fc',lineWidth:1.5,title:'EMA 50'});  s.setData(calcEMA(candles,50)); }
-      if (indicators.includes('WMA'))    { const s=chart.addLineSeries({color:'#34d399',lineWidth:1.5,title:'WMA 20'});  s.setData(calcWMA(candles,20)); }
-      if (indicators.includes('VWAP'))   { const s=chart.addLineSeries({color:'#e879f9',lineWidth:1.5,lineStyle:1,title:'VWAP'}); s.setData(calcVWAP(candles)); }
-      if (indicators.includes('BB')) {
-        const bb=calcBB(candles);
-        chart.addLineSeries({color:'rgba(96,165,250,0.7)',lineWidth:1,lineStyle:2,title:'BB Upper'}).setData(bb.up);
-        chart.addLineSeries({color:'rgba(96,165,250,0.4)',lineWidth:1,title:'BB Mid'}).setData(bb.md);
-        chart.addLineSeries({color:'rgba(96,165,250,0.7)',lineWidth:1,lineStyle:2,title:'BB Lower'}).setData(bb.lo);
-      }
-      if (indicators.includes('SuperTrend')) {
-        const st=calcSuperTrend(candles);
-        const stSeries=chart.addLineSeries({lineWidth:2,title:'SuperTrend'});
-        stSeries.setData(st.map(x=>({time:x.time,value:x.value})));
-        // Color segments
-        st.forEach((x,i)=>{ if(i===0)return; stSeries.setMarkers?.([{time:x.time,position:'inBar',color:x.color,shape:'circle',size:0.01}]); });
-      }
-      if (indicators.includes('Ichimoku')) {
-        const ic=calcIchimoku(candles);
-        chart.addLineSeries({color:'rgba(96,165,250,0.8)',lineWidth:1,title:'Tenkan'}).setData(ic.conv);
-        chart.addLineSeries({color:'rgba(248,113,113,0.8)',lineWidth:1,title:'Kijun'}).setData(ic.base);
-        chart.addLineSeries({color:'rgba(74,222,128,0.4)',lineWidth:1,lineStyle:2,title:'Senkou A'}).setData(ic.sA);
-        chart.addLineSeries({color:'rgba(248,113,113,0.4)',lineWidth:1,lineStyle:2,title:'Senkou B'}).setData(ic.sB);
-      }
-
-      chart.timeScale().fitContent();
-
-      // ── RSI sub-chart ─────────────────────────────────────────────────
-      if (showRSI && rsiRef.current) {
-        const rsiChart = createSubChart(rsiRef.current, LWC, 110);
-        rsiChartRef.current = rsiChart;
-        const rsiData = calcRSI(candles);
-        const rsiSeries = rsiChart.addLineSeries({ color:'#a78bfa', lineWidth:2, title:'RSI 14' });
-        rsiSeries.setData(rsiData);
-        rsiChart.addLineSeries({color:'rgba(248,113,113,0.5)',lineWidth:1,lineStyle:2,lastValueVisible:false,priceLineVisible:false}).setData(rsiData.map(x=>({time:x.time,value:70})));
-        rsiChart.addLineSeries({color:'rgba(74,222,128,0.5)',lineWidth:1,lineStyle:2,lastValueVisible:false,priceLineVisible:false}).setData(rsiData.map(x=>({time:x.time,value:30})));
-        // Sync time scales
-        chart.timeScale().subscribeVisibleLogicalRangeChange(range => { rsiChart.timeScale().setVisibleLogicalRange(range); });
-        rsiChart.timeScale().subscribeVisibleLogicalRangeChange(range => { chart.timeScale().setVisibleLogicalRange(range); });
-        rsiChart.timeScale().fitContent();
-      }
-
-      // ── MACD sub-chart ────────────────────────────────────────────────
-      if (showMACD && macdRef.current) {
-        const macdChart = createSubChart(macdRef.current, LWC, 110);
-        macdChartRef.current = macdChart;
-        const { macdLine, signal, hist } = calcMACD(candles);
-        macdChart.addLineSeries({color:'#60a5fa',lineWidth:1.5,title:'MACD'}).setData(macdLine);
-        macdChart.addLineSeries({color:'#f97316',lineWidth:1.5,title:'Signal'}).setData(signal);
-        const histSeries = macdChart.addHistogramSeries({ priceScaleId:'right' });
-        histSeries.setData(hist.map(x=>({time:x.time,value:x.value,color:x.value>=0?'rgba(74,222,128,0.6)':'rgba(248,113,113,0.6)'})));
-        chart.timeScale().subscribeVisibleLogicalRangeChange(range => { macdChart.timeScale().setVisibleLogicalRange(range); });
-        macdChart.timeScale().subscribeVisibleLogicalRangeChange(range => { chart.timeScale().setVisibleLogicalRange(range); });
-        macdChart.timeScale().fitContent();
-      }
-
-      // ── Resize observer ───────────────────────────────────────────────
-      const ro = new ResizeObserver(() => {
-        [{ ref: mainRef, chart: chartRef }, { ref: rsiRef, chart: rsiChartRef }, { ref: macdRef, chart: macdChartRef }]
-          .forEach(({ ref, chart: cRef }) => { if(ref.current && cRef.current) cRef.current.applyOptions({ width: ref.current.clientWidth }); });
-      });
-      if (mainRef.current) ro.observe(mainRef.current);
-      return () => ro.disconnect();
-    });
-
-    return () => { [chartRef, rsiChartRef, macdChartRef].forEach(r=>{ if(r.current){r.current.remove();r.current=null;} }); };
-  }, [data, indicators, candleType]);
-
-  return (
-    <div style={{background:'#070d1a',borderRadius:'8px',overflow:'hidden'}}>
-      <div ref={mainRef} style={{width:'100%'}}/>
-      {showRSI  && <><div style={{height:'1px',background:'#1e293b'}}/><div style={{padding:'2px 8px',fontSize:'0.65rem',color:'#a78bfa',background:'#070d1a',fontWeight:700}}>RSI 14</div><div ref={rsiRef}  style={{width:'100%'}}/></>}
-      {showMACD && <><div style={{height:'1px',background:'#1e293b'}}/><div style={{padding:'2px 8px',fontSize:'0.65rem',color:'#60a5fa',background:'#070d1a',fontWeight:700}}>MACD (12,26,9)</div><div ref={macdRef} style={{width:'100%'}}/></>}
-    </div>
-  );
-}
-
-function RSIChart({ data }) {
-  const containerRef = React.useRef(null);
-  const chartRef     = React.useRef(null);
-
-  const calcRSI = (candles, period=14) => {
-    const result = [];
-    for (let i = period; i < candles.length; i++) {
-      const gains = [], losses = [];
-      for (let j = i - period + 1; j <= i; j++) {
-        const diff = candles[j].close - candles[j-1].close;
-        if (diff > 0) gains.push(diff); else losses.push(Math.abs(diff));
-      }
-      const avgG = gains.reduce((s,v)=>s+v,0)  / period;
-      const avgL = losses.reduce((s,v)=>s+v,0) / period;
-      const rs   = avgL === 0 ? 100 : avgG / avgL;
-      result.push({ time: candles[i].time, value: 100 - (100 / (1 + rs)) });
-    }
-    return result;
-  };
-
-  React.useEffect(() => {
-    if (!data || data.length === 0 || !containerRef.current) return;
-
-    loadLWC().then((LWC) => {
-      if (chartRef.current) { chartRef.current.remove(); chartRef.current = null; }
-
-      const chart = LWC.createChart(containerRef.current, {
-        width : containerRef.current.clientWidth,
-        height: 120,
-        layout: { background: { color: '#070d1a' }, textColor: '#94a3b8', fontSize: 10 },
-        grid  : { vertLines: { color: 'rgba(100,116,139,0.1)' }, horzLines: { color: 'rgba(100,116,139,0.1)' } },
-        rightPriceScale: { borderColor: '#1e293b', scaleMargins: { top: 0.1, bottom: 0.1 } },
-        timeScale: { borderColor: '#1e293b', timeVisible: true, secondsVisible: false },
-        crosshair: { mode: LWC.CrosshairMode.Normal },
-      });
-      chartRef.current = chart;
-
-      const candles = data
-        .filter(d => d.open && d.close)
-        .map(d => ({ time: Math.floor(new Date(d.time||d.date||d.timestamp).getTime()/1000), close: parseFloat(d.close) }))
-        .sort((a,b) => a.time - b.time)
-        .filter((d,i,arr) => i===0 || d.time !== arr[i-1].time);
-
-      const rsiData = calcRSI(candles);
-      const rsiSeries = chart.addLineSeries({ color: '#a78bfa', lineWidth: 2, title: 'RSI 14' });
-      rsiSeries.setData(rsiData);
-
-      // Overbought/oversold lines
-      const obSeries = chart.addLineSeries({ color: 'rgba(248,113,113,0.5)', lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false });
-      const osSeries = chart.addLineSeries({ color: 'rgba(74,222,128,0.5)',  lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false });
-      if (rsiData.length > 0) {
-        const t0 = rsiData[0].time, t1 = rsiData[rsiData.length-1].time;
-        obSeries.setData([{time:t0,value:70},{time:t1,value:70}]);
-        osSeries.setData([{time:t0,value:30},{time:t1,value:30}]);
-      }
-      chart.timeScale().fitContent();
-
-      const ro = new ResizeObserver(() => {
-        if (containerRef.current && chartRef.current) chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
-      });
-      ro.observe(containerRef.current);
-      return () => ro.disconnect();
-    });
-
-    return () => { if (chartRef.current) { chartRef.current.remove(); chartRef.current = null; } };
-  }, [data]);
-
-  return (
-    <div style={{borderTop:'1px solid #1e293b',background:'#070d1a',paddingBottom:'4px'}}>
-      <div style={{padding:'4px 1rem',fontSize:'0.72rem',color:'#a78bfa',fontWeight:600}}>RSI 14</div>
-      <div ref={containerRef} style={{width:'100%',height:'120px'}}/>
-    </div>
-  );
-}
-
-
-
 
 const normalCDF = (x) => {
   const t = 1 / (1 + 0.2316419 * Math.abs(x));
@@ -431,14 +120,14 @@ const STRATEGY_TEMPLATES = {
 };
 
 
-const YAHOO = `${BACKEND_URL}/api/yahoo`;
-const GROQ  = `${BACKEND_URL}/api`;
+// CORS PROXY FOR REAL DATA
+const CORS_PROXY = "https://api.allorigins.win/raw?url=";
 
 function App() {
   const [activeTab, setActiveTab] = useState('home');
   
-  const [spot, setSpot] = useState(25500);
-  const [strike, setStrike] = useState(25500);
+  const [spot, setSpot] = useState(23500);
+  const [strike, setStrike] = useState(23500);
   const [premium, setPremium] = useState(150);
   const [lotSize, setLotSize] = useState(65);
   const [daysToExpiry, setDaysToExpiry] = useState(7);
@@ -462,446 +151,18 @@ function App() {
   const [showPositionSizing, setShowPositionSizing] = useState(false);
 
   // NEWS INTELLIGENCE SYSTEM
-  // News fetched via backend RSS proxy — no API key needed
+  const NEWS_API_KEY = 'c14ca467b8574c3b8091d20368031139';
   const [intelligentNews, setIntelligentNews] = useState([]);
   const [isLoadingNews, setIsLoadingNews] = useState(false);
-
-  // Settings
-  // TRADE JOURNAL & PSYCHOLOGY
-  const [tradeLog,        setTradeLog]        = useState(() => { try { return JSON.parse(localStorage.getItem('db_tradelog')||'[]'); } catch(e){ return []; } });
-  const [showTradeEntry,  setShowTradeEntry]  = useState(false);
-  const [tradeForm,       setTradeForm]       = useState({symbol:'NIFTY',type:'CE',strike:'',expiry:'',action:'BUY',qty:1,entryPrice:'',exitPrice:'',notes:'',emotion:'Calm',reason:'Setup'});
-  const [journalFilter,   setJournalFilter]   = useState('all');
-  const [cooldownActive,  setCooldownActive]  = useState(false);
-  const [cooldownEnd,     setCooldownEnd]     = useState(null);
-  useEffect(() => { localStorage.setItem('db_tradelog', JSON.stringify(tradeLog)); }, [tradeLog]);
-
-  // ── Auth state ───────────────────────────────────────────────────────────
-  const [currentUser,     setCurrentUser]     = useState(null);
-  const [authLoading,     setAuthLoading]     = useState(true);
-  const [showAuthModal,   setShowAuthModal]   = useState(false);
-  const [authMode,        setAuthMode]        = useState('login');   // 'login' | 'signup'
-  const [authEmail,       setAuthEmail]       = useState('');
-  const [authPassword,    setAuthPassword]    = useState('');
-  const [authName,        setAuthName]        = useState('');
-  const [authError,       setAuthError]       = useState('');
-  const [authSubmitting,  setAuthSubmitting]  = useState(false);
-
-  const [showMobileMenu,   setShowMobileMenu]   = useState(false);
-  const [activeMarketsTab, setActiveMarketsTab] = useState('option-chain');
-  const [deepDiveSymbol,   setDeepDiveSymbol]   = useState('');
-  const [deepDiveData,     setDeepDiveData]     = useState(null);
-  const [deepDiveLoading,  setDeepDiveLoading]  = useState(false);
-  // Backtester state
-  const [btSymbol,         setBtSymbol]         = useState('NIFTY');
-  const [btStrategy,       setBtStrategy]       = useState('ma_crossover');
-  const [btTimeframe,      setBtTimeframe]      = useState('1D');
-  const [btPeriod,         setBtPeriod]         = useState('1y');
-  const [btCapital,        setBtCapital]        = useState(100000);
-  const [btRunning,        setBtRunning]        = useState(false);
-  const [btResult,         setBtResult]         = useState(null);
-  const [btParams,         setBtParams]         = useState({ fastMA:10, slowMA:30, rsiOB:70, rsiOS:30, breakoutBars:5, lotSize:75 });
-  const [showSettings,     setShowSettings]     = useState(false);
-  const [showTgSetup,      setShowTgSetup]      = useState(false);
-  const [isAdmin,          setIsAdmin]          = useState(false);
-  const [groqApiKey,       setGroqApiKey]       = useState(() => localStorage.getItem('db_groq_key')   || '');
-  const [tgChatId,         setTgChatId]         = useState(() => localStorage.getItem('db_tg_chatid')  || '');
-  const sentTgAlerts = React.useRef(new Set()); // track sent alerts to prevent duplicates
-  const [tgStatus,         setTgStatus]         = useState('idle');
-  const [groqStatus,       setGroqStatus]       = useState('idle');
-  const [notifyHighImpact, setNotifyHighImpact] = useState(() => localStorage.getItem('db_notify_hi') !== 'false');
-  const [notifyScanner,    setNotifyScanner]    = useState(() => localStorage.getItem('db_notify_sc') !== 'false');
-  // Paper Trading state
-  const [paperBalance,     setPaperBalance]     = useState(() => parseFloat(localStorage.getItem('db_paper_balance') || '500000'));
-  const [paperPositions,   setPaperPositions]   = useState(() => { try { return JSON.parse(localStorage.getItem('db_paper_positions') || '[]'); } catch(e) { return []; } });
-  const [paperHistory,     setPaperHistory]     = useState(() => { try { return JSON.parse(localStorage.getItem('db_paper_history') || '[]'); } catch(e) { return []; } });
-  const [paperOrder,       setPaperOrder]       = useState({ symbol:'NIFTY', type:'BUY', qty:1, price:'', orderType:'MARKET' });
-  const [paperMsg,         setPaperMsg]         = useState('');
-  // Portfolio / Broker state
-  useEffect(() => { localStorage.setItem('db_groq_key',  groqApiKey);       }, [groqApiKey]);
-  useEffect(() => { localStorage.setItem('db_tg_chatid', tgChatId);         }, [tgChatId]);
-  useEffect(() => { localStorage.setItem('db_notify_hi', notifyHighImpact); }, [notifyHighImpact]);
-  useEffect(() => { localStorage.setItem('db_notify_sc', notifyScanner);    }, [notifyScanner]);
-  useEffect(() => { localStorage.setItem('db_paper_balance',   paperBalance.toString()); }, [paperBalance]);
-  useEffect(() => { localStorage.setItem('db_paper_positions', JSON.stringify(paperPositions)); }, [paperPositions]);
-  useEffect(() => { localStorage.setItem('db_paper_history',   JSON.stringify(paperHistory)); }, [paperHistory]);
-
-
-  // ── Stock Deep Dive ──────────────────────────────────────────────────────
-  const runDeepDive = async (symbol) => {
-    if (!symbol) return;
-    setDeepDiveLoading(true);
-    setDeepDiveData(null);
-    const SYM = symbol.toUpperCase().trim();
-
-    // FnO company meta
-    const FNO_META = {
-      RELIANCE:  { name:'Reliance Industries', sector:'Energy / Refining', lot:250, desc:'India largest company by revenue. Oil-to-chemicals, retail (JioMart), Jio telecom.' },
-      TCS:       { name:'Tata Consultancy Services', sector:'IT Services', lot:150, desc:'Largest IT exporter. Consistent dividend payer, low leverage, global clients.' },
-      HDFCBANK:  { name:'HDFC Bank', sector:'Private Banking', lot:550, desc:'Largest private bank by assets. Known for low NPAs and consistent growth.' },
-      ICICIBANK: { name:'ICICI Bank', sector:'Private Banking', lot:700, desc:'Second largest private bank. Strong retail lending and digital banking push.' },
-      INFY:      { name:'Infosys', sector:'IT Services', lot:400, desc:'Second largest IT exporter. Volatile on US tech spending cycles.' },
-      SBIN:      { name:'State Bank of India', sector:'PSU Banking', lot:1500, desc:'Largest PSU bank. Sensitive to government policy and NPA cycles.' },
-      AXISBANK:  { name:'Axis Bank', sector:'Private Banking', lot:1200, desc:'Third largest private bank. Beneficiary of credit growth cycle.' },
-      ITC:       { name:'ITC Limited', sector:'FMCG / Tobacco', lot:3200, desc:'Dominant cigarettes market share. Growing FMCG and hotels businesses.' },
-      BAJFINANCE:{ name:'Bajaj Finance', sector:'NBFC', lot:125, desc:'Largest NBFC. Premium valuation. Sensitive to rate cycles.' },
-      WIPRO:     { name:'Wipro', sector:'IT Services', lot:3000, desc:'IT services with global delivery. Slower growth vs TCS/Infy.' },
-      NIFTY:     { name:'Nifty 50 Index', sector:'Index', lot:75, desc:'Benchmark index of 50 large-cap Indian stocks.' },
-      BANKNIFTY: { name:'Bank Nifty Index', sector:'Banking Index', lot:15, desc:'Index of the 12 most liquid banking stocks on NSE.' },
-    };
-
-    const meta = FNO_META[SYM] || { name: SYM, sector: 'FnO Stock', lot: 1, desc: 'FnO stock on NSE.' };
-
-    // Get option chain data from existing chain if same symbol
-    let chainData = liveOptionChain;
-    if (selectedUnderlying !== SYM) {
-      // Quick fetch from backend
-      try {
-        const r = await fetch(`${BACKEND_URL}/api/option-chain?symbol=${SYM}`);
-        if (r.ok) {
-          const j = await r.json();
-          const data = j?.records?.data || [];
-          const spot = j?.records?.underlyingValue || 0;
-          chainData = data.slice(0,20).map(row=>({
-            strike: row.strikePrice,
-            ce: { oi: row.CE?.openInterest||0, ltp: row.CE?.lastPrice||0, iv: row.CE?.impliedVolatility||0 },
-            pe: { oi: row.PE?.openInterest||0, ltp: row.PE?.lastPrice||0, iv: row.PE?.impliedVolatility||0 },
-          }));
-        }
-      } catch(e) { chainData = liveOptionChain; }
-    }
-
-    // Compute OI analysis
-    const ceTop = [...chainData].sort((a,b)=>(b.ce?.oi||0)-(a.ce?.oi||0)).slice(0,3);
-    const peTop = [...chainData].sort((a,b)=>(b.pe?.oi||0)-(a.pe?.oi||0)).slice(0,3);
-    const totalCE = chainData.reduce((s,r)=>s+(r.ce?.oi||0),0);
-    const totalPE = chainData.reduce((s,r)=>s+(r.pe?.oi||0),0);
-    const pcr = totalCE>0 ? (totalPE/totalCE).toFixed(2) : '-';
-    const pcrSentiment = parseFloat(pcr)>1.2?'Bullish':parseFloat(pcr)<0.8?'Bearish':'Neutral';
-
-    // AI strategy suggestion
-    let strategy = null;
-    if (groqApiKey) {
-      try {
-        const prompt = `You are an expert options trader. Analyze this FnO stock: ${SYM} (${meta.name}), Sector: ${meta.sector}.
-PCR: ${pcr} (${pcrSentiment}). Top CE OI strikes (resistance): ${ceTop.map(r=>r.strike).join(', ')}. Top PE OI strikes (support): ${peTop.map(r=>r.strike).join(', ')}.
-Suggest ONE specific options strategy for a retail trader. Respond ONLY in this JSON:
-{"strategy":"strategy name","action":"exact trade eg Buy 25500CE","reasoning":"2 sentences max","risk":"Low/Medium/High","timeframe":"intraday/weekly/monthly","sentiment":"Bullish/Bearish/Neutral"}`;
-        const r = await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+groqApiKey.trim()},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],max_tokens:200,temperature:0.3})});
-        const j = await r.json();
-        const text = j?.choices?.[0]?.message?.content||'';
-        const clean = text.replace(/```json|```/g,'').trim();
-        strategy = JSON.parse(clean);
-      } catch(e) { strategy = null; }
-    }
-
-    setDeepDiveData({ meta, chainData, ceTop, peTop, pcr, pcrSentiment, strategy, symbol: SYM });
-    setDeepDiveLoading(false);
-  };
-
-
-  // ── Backtest Engine ──────────────────────────────────────────────────────
-  const runBacktest = async () => {
-    setBtRunning(true); setBtResult(null);
-
-    // Fetch historical data
-    const ticker = (CHART_YAHOO_MAP[btSymbol]||btSymbol+'.NS').trim();
-    const tfMap  = { '1D':'1d','1W':'1wk','1M':'1mo' };
-    const rangeMap = { '3m':'3mo','6m':'6mo','1y':'1y','2y':'2y','5y':'5y' };
-    const interval = tfMap[btTimeframe]||'1d';
-    const range    = rangeMap[btPeriod]||'1y';
-
-    let candles = [];
-    try {
-      const res  = await fetch(`${BACKEND_URL}/api/yahoo/chart/${encodeURIComponent(ticker)}?interval=${interval}&range=${range}`);
-      const json = await res.json();
-      const result = json?.chart?.result?.[0];
-      const ts=result?.timestamp, q=result?.indicators?.quote?.[0];
-      if (ts && q) {
-        candles = ts.map((t,i)=>({
-          date  : new Date(t*1000).toISOString().split('T')[0],
-          time  : t*1000,
-          open  : parseFloat((q.open[i]||0).toFixed(2)),
-          high  : parseFloat((q.high[i]||0).toFixed(2)),
-          low   : parseFloat((q.low[i]||0).toFixed(2)),
-          close : parseFloat((q.close[i]||0).toFixed(2)),
-          volume: q.volume[i]||0,
-        })).filter(c=>c.close>0);
-      }
-    } catch(e) { console.warn('BT fetch error:', e); }
-
-    if (candles.length < 30) {
-      setBtResult({ error: 'Not enough data. Try a longer period or different symbol.' });
-      setBtRunning(false); return;
-    }
-
-    // ── Helper: SMA ──
-    const sma = (arr, p) => arr.map((v,i) => i<p-1 ? null : arr.slice(i-p+1,i+1).reduce((s,x)=>s+x,0)/p);
-
-    // ── Helper: RSI ──
-    const rsi = (closes, p=14) => closes.map((_,i)=>{
-      if(i<p) return null;
-      const slice = closes.slice(i-p,i);
-      const gains = [], losses = [];
-      for(let j=1;j<slice.length;j++){
-        const d=slice[j]-slice[j-1];
-        if(d>0) gains.push(d); else losses.push(Math.abs(d));
-      }
-      const ag=gains.reduce((s,v)=>s+v,0)/p||0;
-      const al=losses.reduce((s,v)=>s+v,0)/p||0;
-      return al===0?100:100-(100/(1+ag/al));
-    });
-
-    // ── Helper: Black-Scholes approx for options P&L ──
-    const bsPrice = (S, K, T, r=0.065, sigma=0.16, type='CE') => {
-      if(T<=0) return Math.max(0, type==='CE'?S-K:K-S);
-      const d1 = (Math.log(S/K)+(r+0.5*sigma*sigma)*T)/(sigma*Math.sqrt(T));
-      const d2 = d1-sigma*Math.sqrt(T);
-      const N  = x => { const a=1/(1+0.2316419*Math.abs(x)); const k=a*(0.319381530+a*(-0.356563782+a*(1.781477937+a*(-1.821255978+a*1.330274429)))); return x>=0?1-0.3989422802*Math.exp(-x*x/2)*k:0.3989422802*Math.exp(-x*x/2)*k; };
-      return type==='CE' ? S*N(d1)-K*Math.exp(-r*T)*N(d2) : K*Math.exp(-r*T)*N(-d2)-S*N(-d1);
-    };
-
-    const closes = candles.map(c=>c.close);
-    const { fastMA, slowMA, rsiOB, rsiOS, breakoutBars, lotSize } = btParams;
-    const lot = parseInt(lotSize)||75;
-
-    let trades = [];
-    let equity = [{ date: candles[0].date, value: btCapital }];
-    let cash   = btCapital;
-    let position = null; // { type, entry, entryDate, strike, optionType, daysToExpiry }
-
-    // ── Strategy engines ──
-    const fastSMA = sma(closes, fastMA);
-    const slowSMA = sma(closes, slowMA);
-    const rsiVals = rsi(closes);
-
-    for (let i = Math.max(fastMA, slowMA, 30); i < candles.length; i++) {
-      const c    = candles[i];
-      const prev = candles[i-1];
-      const S    = c.close;
-
-      // ── ENTRY SIGNALS ──
-      let signal = null;
-      if (btStrategy === 'ma_crossover') {
-        const curF=fastSMA[i], curS=slowSMA[i], prvF=fastSMA[i-1], prvS=slowSMA[i-1];
-        if(curF&&curS&&prvF&&prvS){
-          if(prvF<=prvS && curF>curS) signal='LONG';
-          if(prvF>=prvS && curF<curS) signal='SHORT';
-        }
-      } else if (btStrategy === 'rsi') {
-        const r=rsiVals[i], rp=rsiVals[i-1];
-        if(r&&rp){ if(rp<=rsiOS && r>rsiOS) signal='LONG'; if(rp>=rsiOB && r<rsiOB) signal='SHORT'; }
-      } else if (btStrategy === 'breakout') {
-        const hiN = Math.max(...candles.slice(i-breakoutBars,i).map(c=>c.high));
-        const loN = Math.min(...candles.slice(i-breakoutBars,i).map(c=>c.low));
-        if(c.close>hiN && prev.close<=hiN) signal='LONG';
-        if(c.close<loN && prev.close>=loN) signal='SHORT';
-      } else if (btStrategy === 'straddle_sell') {
-        // Sell ATM straddle: enter on Mondays, exit on Thursday close (weekly expiry)
-        const day = new Date(c.time).getDay();
-        if(day===1 && !position) signal='SELL_STRADDLE';
-        if(day===4 && position)  signal='EXIT_STRADDLE';
-      }
-
-      // ── EXIT open position ──
-      if (position && signal && signal !== 'SELL_STRADDLE') {
-        let pnl = 0;
-        if (btStrategy === 'ma_crossover' || btStrategy === 'rsi' || btStrategy === 'breakout') {
-          if (position.optionType === 'CE') {
-            const daysLeft = Math.max(0, position.daysToExpiry - (i - position.entryBar));
-            const exitPx   = bsPrice(S, position.strike, daysLeft/365, 0.065, 0.16, 'CE');
-            pnl = (exitPx - position.entryPx) * lot;
-          } else {
-            const daysLeft = Math.max(0, position.daysToExpiry - (i - position.entryBar));
-            const exitPx   = bsPrice(S, position.strike, daysLeft/365, 0.065, 0.16, 'PE');
-            pnl = (exitPx - position.entryPx) * lot;
-          }
-        }
-        cash += pnl;
-        trades.push({ date:c.date, type:'EXIT', side:position.optionType, strike:position.strike, entryDate:position.entryDate, entryPx:position.entryPx, exitPx: (cash/lot).toFixed(2), pnl:Math.round(pnl), capital:Math.round(cash) });
-        position = null;
-      }
-
-      // ── EXIT straddle ──
-      if (position && signal === 'EXIT_STRADDLE') {
-        const daysLeft = 0;
-        const cePx = bsPrice(S, position.strike, daysLeft/365, 0.065, position.ceIV||0.16, 'CE');
-        const pePx = bsPrice(S, position.strike, daysLeft/365, 0.065, position.peIV||0.16, 'PE');
-        const pnl  = (position.cePx + position.pePx - cePx - pePx) * lot;
-        cash += pnl;
-        trades.push({ date:c.date, type:'EXIT', side:'STRADDLE', strike:position.strike, entryDate:position.entryDate, pnl:Math.round(pnl), capital:Math.round(cash) });
-        position = null;
-      }
-
-      // ── ENTER new position ──
-      if (!position && signal && signal !== 'EXIT_STRADDLE') {
-        if (signal === 'SELL_STRADDLE') {
-          const strike = Math.round(S/50)*50;
-          const cePx   = bsPrice(S, strike, 4/365, 0.065, 0.16, 'CE');
-          const pePx   = bsPrice(S, strike, 4/365, 0.065, 0.16, 'PE');
-          position = { type:'SELL_STRADDLE', entryDate:c.date, entryBar:i, strike, cePx, pePx, ceIV:0.16, peIV:0.16 };
-          trades.push({ date:c.date, type:'ENTRY', side:'STRADDLE_SELL', strike, entryPx:(cePx+pePx).toFixed(2), capital:Math.round(cash) });
-        } else {
-          const optType  = signal === 'LONG' ? 'CE' : 'PE';
-          const strikeMul = btSymbol.includes('BANK') ? 100 : 50;
-          const strike   = signal === 'LONG' ? Math.ceil(S/strikeMul)*strikeMul : Math.floor(S/strikeMul)*strikeMul;
-          const daysToExp = 7;
-          const entryPx  = bsPrice(S, strike, daysToExp/365, 0.065, 0.16, optType);
-          const cost     = entryPx * lot;
-          if (cost > cash * 0.15) { equity.push({ date:c.date, value:Math.round(cash) }); continue; } // risk check
-          cash -= cost;
-          position = { type:signal, optionType:optType, entryDate:c.date, entryBar:i, strike, entryPx, daysToExpiry:daysToExp };
-          trades.push({ date:c.date, type:'ENTRY', side:optType, strike, entryPx:entryPx.toFixed(2), capital:Math.round(cash) });
-        }
-      }
-
-      equity.push({ date:c.date, value:Math.round(cash) });
-    }
-
-    // ── Close any open position at end ──
-    if (position) {
-      const S = candles[candles.length-1].close;
-      const exitPx = bsPrice(S, position.strike, 0, 0.065, 0.16, position.optionType||'CE');
-      const pnl    = position.optionType ? (exitPx - position.entryPx) * lot : 0;
-      cash += pnl;
-      trades.push({ date:candles[candles.length-1].date, type:'EXIT(End)', side:position.optionType||'STRADDLE', pnl:Math.round(pnl), capital:Math.round(cash) });
-    }
-
-    // ── Stats ──
-    const exitTrades  = trades.filter(t=>t.type.startsWith('EXIT'));
-    const profits     = exitTrades.map(t=>t.pnl).filter(p=>p>0);
-    const losses2     = exitTrades.map(t=>t.pnl).filter(p=>p<=0);
-    const totalReturn = ((cash - btCapital)/btCapital*100).toFixed(2);
-    const winRate     = exitTrades.length ? (profits.length/exitTrades.length*100).toFixed(1) : 0;
-    const avgWin      = profits.length ? (profits.reduce((s,v)=>s+v,0)/profits.length).toFixed(0) : 0;
-    const avgLoss     = losses2.length ? (losses2.reduce((s,v)=>s+v,0)/losses2.length).toFixed(0) : 0;
-    const maxDD       = equity.reduce((dd,p,i,a)=>{ const peak=Math.max(...a.slice(0,i+1).map(x=>x.value)); return Math.max(dd,((peak-p.value)/peak)*100); },0).toFixed(2);
-    const returns     = equity.slice(1).map((p,i)=>((p.value-equity[i].value)/equity[i].value));
-    const avgR        = returns.reduce((s,v)=>s+v,0)/returns.length||0;
-    const stdR        = Math.sqrt(returns.reduce((s,v)=>s+(v-avgR)**2,0)/returns.length||1);
-    const sharpe      = (avgR/stdR*Math.sqrt(252)).toFixed(2);
-    const bestTrade   = Math.max(0,...exitTrades.map(t=>t.pnl||0));
-    const worstTrade  = Math.min(0,...exitTrades.map(t=>t.pnl||0));
-
-    setBtResult({
-      symbol:btSymbol, strategy:btStrategy, period:btPeriod, capital:btCapital,
-      finalCapital:Math.round(cash), totalReturn, winRate, avgWin, avgLoss,
-      totalTrades:exitTrades.length, maxDD, sharpe, bestTrade, worstTrade,
-      trades, equity, candles,
-    });
-    setBtRunning(false);
-  };
-
-  // ── Wake backend on load (Render free tier sleeps) ──────────────────────────
-  useEffect(() => {
-    fetch(`${BACKEND_URL}/api/health`).catch(()=>{});
-  }, []);
-
-  // ── Firebase auth listener ────────────────────────────────────────────────
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
-      setIsAdmin(user?.email === ADMIN_EMAIL);
-      setAuthLoading(false);
-      if (user) {
-        // Load user preferences from Firestore
-        try {
-          const snap = await getDoc(doc(db, 'users', user.uid));
-          if (snap.exists()) {
-            const data = snap.data();
-            if (data.groqApiKey)  setGroqApiKey(data.groqApiKey);
-            if (data.tgChatId)    setTgChatId(data.tgChatId);
-          }
-          // Load trade journal from Firestore
-          const tradesSnap = await getDocs(query(collection(db,'users',user.uid,'trades'),orderBy('timestamp','desc')));
-          const cloudTrades = tradesSnap.docs.map(d=>({...d.data(),firestoreId:d.id}));
-          if (cloudTrades.length > 0) setTradeLog(cloudTrades);
-        } catch(e) { console.warn('Firestore load error:', e.message); }
-      }
-    });
-    return () => unsub();
-  }, []);
-
-  // ── Save settings to Firestore when changed ───────────────────────────────
-  useEffect(() => {
-    if (!currentUser) return;
-    const save = async () => {
-      try {
-        await setDoc(doc(db,'users',currentUser.uid), { groqApiKey, tgChatId, email:currentUser.email, updatedAt:serverTimestamp() }, { merge:true });
-      } catch(e) { console.warn('Settings save error:', e.message); }
-    };
-    const timer = setTimeout(save, 1500); // debounce
-    return () => clearTimeout(timer);
-  }, [groqApiKey, tgChatId, currentUser]);
-
-  // ── Auth functions ────────────────────────────────────────────────────────
-  const signInWithGoogle = async () => {
-    setAuthSubmitting(true); setAuthError('');
-    try { await signInWithPopup(auth, googleProvider); setShowAuthModal(false); }
-    catch(e) { setAuthError(e.message); }
-    finally { setAuthSubmitting(false); }
-  };
-
-  const signInWithEmail = async () => {
-    setAuthSubmitting(true); setAuthError('');
-    try {
-      if (authMode === 'signup') {
-        const cred = await createUserWithEmailAndPassword(auth, authEmail, authPassword);
-        if (authName) await updateProfile(cred.user, { displayName: authName });
-        await setDoc(doc(db,'users',cred.user.uid),{ email:authEmail, name:authName, createdAt:serverTimestamp() });
-      } else {
-        await signInWithEmailAndPassword(auth, authEmail, authPassword);
-      }
-      setShowAuthModal(false);
-    } catch(e) {
-      const msgs = { 'auth/email-already-in-use':'Email already registered — try logging in', 'auth/wrong-password':'Wrong password', 'auth/user-not-found':'No account with this email', 'auth/weak-password':'Password must be 6+ characters', 'auth/invalid-email':'Invalid email address' };
-      setAuthError(msgs[e.code] || e.message);
-    }
-    finally { setAuthSubmitting(false); }
-  };
-
-  const handleSignOut = async () => { await signOut(auth); setTradeLog([]); };
-
-  // ── Save trade to Firestore (overrides localStorage-only addTrade) ────────
-  const addTradeWithSync = async (form) => {
-    const entry = { ...form, id:Date.now(), timestamp:new Date().toISOString(), pnl: form.exitPrice ? ((parseFloat(form.exitPrice)-parseFloat(form.entryPrice))*(form.action==='BUY'?1:-1)*parseInt(form.qty)*50).toFixed(0) : null };
-    const newLog = [entry, ...tradeLog];
-    setTradeLog(newLog);
-    if (currentUser) {
-      try { await addDoc(collection(db,'users',currentUser.uid,'trades'), { ...entry, savedAt:serverTimestamp() }); }
-      catch(e) { console.warn('Trade sync failed:', e.message); }
-    }
-    // Revenge trading detection
-    const recent = newLog.slice(0,3);
-    const recentLosses = recent.filter(t=>t.pnl&&parseFloat(t.pnl)<0).length;
-    const timeDiffs = recent.slice(0,-1).map((t,i)=>(new Date(t.timestamp)-new Date(recent[i+1].timestamp))/60000);
-    const tooFast = timeDiffs.some(d=>d<15);
-    if (recentLosses>=2 && tooFast) {
-      const end = new Date(Date.now()+30*60*1000);
-      setCooldownActive(true); setCooldownEnd(end);
-      // Cooldown alert sent below in addTrade function
-    }
-  };
-
   const [marketData, setMarketData] = useState({
-    nifty: { value: 25500, change: 0.8 },
-    bankNifty: { value: 54000, change: 1.2 },
+    nifty: { value: 23450, change: 0.8 },
+    bankNifty: { value: 49200, change: 1.2 },
     vix: { value: 14.2, change: -2.1 }
   });
-  const [liveChanges,   setLiveChanges]   = useState({});
-  const [livePrevClose, setLivePrevClose] = useState({});
-  const [banList,       setBanList]       = useState([]);
-  const [banLoading,    setBanLoading]    = useState(false);
-  const [banFetched,    setBanFetched]    = useState(false);
-  const [prevOI,        setPrevOI]        = useState({});
-  const [watchNSE,     setWatchNSE]     = useState(['Nifty 50','Bank Nifty','Nifty IT']);
-  const [watchBSE,     setWatchBSE]     = useState(['Sensex','BSE Midcap']);
-  const [watchStocks,  setWatchStocks]  = useState(['Reliance','TCS','HDFC Bank']);
-  const [watchTab,     setWatchTab]     = useState('nse');
   const [livePrices, setLivePrices] = useState({
     // NSE Indices
-    'Nifty 50': 25500,
-    'Bank Nifty': 54000,
+    'Nifty 50': 23450,
+    'Bank Nifty': 49200,
     'Nifty IT': 35800,
     'Nifty Pharma': 21000,
     'Nifty Auto': 22000,
@@ -1019,8 +280,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
 
   // LIVE OPTION CHAIN STATE
   const [liveOptionChain, setLiveOptionChain] = useState([]);
-  const [selectedExpiry,   setSelectedExpiry]   = useState('');
-  const [nseExpiryDates,   setNseExpiryDates]   = useState([]);
+  const [selectedExpiry, setSelectedExpiry] = useState('current');
   const [selectedUnderlying, setSelectedUnderlying] = useState('NIFTY');
   const [isLoadingChain, setIsLoadingChain] = useState(false);
   const [chartType, setChartType] = useState('oi'); // 'oi', 'iv', 'greeks', 'volume'
@@ -1048,9 +308,9 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
 
   // CANDLESTICK CHART STATE
   const [selectedChartSymbol, setSelectedChartSymbol] = useState('NIFTY');
-  const [chartTimeframe, setChartTimeframe] = useState('15m');
+  const [chartTimeframe, setChartTimeframe] = useState('5m'); // 1D, 5D, 1M, 3M, 6M, 1Y
   const [candlestickType, setCandlestickType] = useState('candlestick');
-  const [chartIndicators, setChartIndicators] = useState(['EMA20', 'RSI']);
+  const [chartIndicators, setChartIndicators] = useState(['SMA', 'RSI']);
   const [lastChartUpdate, setLastChartUpdate] = useState(new Date()); // SMA, EMA, RSI, MACD, BB
   const [candlestickData, setCandlestickData] = useState([]);
 
@@ -1101,237 +361,190 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [oiChartData, setOiChartData] = useState([]);
   const [activeHomeTab, setActiveHomeTab] = useState('news');
 
-  const executePaperOrder = async () => {
-    const { symbol, type, qty, price, orderType } = paperOrder;
-    if (!symbol || !qty || qty <= 0) { setPaperMsg('❌ Enter valid symbol and quantity'); return; }
+  // SCANNER STATE
+  const [optionChainData, setOptionChainData] = useState([
+    { strike: 23300, cePremium: 250, pePremium: 50, ceOI: 50000, peOI: 30000, ceOpen: 250, ceHigh: 270 },
+    { strike: 23500, cePremium: 150, pePremium: 150, ceOI: 80000, peOI: 75000, ceOpen: 150, ceHigh: 150 },
+    { strike: 23700, cePremium: 80, pePremium: 280, ceOI: 40000, peOI: 60000, ceOpen: 80, ceHigh: 90 },
+  ]);
+  const [alerts, setAlerts] = useState([]);
+  const [scannerIV, setScannerIV] = useState(18);
+  const [scannerExpiry, setScannerExpiry] = useState(5);
 
-    // Fetch live price
-    let ltp = parseFloat(price);
-    if (orderType === 'MARKET' || !ltp) {
-      try {
-        const sym = symbol.toUpperCase().includes('NIFTY') ? '^NSEI' :
-                    symbol.toUpperCase().includes('BANKNIFTY') ? '^NSEBANK' :
-                    `${symbol.toUpperCase()}.NS`;
-        const r = await fetch(`${BACKEND_URL}/api/stock-price?symbol=${encodeURIComponent(sym)}`);
-        const d = await r.json();
-        ltp = d.price || d.regularMarketPrice || 0;
-      } catch(e) { ltp = parseFloat(price) || 0; }
+  useEffect(() => {
+    const saved = localStorage.getItem('deltabuddy-strategies');
+    if (saved) {
+      setSavedStrategies(JSON.parse(saved));
     }
-    if (!ltp) { setPaperMsg('❌ Could not fetch price. Enter manually.'); return; }
-
-    const cost = ltp * qty;
-    if (type === 'BUY' && cost > paperBalance) { setPaperMsg(`❌ Insufficient balance. Need ₹${cost.toLocaleString('en-IN')}`); return; }
-
-    // Check if selling existing position
-    if (type === 'SELL') {
-      const pos = paperPositions.find(p => p.symbol === symbol.toUpperCase());
-      if (!pos || pos.qty < qty) { setPaperMsg('❌ No open position to sell'); return; }
-      const pnl = (ltp - pos.avgPrice) * qty;
-      setPaperPositions(prev => {
-        const updated = prev.map(p => p.symbol === symbol.toUpperCase()
-          ? { ...p, qty: p.qty - qty }
-          : p
-        ).filter(p => p.qty > 0);
-        return updated;
-      });
-      setPaperBalance(b => b + cost);
-      const trade = { id: Date.now(), symbol: symbol.toUpperCase(), type: 'SELL', qty, price: ltp, pnl, time: new Date().toLocaleString('en-IN') };
-      setPaperHistory(h => [trade, ...h].slice(0, 100));
-      setPaperMsg(`✅ SELL executed @ ₹${ltp.toFixed(2)} | P&L: ${pnl >= 0 ? '+' : ''}₹${pnl.toFixed(2)}`);
-    } else {
-      // BUY
-      setPaperBalance(b => b - cost);
-      setPaperPositions(prev => {
-        const existing = prev.find(p => p.symbol === symbol.toUpperCase());
-        if (existing) {
-          return prev.map(p => p.symbol === symbol.toUpperCase()
-            ? { ...p, qty: p.qty + qty, avgPrice: (p.avgPrice * p.qty + ltp * qty) / (p.qty + qty) }
-            : p
-          );
-        }
-        return [...prev, { symbol: symbol.toUpperCase(), qty, avgPrice: ltp, buyTime: new Date().toLocaleString('en-IN') }];
-      });
-      const trade = { id: Date.now(), symbol: symbol.toUpperCase(), type: 'BUY', qty, price: ltp, pnl: null, time: new Date().toLocaleString('en-IN') };
-      setPaperHistory(h => [trade, ...h].slice(0, 100));
-      setPaperMsg(`✅ BUY executed @ ₹${ltp.toFixed(2)} | Cost: ₹${cost.toLocaleString('en-IN')}`);
-    }
-    setTimeout(() => setPaperMsg(''), 4000);
+  }, []);
+  // NEWS INTELLIGENCE FUNCTIONS
+  const analyzeSentiment = (text) => {
+    const lowerText = text.toLowerCase();
+    const bullishKeywords = ['rally', 'surge', 'gains', 'up', 'rise', 'high', 'bullish', 'positive', 'growth', 'strong', 'boost', 'jump', 'soar', 'record', 'buy', 'upgrade'];
+    const bearishKeywords = ['fall', 'drop', 'down', 'crash', 'decline', 'loss', 'bearish', 'negative', 'weak', 'concern', 'risk', 'fear', 'sell', 'downgrade', 'plunge', 'slide'];
+    let bullishScore = 0;
+    let bearishScore = 0;
+    bullishKeywords.forEach(word => { if (lowerText.includes(word)) bullishScore++; });
+    bearishKeywords.forEach(word => { if (lowerText.includes(word)) bearishScore++; });
+    if (bullishScore > bearishScore) return 'bullish';
+    if (bearishScore > bullishScore) return 'bearish';
+    return 'neutral';
   };
 
-  const resetPaperAccount = () => {
-    if (!window.confirm('Reset paper trading account? All positions and history will be cleared.')) return;
-    setPaperBalance(500000);
-    setPaperPositions([]);
-    setPaperHistory([]);
-    setPaperMsg('✅ Account reset to ₹5,00,000');
-    setTimeout(() => setPaperMsg(''), 3000);
+  const calculateImpact = (article) => {
+    const text = (article.title + ' ' + (article.description || '')).toLowerCase();
+    const highImpactKeywords = ['rbi', 'reserve bank', 'rate decision', 'repo rate', 'budget', 'fii', 'dii', 'interest rate', 'inflation', 'gdp', 'crude oil', 'election', 'policy', 'government', 'sensex', 'nifty'];
+    const mediumImpactKeywords = ['earnings', 'profit', 'revenue', 'results', 'quarter', 'sector', 'industry', 'stocks', 'market'];
+    let impactScore = 0;
+    highImpactKeywords.forEach(word => { if (text.includes(word)) impactScore += 3; });
+    mediumImpactKeywords.forEach(word => { if (text.includes(word)) impactScore += 1; });
+    if (impactScore >= 5) return 'high';
+    if (impactScore >= 2) return 'medium';
+    return 'low';
   };
 
-  // Telegram
-  const sendTelegramMessage = async (text, dedupeKey) => {
-    if (!tgChatId) return;
-    // Deduplicate — don't send same alert twice within 1 hour
-    const key = dedupeKey || text.substring(0, 60);
-    if (sentTgAlerts.current.has(key)) return;
-    sentTgAlerts.current.add(key);
-    setTimeout(() => sentTgAlerts.current.delete(key), 60 * 60 * 1000); // clear after 1 hour
-    try {
-      await fetch(`${BACKEND_URL}/api/telegram`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: tgChatId, text, parse_mode: 'HTML' })
-      });
-    } catch(e) { console.warn('TG failed', e); }
+  const predictAffectedIndex = (article) => {
+    const text = (article.title + ' ' + (article.description || '')).toLowerCase();
+    if (text.includes('bank') || text.includes('hdfc') || text.includes('icici') || text.includes('sbi') || text.includes('axis')) return 'Bank Nifty';
+    if (text.includes('it') || text.includes('tech') || text.includes('tcs') || text.includes('infosys') || text.includes('wipro')) return 'Nifty IT';
+    if (text.includes('pharma') || text.includes('drug') || text.includes('healthcare')) return 'Nifty Pharma';
+    if (text.includes('auto') || text.includes('tata motors') || text.includes('maruti')) return 'Nifty Auto';
+    return 'Nifty 50';
   };
-  const testTelegram = async () => {
-    setTgStatus('testing');
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/telegram`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:tgChatId,parse_mode:'HTML',text:'\u2705 <b>DeltaBuddy Connected!</b>\n\n\ud83d\udcf0 High-impact news alerts: ON\n\ud83d\udd0d Scanner alerts: ON\n\nHappy Trading! \ud83d\ude80'})});
-      const d = await res.json(); setTgStatus(d.ok?'ok':'error');
-    } catch(e) { setTgStatus('error'); }
-  };
-  const testGroq = async () => {
-    setGroqStatus('testing');
-    try {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + groqApiKey.trim()
-        },
-        body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
-          messages: [{role:'user', content:'Reply OK'}],
-          max_tokens: 5
-        })
-      });
-      const d = await res.json();
-      setGroqStatus(d.choices && d.choices.length > 0 ? 'ok' : 'error');
-    } catch(e) {
-      setGroqStatus('error');
-    }
-  };
-  // Trade Journal helpers
-  const addTrade = (form) => {
-    const entry = { ...form, id:Date.now(), timestamp:new Date().toISOString(), pnl: form.exitPrice ? ((parseFloat(form.exitPrice)-parseFloat(form.entryPrice))*(form.action==='BUY'?1:-1)*parseInt(form.qty)*50).toFixed(0) : null };
-    const newLog = [entry, ...tradeLog];
-    setTradeLog(newLog);
-    // Detect revenge/impulse trading
-    const recent = newLog.slice(0,3);
-    const recentLosses = recent.filter(t=>t.pnl&&parseFloat(t.pnl)<0).length;
-    const timeDiffs = recent.slice(0,-1).map((t,i)=>(new Date(t.timestamp)-new Date(recent[i+1].timestamp))/60000);
-    const tooFast = timeDiffs.some(d=>d<15);
-    if (recentLosses>=2 && tooFast) {
-      const end = new Date(Date.now()+30*60*1000);
-      setCooldownActive(true); setCooldownEnd(end);
-      if (tgChatId) sendTelegramMessage('\u26a0\ufe0f <b>DeltaBuddy Risk Alert</b>\n\n2 losses in quick succession detected.\n\n\ud83e\uddd8 <b>30-minute cooldown activated.</b>\n\nStep away. Review your trades. Return with a clear mind.\n\nRemember: Revenge trading destroys accounts.\n\n\ud83d\udcca Check your Journal in DeltaBuddy.');
-    }
-  };
-  const deleteTrade = (id) => setTradeLog(prev=>prev.filter(t=>t.id!==id));
-  const journalStats = () => {
-    const trades = tradeLog.filter(t=>t.pnl!==null);
-    const wins = trades.filter(t=>parseFloat(t.pnl)>0);
-    const losses = trades.filter(t=>parseFloat(t.pnl)<0);
-    const totalPnl = trades.reduce((s,t)=>s+parseFloat(t.pnl),0);
-    const impulse = tradeLog.filter(t=>['FOMO','Revenge','Boredom'].includes(t.reason)).length;
-    return { total:trades.length, wins:wins.length, losses:losses.length, winRate:trades.length?((wins.length/trades.length)*100).toFixed(1):0, totalPnl:totalPnl.toFixed(0), impulse, avgWin:wins.length?(wins.reduce((s,t)=>s+parseFloat(t.pnl),0)/wins.length).toFixed(0):0, avgLoss:losses.length?(losses.reduce((s,t)=>s+parseFloat(t.pnl),0)/losses.length).toFixed(0):0 };
-  };
-
-  // Groq AI analysis
-  const analyzeNewsWithGroq = async (article) => {
-    const prompt = `You are an expert Indian stock market analyst for NSE options traders.
-
-Title: ${article.title}
-Description: ${article.description||'N/A'}
-
-Respond ONLY with valid JSON:
-{"sentiment":"bullish"|"bearish"|"neutral","impact":"high"|"medium"|"low","impactReason":"one line","affectedIndex":"Nifty 50"|"Bank Nifty"|"Nifty IT"|"Nifty Pharma"|"Nifty Auto"|"Nifty FMCG"|"Nifty Metal"|"Nifty Energy","affectedStocks":["SYM1","SYM2"],"keyInsight":"one professional sentence for Indian traders","tradingStrategy":{"name":"Bull Call Spread"|"Bear Put Spread"|"Long Straddle"|"Iron Condor"|"Sell Strangle"|"Wait and Watch","reasoning":"2 sentences with specific NSE market impact","timeframe":"Intraday"|"1-3 Days"|"Weekly","risk":"Low"|"Medium"|"High"}}`;
-    try {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+groqApiKey.trim()},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],max_tokens:400,temperature:0.3})});
-      const d = await res.json();
-      return JSON.parse((d.choices?.[0]?.message?.content||'{}').replace(/```json|```/g,'').trim());
-    } catch(e) { console.warn('Groq failed:',e.message); return null; }
-  };
-  // Keyword fallback
-  const analyzeSentiment = (text) => { const t=text.toLowerCase(); const b=['rally','surge','gains','rise','bullish','positive','growth','strong','boost','soar','record','upgrade'],br=['fall','drop','crash','decline','loss','bearish','negative','weak','concern','fear','sell','downgrade','plunge']; let bs=0,brs=0; b.forEach(w=>{if(t.includes(w))bs++;}); br.forEach(w=>{if(t.includes(w))brs++;}); return bs>brs?'bullish':brs>bs?'bearish':'neutral'; };
-  const calculateImpact = (article) => { const t=(article.title+' '+(article.description||'')).toLowerCase(); const h=['rbi','reserve bank','repo rate','budget','fii','interest rate','inflation','gdp','crude oil','election','policy'],m=['earnings','profit','revenue','results','quarter','stocks','market']; let s=0; h.forEach(w=>{if(t.includes(w))s+=3;}); m.forEach(w=>{if(t.includes(w))s+=1;}); return s>=5?'high':s>=2?'medium':'low'; };
-  const predictAffectedIndex = (article) => { const t=(article.title+' '+(article.description||'')).toLowerCase(); if(t.includes('bank')||t.includes('hdfc')||t.includes('icici')||t.includes('sbi')) return 'Bank Nifty'; if(t.includes('tcs')||t.includes('infosys')||t.includes('wipro')||t.includes('hcl')) return 'Nifty IT'; if(t.includes('pharma')||t.includes('drug')) return 'Nifty Pharma'; if(t.includes('auto')||t.includes('maruti')) return 'Nifty Auto'; if(t.includes('metal')||t.includes('steel')||t.includes('alumin')) return 'Nifty Metal'; return 'Nifty 50'; };
 
   // Fetch live prices from Yahoo Finance (free, no API key needed)
   const fetchLivePrices = async () => {
     setIsPriceLoading(true);
     try {
-      // All symbols we ever need: watchlists + core gainers list
-      const SYMBOL_MAP = {
-        'Nifty 50':'^NSEI','Bank Nifty':'^NSEBANK','Nifty IT':'NIFTYIT.NS',
-        'Nifty Pharma':'NIFTYPHARMA.NS','Nifty Auto':'NIFTYAUTO.NS','Nifty Metal':'NIFTYMETAL.NS',
-        'Nifty FMCG':'NIFTYFMCG.NS','Nifty Realty':'NIFTYREALTY.NS','Nifty Energy':'NIFTYENERGY.NS',
-        'Nifty Midcap 50':'NIFTYMIDCAP50.NS','Nifty Smallcap 50':'NIFTYSMLCAP50.NS',
-        'Nifty Financial Services':'CNXFINANCE.NS','Nifty Next 50':'NIFTYJR.NS',
-        'Nifty 100':'NIFTY100.NS','Nifty 200':'NIFTY200.NS',
-        'Sensex':'^BSESN','BSE 100':'BSE100.BO','BSE 200':'BSE200.BO',
-        'BSE 500':'BSE500.BO','BSE Midcap':'BSEMID.BO','BSE Smallcap':'BSESMALL.BO',
-        'Reliance':'RELIANCE.NS','TCS':'TCS.NS','HDFC Bank':'HDFCBANK.NS',
-        'Infosys':'INFY.NS','ICICI Bank':'ICICIBANK.NS','Bharti Airtel':'BHARTIARTL.NS',
-        'ITC':'ITC.NS','SBI':'SBIN.NS','LT':'LT.NS','Kotak Bank':'KOTAKBANK.NS',
-        'HCL Tech':'HCLTECH.NS','Axis Bank':'AXISBANK.NS','Maruti Suzuki':'MARUTI.NS',
-        'Titan':'TITAN.NS','Bajaj Finance':'BAJFINANCE.NS','Wipro':'WIPRO.NS',
-        'Sun Pharma':'SUNPHARMA.NS','Tata Motors':'TATAMOTORS.NS','Asian Paints':'ASIANPAINT.NS',
-        'Adani Ports':'ADANIPORTS.NS','ONGC':'ONGC.NS','NTPC':'NTPC.NS',
-        'Power Grid':'POWERGRID.NS','M&M':'MM.NS','Tech Mahindra':'TECHM.NS',
-        'Tata Steel':'TATASTEEL.NS','JSW Steel':'JSWSTEEL.NS','Coal India':'COALINDIA.NS',
-        'Dr Reddy':'DRREDDY.NS','Cipla':'CIPLA.NS','Bajaj Auto':'BAJAJ-AUTO.NS',
-        'Hero MotoCorp':'HEROMOTOCO.NS','Eicher Motors':'EICHERMOT.NS',
-        'Hindalco':'HINDALCO.NS','Britannia':'BRITANNIA.NS',
+      const symbols = {
+        // NSE Indices
+        'Nifty 50': '^NSEI',
+        'Bank Nifty': '^NSEBANK',
+        'Nifty IT': 'NIFTYIT.NS',
+        'Nifty Pharma': 'NIFTYPHARMA.NS',
+        'Nifty Auto': 'NIFTYAUTO.NS',
+        'Nifty Financial Services': 'CNXFINANCE.NS',
+        'Nifty FMCG': 'NIFTYFMCG.NS',
+        'Nifty Metal': 'NIFTYMETAL.NS',
+        'Nifty Realty': 'NIFTYREALTY.NS',
+        'Nifty Energy': 'NIFTYENERGY.NS',
+        'Nifty Infrastructure': 'NIFTYINFRA.NS',
+        'Nifty Media': 'NIFTYMEDIA.NS',
+        'Nifty PSU Bank': 'NIFTYPSUBANK.NS',
+        'Nifty Private Bank': 'NIFTY_PVT_BANK.NS',
+        'Nifty Midcap 50': 'NIFTYMIDCAP50.NS',
+        'Nifty Smallcap 50': 'NIFTYSMLCAP50.NS',
+        'Nifty Midcap 100': 'NIFTYMIDCAP100.NS',
+        'Nifty Next 50': 'NIFTYJR.NS',
+        'Nifty 100': 'NIFTY100.NS',
+        'Nifty 200': 'NIFTY200.NS',
+        'Nifty 500': 'NIFTY500.NS',
+        
+        // BSE Indices
+        'Sensex': '^BSESN',
+        'BSE 100': 'BSE100.BO',
+        'BSE 200': 'BSE200.BO',
+        'BSE 500': 'BSE500.BO',
+        'BSE Midcap': 'BSEMID.BO',
+        'BSE Smallcap': 'BSESMALL.BO',
+        
+        // Top FNO Stocks
+        'Reliance': 'RELIANCE.NS',
+        'TCS': 'TCS.NS',
+        'HDFC Bank': 'HDFCBANK.NS',
+        'Infosys': 'INFY.NS',
+        'ICICI Bank': 'ICICIBANK.NS',
+        'Bharti Airtel': 'BHARTIARTL.NS',
+        'ITC': 'ITC.NS',
+        'SBI': 'SBIN.NS',
+        'LT': 'LT.NS',
+        'Kotak Bank': 'KOTAKBANK.NS',
+        'HCL Tech': 'HCLTECH.NS',
+        'Axis Bank': 'AXISBANK.NS',
+        'Asian Paints': 'ASIANPAINT.NS',
+        'Maruti Suzuki': 'MARUTI.NS',
+        'Titan': 'TITAN.NS',
+        'Bajaj Finance': 'BAJFINANCE.NS',
+        'Wipro': 'WIPRO.NS',
+        'Ultra Cement': 'ULTRACEMCO.NS',
+        'Sun Pharma': 'SUNPHARMA.NS',
+        'Nestle': 'NESTLEIND.NS',
+        'M&M': 'M&M.NS',
+        'Tech Mahindra': 'TECHM.NS',
+        'Tata Motors': 'TATAMOTORS.NS',
+        'Power Grid': 'POWERGRID.NS',
+        'Adani Ports': 'ADANIPORTS.NS',
+        'NTPC': 'NTPC.NS',
+        'Tata Steel': 'TATASTEEL.NS',
+        'JSW Steel': 'JSWSTEEL.NS',
+        'Coal India': 'COALINDIA.NS',
+        'ONGC': 'ONGC.NS',
+        'IOC': 'IOC.NS',
+        'Hindalco': 'HINDALCO.NS',
+        'Grasim': 'GRASIM.NS',
+        'UPL': 'UPL.NS',
+        'Britannia': 'BRITANNIA.NS',
+        'Div Lab': 'DIVISLAB.NS',
+        'Dr Reddy': 'DRREDDY.NS',
+        'Cipla': 'CIPLA.NS',
+        'Eicher Motors': 'EICHERMOT.NS',
+        'Hero MotoCorp': 'HEROMOTOCO.NS',
+        'Bajaj Auto': 'BAJAJ-AUTO.NS',
       };
-      // Collect all needed names (watchlists + core gainers)
-      const CORE = ['Nifty 50','Bank Nifty','Reliance','TCS','HDFC Bank','Infosys',
-        'ICICI Bank','SBI','Axis Bank','Bajaj Finance','Maruti Suzuki','Tata Motors',
-        'Sun Pharma','HCL Tech','Wipro','ITC','LT','Titan','Kotak Bank','Adani Ports',
-        'NTPC','Bharti Airtel','Bharti Airtel'];
-      const allNames = [...new Set([...watchNSE,...watchBSE,...watchStocks,...CORE])];
-      // Build symbol list string for batch endpoint
-      const symbolsParam = allNames.map(n=>SYMBOL_MAP[n]).filter(Boolean).join(',');
-      if (!symbolsParam) return;
 
-      const res = await fetch(`${BACKEND_URL}/api/prices?symbols=${encodeURIComponent(symbolsParam)}`);
-      if (!res.ok) throw new Error(`Prices endpoint ${res.status}`);
-      const raw = await res.json(); // { 'RELIANCE.NS': {price, change, prevClose}, ... }
+      const results = {};
+      
+      // Fetch only selected indices to avoid rate limits
+      const toFetch = selectedIndices.length > 0 ? selectedIndices : ['Nifty 50', 'Bank Nifty', 'Nifty IT'];
+      
+      await Promise.all(
+        toFetch.map(async (name) => {
+          const symbol = symbols[name];
+          if (!symbol) return;
+          
+          try {
+            const res = await fetch(CORS_PROXY + `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`
+            );
+            const data = await res.json();
+            const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+            const prevClose = data?.chart?.result?.[0]?.meta?.previousClose;
+            const change = prevClose ? (((price - prevClose) / prevClose) * 100).toFixed(2) : 0;
 
-      // Build reverse map: yahoo symbol → display name
-      const reverseMap = {};
-      allNames.forEach(n => { if (SYMBOL_MAP[n]) reverseMap[SYMBOL_MAP[n]] = n; });
+            if (price) {
+              results[name] = { value: Math.round(price), change: parseFloat(change) };
+            }
+          } catch (e) {
+            console.log(`Could not fetch ${name}`);
+          }
+        })
+      );
 
-      const priceMap = {}, changeMap = {}, prevCloseMap = {};
-      Object.entries(raw).forEach(([sym, d]) => {
-        const name = reverseMap[sym];
-        if (!name || !d?.price) return;
-        priceMap[name]    = d.price;
-        changeMap[name]   = d.change != null ? d.change : 0;
-        if (d.prevClose)  prevCloseMap[name] = d.prevClose;
-      });
-
-      if (Object.keys(priceMap).length > 0) {
-        setLivePrices(prev   => ({ ...prev,   ...priceMap    }));
-        setLiveChanges(prev  => ({ ...prev,   ...changeMap   }));
-        setLivePrevClose(prev=> ({ ...prev,   ...prevCloseMap}));
-        // Update market data (Nifty / BankNifty)
-        if (priceMap['Nifty 50'] || priceMap['Bank Nifty']) {
-          setMarketData(prev => ({
-            nifty    : priceMap['Nifty 50']   ? { value: priceMap['Nifty 50'],   change: changeMap['Nifty 50']   || prev.nifty.change,    vix: prev.nifty.vix    } : prev.nifty,
-            bankNifty: priceMap['Bank Nifty'] ? { value: priceMap['Bank Nifty'], change: changeMap['Bank Nifty'] || prev.bankNifty.change, vix: prev.bankNifty.vix} : prev.bankNifty,
-            vix      : prev.vix,
-          }));
-        }
+      // Update market data display
+      if (results['Nifty 50']) {
+        setMarketData({
+          nifty: results['Nifty 50'],
+          bankNifty: results['Bank Nifty'] || marketData.bankNifty,
+          vix: marketData.vix
+        });
       }
-    } catch (err) {
-      console.error('fetchLivePrices error:', err.message);
+
+      // Update live prices
+      const priceMap = {};
+      Object.entries(results).forEach(([name, data]) => {
+        priceMap[name] = data.value;
+      });
+      if (Object.keys(priceMap).length > 0) {
+        setLivePrices(prev => ({ ...prev, ...priceMap }));
+      }
+
+    } catch (error) {
+      console.error('Error fetching live prices:', error);
     } finally {
       setIsPriceLoading(false);
     }
   };
 
-    // Fetch Global Indices (Real-time from Yahoo Finance)
+  // Fetch Global Indices (Real-time from Yahoo Finance)
   const fetchGlobalIndices = async () => {
     try {
       const symbols = {
@@ -1356,7 +569,8 @@ Respond ONLY with valid JSON:
       await Promise.all(
         Object.entries(symbols).map(async ([name, symbol]) => {
           try {
-            const res = await fetch(`${YAHOO}/chart/${symbol}?interval=1m&range=1d`);
+            const res = await fetch(CORS_PROXY + `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1m&range=1d`
+            );
             const data = await res.json();
             const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
             const prevClose = data?.chart?.result?.[0]?.meta?.previousClose || data?.chart?.result?.[0]?.meta?.chartPreviousClose;
@@ -1383,120 +597,113 @@ Respond ONLY with valid JSON:
     }
   };
 
-  const UNDERLYING_YAHOO = { 'NIFTY':'^NSEI','BANKNIFTY':'^NSEBANK','FINNIFTY':'NIFTY_FIN_SERVICE.NS','MIDCPNIFTY':'^NSEMDCP50' };
-  const UNDERLYING_NSE   = { 'NIFTY':'NIFTY','BANKNIFTY':'BANKNIFTY','FINNIFTY':'FINNIFTY','MIDCPNIFTY':'MIDCPNIFTY' };
-  const BASE_PRICES = { 'NIFTY':25500,'BANKNIFTY':54000,'FINNIFTY':23500,'MIDCPNIFTY':12800 };
-  const STRIKE_GAP  = { 'NIFTY':50,'BANKNIFTY':100,'FINNIFTY':50,'MIDCPNIFTY':25 };
-
-  const buildSimulatedChain = (underlying, spot) => {
-    const gap = STRIKE_GAP[underlying]||50;
-    const atm = Math.round(spot/gap)*gap;
-    const strikes = Array.from({length:21},(_,i)=>atm+(i-10)*gap);
-    return strikes.map(strike => {
-      const d = Math.abs(strike-spot);
-      const itmCE = strike<spot, itmPE = strike>spot;
-      const ceIV = 13+(d/spot)*120+(Math.random()*3-1.5);
-      const peIV = 13+(d/spot)*120+(Math.random()*3-1.5);
-      const cePrem = Math.max(0.5, itmCE?(spot-strike)+(strike*ceIV/100*Math.sqrt(7/365)):(strike*ceIV/100*Math.sqrt(7/365)));
-      const pePrem = Math.max(0.5, itmPE?(strike-spot)+(strike*peIV/100*Math.sqrt(7/365)):(strike*peIV/100*Math.sqrt(7/365)));
-      const oiMul = Math.max(0.15,1-(d/(spot*0.08)));
-      const ceOI=Math.floor((80000+Math.random()*150000)*oiMul);
-      const peOI=Math.floor((80000+Math.random()*150000)*oiMul);
-      return {strike,atmDistance:d,
-        ce:{premium:cePrem.toFixed(2),iv:ceIV.toFixed(1),oi:ceOI,volume:Math.floor(ceOI*0.08),bid:(cePrem*0.98).toFixed(2),ask:(cePrem*1.02).toFixed(2),ltp:cePrem.toFixed(2),change:(Math.random()*16-8).toFixed(2),delta:itmCE?0.65+Math.random()*0.25:0.1+Math.random()*0.35,gamma:0.001+Math.random()*0.009,theta:-(0.4+Math.random()*1.8),vega:4+Math.random()*9},
-        pe:{premium:pePrem.toFixed(2),iv:peIV.toFixed(1),oi:peOI,volume:Math.floor(peOI*0.08),bid:(pePrem*0.98).toFixed(2),ask:(pePrem*1.02).toFixed(2),ltp:pePrem.toFixed(2),change:(Math.random()*16-8).toFixed(2),delta:itmPE?-(0.65+Math.random()*0.25):-(0.1+Math.random()*0.35),gamma:0.001+Math.random()*0.009,theta:-(0.4+Math.random()*1.8),vega:4+Math.random()*9}};
-    });
-  };
-
-  const generateLiveOptionChain = async (underlying = 'NIFTY') => {
+  // Generate Live Option Chain (Realistic data based on current price)
+  const generateLiveOptionChain = (underlying = 'NIFTY') => {
     setIsLoadingChain(true);
-    let usedLive = false;
-    try {
-      // Try NSE India first (most accurate), fallback to Yahoo
-      let json, spot, usedNSE = false;
-      try {
-        const nseRes = await fetch(`${BACKEND_URL}/api/option-chain?symbol=${UNDERLYING_NSE[underlying]||'NIFTY'}`, {headers:{'Accept':'application/json'}});
-        if (nseRes.ok) {
-          const nseJson = await nseRes.json();
-          if (nseJson?.records?.data?.length > 0) {
-            // Parse NSE format
-            spot = nseJson.records.underlyingValue;
-            const expiries = [...new Set(nseJson.records.data.map(d=>d.expiryDate))].slice(0,6);
-            if (expiries.length>0) setNseExpiryDates(expiries);
-            const map = {};
-            nseJson.records.data.forEach(row => {
-              const s = row.strikePrice;
-              if (!map[s]) map[s] = {strike:s, atmDistance:Math.abs(s-spot)};
-              if (row.CE) map[s].ce = {premium:(row.CE.lastPrice||0).toFixed(2),iv:(row.CE.impliedVolatility||0).toFixed(1),oi:row.CE.openInterest||0,volume:row.CE.totalTradedVolume||0,bid:(row.CE.bidprice||0).toFixed(2),ask:(row.CE.askPrice||0).toFixed(2),ltp:(row.CE.lastPrice||0).toFixed(2),change:(row.CE.pChange||0).toFixed(2),delta:0,gamma:0,theta:0,vega:0};
-              if (row.PE) map[s].pe = {premium:(row.PE.lastPrice||0).toFixed(2),iv:(row.PE.impliedVolatility||0).toFixed(1),oi:row.PE.openInterest||0,volume:row.PE.totalTradedVolume||0,bid:(row.PE.bidprice||0).toFixed(2),ask:(row.PE.askPrice||0).toFixed(2),ltp:(row.PE.lastPrice||0).toFixed(2),change:(row.PE.pChange||0).toFixed(2),delta:0,gamma:0,theta:0,vega:0};
-            });
-            const chain = Object.values(map).filter(r=>r.ce&&r.pe).sort((a,b)=>a.strike-b.strike);
-            if (chain.length > 0) {
-              setLiveOptionChain(chain);
-              setChartData({oi:chain.map(r=>({strike:r.strike,ce:r.ce.oi/1000,pe:r.pe.oi/1000})),iv:chain.map(r=>({strike:r.strike,ce:parseFloat(r.ce.iv),pe:parseFloat(r.pe.iv)})),volume:chain.map(r=>({strike:r.strike,ce:r.ce.volume/1000,pe:r.pe.volume/1000})),priceHistory:[]});
-              setMarketData(prev=>({...prev,nifty:underlying==='NIFTY'?{...prev.nifty,value:Math.round(spot)}:prev.nifty,bankNifty:underlying==='BANKNIFTY'?{...prev.bankNifty,value:Math.round(spot)}:prev.bankNifty}));
-              setIsLoadingChain(false); return; // SUCCESS — NSE data loaded
-            }
-          }
-        }
-      } catch(nseErr) { console.warn('NSE direct failed, trying Yahoo:', nseErr.message); }
-
-      // Yahoo Finance fallback
-      const sym = UNDERLYING_YAHOO[underlying] || '^NSEI';
-      const yahooRes = await fetch(`${YAHOO}/options/${encodeURIComponent(sym)}`);
-      if (!yahooRes.ok) throw new Error(`HTTP ${yahooRes.status}`);
-      const yahooJson = await yahooRes.json();
-      const result = yahooJson?.optionChain?.result?.[0];
-      if (!result) throw new Error('No result');
-      const yahooSpot = result.quote?.regularMarketPrice || BASE_PRICES[underlying];
-      const expiries = (result.expirationDates||[]).map(ts => new Date(ts*1000).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}));
-      if (expiries.length>0) setNseExpiryDates(expiries);
-      const opts = result.options?.[0]; if (!opts) throw new Error('No options');
-      const ymap = {};
-      (opts.calls||[]).forEach(c => { const s=c.strike; if(!ymap[s]) ymap[s]={strike:s,atmDistance:Math.abs(s-yahooSpot)}; ymap[s].ce={premium:(c.lastPrice||0).toFixed(2),iv:((c.impliedVolatility||0)*100).toFixed(1),oi:c.openInterest||0,volume:c.volume||0,bid:(c.bid||0).toFixed(2),ask:(c.ask||0).toFixed(2),ltp:(c.lastPrice||0).toFixed(2),change:(c.percentChange||0).toFixed(2),delta:0,gamma:0,theta:0,vega:0}; });
-      (opts.puts||[]).forEach(p  => { const s=p.strike; if(!ymap[s]) ymap[s]={strike:s,atmDistance:Math.abs(s-yahooSpot)}; ymap[s].pe={premium:(p.lastPrice||0).toFixed(2),iv:((p.impliedVolatility||0)*100).toFixed(1),oi:p.openInterest||0,volume:p.volume||0,bid:(p.bid||0).toFixed(2),ask:(p.ask||0).toFixed(2),ltp:(p.lastPrice||0).toFixed(2),change:(p.percentChange||0).toFixed(2),delta:0,gamma:0,theta:0,vega:0}; });
-      const chain = Object.values(ymap).filter(r=>r.ce&&r.pe).sort((a,b)=>a.strike-b.strike);
-      if (!chain.length) throw new Error('Empty chain from Yahoo');
-      usedLive = true;
-      setLiveOptionChain(chain);
-      setChartData({ oi:chain.map(r=>({strike:r.strike,ce:r.ce.oi/1000,pe:r.pe.oi/1000})), iv:chain.map(r=>({strike:r.strike,ce:parseFloat(r.ce.iv),pe:parseFloat(r.pe.iv)})), volume:chain.map(r=>({strike:r.strike,ce:r.ce.volume/1000,pe:r.pe.volume/1000})), priceHistory:[] });
-      setMarketData(prev => ({ ...prev, nifty:underlying==='NIFTY'?{...prev.nifty,value:Math.round(yahooSpot)}:prev.nifty, bankNifty:underlying==='BANKNIFTY'?{...prev.bankNifty,value:Math.round(yahooSpot)}:prev.bankNifty }));
-    } catch(e) {
-      console.warn('Yahoo option chain failed, using simulation:', e.message);
-      const spot = marketData.nifty.value > 24000 ? marketData.nifty.value : BASE_PRICES[underlying];
-      const chain = buildSimulatedChain(underlying, spot);
-      setLiveOptionChain(chain);
-      setChartData({ oi:chain.map(r=>({strike:r.strike,ce:r.ce.oi/1000,pe:r.pe.oi/1000})), iv:chain.map(r=>({strike:r.strike,ce:parseFloat(r.ce.iv),pe:parseFloat(r.pe.iv)})), volume:chain.map(r=>({strike:r.strike,ce:r.ce.volume/1000,pe:r.pe.volume/1000})), priceHistory:[] });
-    } finally { setIsLoadingChain(false); }
+    
+    // Get current price
+    const currentPrice = underlying === 'NIFTY' ? marketData.nifty.value : 
+                        underlying === 'BANKNIFTY' ? marketData.bankNifty.value : 23450;
+    
+    // Generate strikes around ATM
+    const atmStrike = Math.round(currentPrice / 50) * 50;
+    const strikes = [];
+    for (let i = -10; i <= 10; i++) {
+      strikes.push(atmStrike + (i * (underlying === 'BANKNIFTY' ? 100 : 50)));
+    }
+    
+    // Generate realistic option chain data
+    const chain = strikes.map(strike => {
+      const distanceFromATM = Math.abs(strike - currentPrice);
+      const isITM_CE = strike < currentPrice;
+      const isITM_PE = strike > currentPrice;
+      
+      // Calculate realistic premiums
+      const ceIV = 15 + (distanceFromATM / currentPrice) * 100 + (Math.random() * 5 - 2.5);
+      const peIV = 15 + (distanceFromATM / currentPrice) * 100 + (Math.random() * 5 - 2.5);
+      
+      const cePremium = isITM_CE 
+        ? (currentPrice - strike) + (strike * ceIV / 100 * Math.sqrt(7/365))
+        : (strike * ceIV / 100 * Math.sqrt(7/365));
+      
+      const pePremium = isITM_PE
+        ? (strike - currentPrice) + (strike * peIV / 100 * Math.sqrt(7/365))
+        : (strike * peIV / 100 * Math.sqrt(7/365));
+      
+      // Generate realistic OI (higher near ATM)
+      const oiMultiplier = Math.max(0.2, 1 - (distanceFromATM / (currentPrice * 0.1)));
+      const ceOI = Math.floor((50000 + Math.random() * 100000) * oiMultiplier);
+      const peOI = Math.floor((50000 + Math.random() * 100000) * oiMultiplier);
+      
+      // Volume (related to OI)
+      const ceVolume = Math.floor(ceOI * (0.05 + Math.random() * 0.15));
+      const peVolume = Math.floor(peOI * (0.05 + Math.random() * 0.15));
+      
+      return {
+        strike,
+        ce: {
+          premium: Math.max(0.5, cePremium).toFixed(2),
+          iv: ceIV.toFixed(1),
+          oi: ceOI,
+          volume: ceVolume,
+          bid: (cePremium * 0.98).toFixed(2),
+          ask: (cePremium * 1.02).toFixed(2),
+          ltp: cePremium.toFixed(2),
+          change: (Math.random() * 20 - 10).toFixed(2),
+          delta: isITM_CE ? 0.7 + Math.random() * 0.2 : 0.1 + Math.random() * 0.3,
+          gamma: 0.001 + Math.random() * 0.01,
+          theta: -(0.5 + Math.random() * 2),
+          vega: 5 + Math.random() * 10
+        },
+        pe: {
+          premium: Math.max(0.5, pePremium).toFixed(2),
+          iv: peIV.toFixed(1),
+          oi: peOI,
+          volume: peVolume,
+          bid: (pePremium * 0.98).toFixed(2),
+          ask: (pePremium * 1.02).toFixed(2),
+          ltp: pePremium.toFixed(2),
+          change: (Math.random() * 20 - 10).toFixed(2),
+          delta: isITM_PE ? -(0.7 + Math.random() * 0.2) : -(0.1 + Math.random() * 0.3),
+          gamma: 0.001 + Math.random() * 0.01,
+          theta: -(0.5 + Math.random() * 2),
+          vega: 5 + Math.random() * 10
+        },
+        atmDistance: distanceFromATM
+      };
+    });
+    
+    setLiveOptionChain(chain);
+    
+    // Generate chart data from option chain
+    setChartData({
+      oi: chain.map(row => ({ strike: row.strike, ce: row.ce.oi / 1000, pe: row.pe.oi / 1000 })),
+      iv: chain.map(row => ({ strike: row.strike, ce: parseFloat(row.ce.iv), pe: parseFloat(row.pe.iv) })),
+      volume: chain.map(row => ({ strike: row.strike, ce: row.ce.volume / 1000, pe: row.pe.volume / 1000 })),
+      priceHistory: [] // Would come from historical data API
+    });
+    
+    setIsLoadingChain(false);
   };
 
   // Fetch General Business News
-  // Fetch F&O Ban List from NSE
-  const fetchBanList = async () => {
-    setBanLoading(true);
-    try {
-      const r = await fetch(`${BACKEND_URL}/api/nse/fno-ban`);
-      if (r.ok) { const d = await r.json(); setBanList(d.securities||[]); }
-    } catch(e) { console.log('Ban list fetch failed'); }
-    finally { setBanLoading(false); setBanFetched(true); }
-  };
-
   const fetchBusinessNews = async () => {
     setIsLoadingBusinessNews(true);
     try {
-      // Use free RSS feeds — no API key needed
-      const RSS_PROXY = `${BACKEND_URL}/api/rss-news`;
-      const response = await fetch(RSS_PROXY);
+      const query = 'business OR economy OR markets OR companies OR earnings OR IPO';
+      const response = await fetch(
+        `https://newsapi.org/v2/everything?q=${query}&language=en&sortBy=publishedAt&pageSize=20&apiKey=${NEWS_API_KEY}`
+      );
       const data = await response.json();
       if (data.articles) {
         setBusinessNews(data.articles.map(article => ({
           id: article.url,
           title: article.title,
           description: article.description,
-          source: article.source,
+          source: article.source.name,
           publishedAt: new Date(article.publishedAt),
           url: article.url,
-          image: null,
+          image: article.urlToImage
         })));
       }
     } catch (error) {
@@ -1506,25 +713,42 @@ Respond ONLY with valid JSON:
     }
   };
 
-  const CHART_YAHOO_MAP = {'NIFTY':'^NSEI','BANKNIFTY':'^NSEBANK','FINNIFTY':'NIFTY_FIN_SERVICE.NS','MIDCPNIFTY':'^NSEMDCP50','SENSEX':'^BSESN','RELIANCE':'RELIANCE.NS','TCS':'TCS.NS','HDFCBANK':'HDFCBANK.NS','INFY':'INFY.NS','ICICIBANK':'ICICIBANK.NS','SBIN':'SBIN.NS','BHARTIARTL':'BHARTIARTL.NS','ITC':'ITC.NS','LT':'LT.NS','KOTAKBANK':'KOTAKBANK.NS','AXISBANK':'AXISBANK.NS','HCLTECH':'HCLTECH.NS','WIPRO':'WIPRO.NS','TATAMOTORS':'TATAMOTORS.NS','TATASTEEL':'TATASTEEL.NS','MARUTI':'MARUTI.NS','BAJFINANCE':'BAJFINANCE.NS','SUNPHARMA':'SUNPHARMA.NS','ADANIENT':'ADANIENT.NS','NESTLEIND':'NESTLEIND.NS','ULTRACEMCO':'ULTRACEMCO.NS','POWERGRID':'POWERGRID.NS','NTPC':'NTPC.NS','COALINDIA':'COALINDIA.NS','ONGC':'ONGC.NS','HINDALCO':'HINDALCO.NS','JSWSTEEL':'JSWSTEEL.NS','MM':'M&M.NS','TITAN':'TITAN.NS','BAJAJ-AUTO':'BAJAJ-AUTO.NS','HEROMOTOCO':'HEROMOTOCO.NS','EICHERMOT':'EICHERMOT.NS','DRREDDY':'DRREDDY.NS','CIPLA':'CIPLA.NS','BRITANNIA':'BRITANNIA.NS','GRASIM':'GRASIM.NS','ASIANPAINT':'ASIANPAINT.NS','TECHM':'TECHM.NS','INDUSINDBK':'INDUSINDBK.NS','SBILIFE':'SBILIFE.NS','HDFCLIFE':'HDFCLIFE.NS','ADANIPORTS':'ADANIPORTS.NS','BAJAJFINSV':'BAJAJFINSV.NS','DIVISLAB':'DIVISLAB.NS','UPL':'UPL.NS'};
-  const TF_MAP = {'1m':{interval:'1m',range:'1d'},'3m':{interval:'5m',range:'1d'},'5m':{interval:'5m',range:'5d'},'15m':{interval:'15m',range:'5d'},'30m':{interval:'30m',range:'1mo'},'1H':{interval:'60m',range:'1mo'},'4H':{interval:'60m',range:'3mo'},'1D':{interval:'1d',range:'1y'},'1W':{interval:'1wk',range:'5y'},'1M':{interval:'1mo',range:'max'},'3M':{interval:'1d',range:'6mo'},'6M':{interval:'1d',range:'1y'},'1Y':{interval:'1d',range:'2y'}};
-  const generateCandlestickData = async (symbol, timeframe) => {
-    const ticker = (CHART_YAHOO_MAP[symbol]||symbol+'.NS').trim();
-    const {interval,range} = TF_MAP[timeframe]||{interval:'5m',range:'5d'};
-    try {
-      const res = await fetch(`${YAHOO}/chart/${encodeURIComponent(ticker)}?interval=${interval}&range=${range}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const result = json?.chart?.result?.[0]; if (!result) throw new Error('No result');
-      const ts=result.timestamp, q=result.indicators?.quote?.[0]; if (!ts||!q) throw new Error('No OHLCV');
-      const candles = ts.map((t,i)=>({time:t*1000,open:(q.open[i]??0).toFixed(2),high:(q.high[i]??0).toFixed(2),low:(q.low[i]??0).toFixed(2),close:(q.close[i]??0).toFixed(2),volume:q.volume[i]??0})).filter(c=>parseFloat(c.close)>0);
-      if (!candles.length) throw new Error('Empty');
-      setCandlestickData(candles); setLastChartUpdate(new Date());
-    } catch(e) {
-      console.warn('Chart failed:',e.message);
-      const base=marketData.nifty.value||23450; let p=base*0.97; const v=base*0.002;
-      setCandlestickData(Array.from({length:60},(_,i)=>{const chg=(Math.random()-0.48)*v,o=p,c=p+chg;p=c;return{time:Date.now()-(60-i)*300000,open:o.toFixed(2),high:(Math.max(o,c)+Math.random()*v*0.4).toFixed(2),low:(Math.min(o,c)-Math.random()*v*0.4).toFixed(2),close:c.toFixed(2),volume:Math.floor(300000+Math.random()*1e6)};}));
+  // Generate Candlestick Data (realistic OHLCV data)
+  const generateCandlestickData = (symbol, timeframe) => {
+    const basePrice = symbol === 'NIFTY' ? 23450 : 
+                     symbol === 'BANKNIFTY' ? 49200 : 2850;
+    
+    const periods = timeframe === '1D' ? 78 : // 1 day = 78 candles (5min)
+                   timeframe === '5D' ? 390 : // 5 days
+                   timeframe === '1M' ? 420 : // 1 month (daily)
+                   timeframe === '3M' ? 63 : 
+                   timeframe === '6M' ? 126 : 252;
+    
+    const candles = [];
+    let price = basePrice;
+    const volatility = basePrice * 0.002; // 0.2% volatility per period
+    
+    for (let i = 0; i < periods; i++) {
+      const change = (Math.random() - 0.48) * volatility; // Slight upward bias
+      const open = price;
+      const close = price + change;
+      const high = Math.max(open, close) + Math.random() * volatility * 0.5;
+      const low = Math.min(open, close) - Math.random() * volatility * 0.5;
+      const volume = Math.floor(1000000 + Math.random() * 5000000);
+      
+      candles.push({
+        time: Date.now() - ((periods - i) * (timeframe === '1D' ? 300000 : 86400000)), // 5min or daily
+        open: open.toFixed(2),
+        high: high.toFixed(2),
+        low: low.toFixed(2),
+        close: close.toFixed(2),
+        volume
+      });
+      
+      price = close;
     }
+    
+    setCandlestickData(candles);
   };
 
   // Calculate Technical Indicators
@@ -1592,52 +816,85 @@ Respond ONLY with valid JSON:
     setAlerts(prev => [...prev, ...newAlerts]);
   };
 
+  // Dynamic key levels based on live price
   const calculateKeyLevels = (indexName) => {
-    const p = livePrices[indexName]||livePrices['Nifty 50']||23450;
-    const r = (n)=>Math.round(n/50)*50;
-    return {current:p,support:[r(p*0.985),r(p*0.970),r(p*0.955)],resistance:[r(p*1.015),r(p*1.030),r(p*1.045)]};
+    const currentPrice = livePrices[indexName] || livePrices['Nifty 50'] || 23450;
+
+    // Calculate dynamic support/resistance as % away from current price
+    const support1 = Math.round(currentPrice * 0.985); // 1.5% below
+    const support2 = Math.round(currentPrice * 0.970); // 3% below
+    const support3 = Math.round(currentPrice * 0.955); // 4.5% below
+    const resistance1 = Math.round(currentPrice * 1.015); // 1.5% above
+    const resistance2 = Math.round(currentPrice * 1.030); // 3% above
+    const resistance3 = Math.round(currentPrice * 1.045); // 4.5% above
+
+    // Round to nearest 50 for cleaner levels
+    const roundTo50 = (n) => Math.round(n / 50) * 50;
+
+    return {
+      current: currentPrice,
+      support: [roundTo50(support1), roundTo50(support2), roundTo50(support3)],
+      resistance: [roundTo50(resistance1), roundTo50(resistance2), roundTo50(resistance3)]
+    };
+  };
+
+  const generateTradingStrategy = (sentiment, impact, indexName) => {
+    const levels = calculateKeyLevels(indexName);
+    if (sentiment === 'bearish' && (impact === 'high' || impact === 'medium')) {
+      return {
+        strategy: 'Bear Put Spread',
+        index: indexName,
+        strikes: { buy: Math.round(levels.current), sell: Math.round(levels.support[0]) },
+        reasoning: `${impact.toUpperCase()} impact bearish news suggests downward pressure. Target support at ${levels.support[0]}.`,
+        risk: 'Low to Medium',
+        timeframe: '1-3 days',
+        probability: impact === 'high' ? '72%' : '58%'
+      };
+    }
+    if (sentiment === 'bullish' && (impact === 'high' || impact === 'medium')) {
+      return {
+        strategy: 'Bull Call Spread',
+        index: indexName,
+        strikes: { buy: Math.round(levels.current), sell: Math.round(levels.resistance[0]) },
+        reasoning: `${impact.toUpperCase()} impact bullish news suggests upward momentum. Target resistance at ${levels.resistance[0]}.`,
+        risk: 'Low to Medium',
+        timeframe: '1-3 days',
+        probability: impact === 'high' ? '68%' : '55%'
+      };
+    }
+    return { strategy: 'Wait and Watch', reasoning: 'Market direction unclear. Wait for confirmation.', risk: 'None', timeframe: 'N/A', probability: 'N/A' };
   };
 
   const fetchIntelligentNews = async () => {
     setIsLoadingNews(true);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/rss-news`);
+      const query = 'nifty OR sensex OR "bank nifty" OR "india market" OR RBI';
+      const response = await fetch(`https://newsapi.org/v2/everything?q=${query}&language=en&sortBy=publishedAt&pageSize=10&apiKey=${NEWS_API_KEY}`);
       const data = await response.json();
-      if (!data.articles) throw new Error('No articles');
-      const analyzed = await Promise.all(data.articles.map(async (article) => {
-        let analysis;
-        if (groqApiKey) {
-          const ai = await analyzeNewsWithGroq(article);
-          if (ai) {
-            const kl = calculateKeyLevels(ai.affectedIndex);
-            analysis = {sentiment:ai.sentiment,impact:ai.impact,impactReason:ai.impactReason,affectedIndex:ai.affectedIndex,affectedStocks:ai.affectedStocks||[],keyInsight:ai.keyInsight,keyLevels:kl,tradingIdea:{strategy:ai.tradingStrategy?.name,name:ai.tradingStrategy?.name,reasoning:ai.tradingStrategy?.reasoning,timeframe:ai.tradingStrategy?.timeframe,risk:ai.tradingStrategy?.risk,strikes:null,probability:null,aiPowered:true}};
-            if (notifyHighImpact && ai.impact==='high' && tgChatId) {
-              const em = ai.sentiment==='bullish'?'🟢':ai.sentiment==='bearish'?'🔴':'⚪';
-              sendTelegramMessage(`${em} <b>HIGH IMPACT — ${ai.affectedIndex}</b>
-
-<b>${article.title}</b>
-
-📊 <b>${ai.sentiment.toUpperCase()}</b>
-💡 ${ai.keyInsight}
-📈 Strategy: <b>${ai.tradingStrategy?.name}</b>
-⏱ ${ai.tradingStrategy?.timeframe}
-
-🔗 <a href="${article.url}">Read more</a>`, article.url);
-            }
-            return {id:article.url,title:article.title,description:article.description,source:article.source.name,publishedAt:new Date(article.publishedAt),url:article.url,analysis};
-          }
-        }
-        const sentiment=analyzeSentiment(article.title+' '+(article.description||''));
-        const impact=calculateImpact(article);
-        const affectedIndex=predictAffectedIndex(article);
-        const keyLevels=calculateKeyLevels(affectedIndex);
-        const lv=keyLevels;
-        const tradingIdea=sentiment==='bearish'&&impact!=='low'?{strategy:'Bear Put Spread',name:'Bear Put Spread',reasoning:`${impact} impact bearish news suggests downward pressure.`,timeframe:'1-3 Days',risk:'Medium',strikes:{buy:Math.round(lv.current),sell:Math.round(lv.support[0])},probability:'—',aiPowered:false}:sentiment==='bullish'&&impact!=='low'?{strategy:'Bull Call Spread',name:'Bull Call Spread',reasoning:`${impact} impact bullish news suggests upward momentum.`,timeframe:'1-3 Days',risk:'Medium',strikes:{buy:Math.round(lv.current),sell:Math.round(lv.resistance[0])},probability:'—',aiPowered:false}:{strategy:'Wait and Watch',name:'Wait and Watch',reasoning:'Direction unclear.',timeframe:'N/A',risk:'None',strikes:null,probability:'—',aiPowered:false};
-        analysis={sentiment,impact,impactReason:'',affectedIndex,affectedStocks:[],keyInsight:'',keyLevels,tradingIdea};
-        return {id:article.url,title:article.title,description:article.description,source:article.source.name,publishedAt:new Date(article.publishedAt),url:article.url,analysis};
-      }));
-      setIntelligentNews(analyzed);
-    } catch(error) { console.error('News error:',error); } finally { setIsLoadingNews(false); }
+      if (data.articles) {
+        const analyzed = data.articles.map(article => {
+          const sentiment = analyzeSentiment(article.title + ' ' + (article.description || ''));
+          const impact = calculateImpact(article);
+          const affectedIndex = predictAffectedIndex(article);
+          const keyLevels = calculateKeyLevels(affectedIndex);
+          const tradingIdea = generateTradingStrategy(sentiment, impact, affectedIndex);
+          return {
+            id: article.url,
+            title: article.title,
+            description: article.description,
+            source: article.source.name,
+            publishedAt: new Date(article.publishedAt),
+            url: article.url,
+            analysis: { sentiment, impact, affectedIndex, keyLevels, tradingIdea }
+          };
+        });
+        setIntelligentNews(analyzed);
+      }
+    } catch (error) {
+      console.error('Error fetching news:', error);
+    } finally {
+      setIsLoadingNews(false);
+    }
   };
 
   const formatNewsTime = (timestamp) => {
@@ -1700,21 +957,7 @@ Respond ONLY with valid JSON:
 
   // Auto-refresh news and prices - LIVE MODE
   useEffect(() => {
-    // Register PWA service worker
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/service-worker.js').catch(() => {});
-    }
-    // Re-subscribe to backend alert engine on every load
-    const chatId = localStorage.getItem('db_tg_chatid');
-    if (chatId) {
-      fetch(`${BACKEND_URL}/api/alert-subscribe`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId }),
-      }).catch(() => {});
-    }
     fetchLivePrices();
-    fetchBanList();
     fetchIntelligentNews();
     fetchGlobalIndices();
     generateLiveOptionChain(selectedUnderlying);
@@ -1722,23 +965,38 @@ Respond ONLY with valid JSON:
     generateCandlestickData(selectedChartSymbol, chartTimeframe);
     
     if (isLiveMode) {
-      // Ticker: Yahoo Finance every 15 seconds
-      const globalInterval = setInterval(fetchGlobalIndices, 15000);
-
-      // Live prices: Yahoo Finance every 15 seconds
-      const indiaInterval = setInterval(fetchLivePrices, 15000);
-
-      // Option chain: NSE every 10 seconds
-      const chainInterval = setInterval(() => generateLiveOptionChain(selectedUnderlying), 10000);
-
-      // News: NewsAPI + AI every 5 minutes (top 10 only)
-      const newsInterval = setInterval(() => { fetchIntelligentNews(); fetchBusinessNews(); }, 300000);
-
+      // Update global indices every 15 seconds (real-time feel)
+      const globalInterval = setInterval(() => {
+        fetchGlobalIndices();
+      }, 15000);
+      
+      // Update Indian indices every 30 seconds
+      const indiaInterval = setInterval(() => {
+        fetchLivePrices();
+        fetchIntelligentNews();
+      }, 30000);
+      
+      // Update option chain every 10 seconds
+      const chainInterval = setInterval(() => {
+        generateLiveOptionChain(selectedUnderlying);
+      }, 10000);
+      
+      // Update business news every 5 minutes
+      const newsInterval = setInterval(() => {
+        fetchBusinessNews();
+      }, 300000);
+      
+      // Update chart data every 5 minutes
+      const chartInterval = setInterval(() => {
+        generateCandlestickData(selectedChartSymbol, chartTimeframe);
+      }, 300000);
+      
       return () => {
         clearInterval(globalInterval);
         clearInterval(indiaInterval);
         clearInterval(chainInterval);
         clearInterval(newsInterval);
+        clearInterval(chartInterval);
       };
     }
   }, [isLiveMode, selectedUnderlying, selectedChartSymbol, chartTimeframe]);
@@ -1779,29 +1037,15 @@ Respond ONLY with valid JSON:
     setMaxPainData({ maxPain: maxPainStrike, currentSpot: spot });
   }, [optionChainData, spot]);
 
-  // Build OI Chart data from liveOptionChain (real NSE data)
+  // Build OI Chart data from option chain
   useEffect(() => {
-    if (liveOptionChain.length === 0) return;
-    const chartData = liveOptionChain
-      .filter(d => d.strike)
-      .map(d => ({
-        strike: d.strike,
-        ce:    Math.round((d.ce?.oi    || 0) / 1000),
-        pe:    Math.round((d.pe?.oi    || 0) / 1000),
-        ceVol: Math.round((d.ce?.volume|| 0) / 1000),
-        peVol: Math.round((d.pe?.volume|| 0) / 1000),
-      }))
-      .sort((a,b) => (b.ce+b.pe) - (a.ce+a.pe));
+    const chartData = optionChainData.map(d => ({
+      strike: d.strike,
+      ceOI: Math.round(d.ceOI / 1000),
+      peOI: Math.round(d.peOI / 1000),
+    }));
     setOiChartData(chartData);
-  }, [liveOptionChain]);
-
-  // Track prevOI snapshot for Unusual OI card — store first snapshot, compare on next update
-  useEffect(() => {
-    if (liveOptionChain.length === 0) return;
-    const snapshot = {};
-    liveOptionChain.forEach(r => { snapshot[r.strike] = { ce: r.ce?.oi||0, pe: r.pe?.oi||0 }; });
-    setPrevOI(prev => Object.keys(prev).length === 0 ? snapshot : prev);
-  }, [liveOptionChain]);
+  }, [optionChainData]);
 
 
   const saveStrategy = () => {
@@ -2101,113 +1345,43 @@ Respond ONLY with valid JSON:
     <div className="App">
       <nav className="navbar">
         <div className="container">
-          {/* Logo */}
-          <div className="logo" onClick={()=>{setActiveTab('home');setShowMobileMenu(false);}}
-            style={{cursor:'pointer',userSelect:'none',borderBottom:activeTab==='home'?'2px solid var(--accent)':'2px solid transparent',paddingBottom:'2px',transition:'border-color 0.2s'}}>
+          <div className="logo">
             <span className="delta">Δ</span>
             <span>DeltaBuddy</span>
           </div>
-
-          {/* Nav links — desktop only */}
           <div className="nav-links">
-            {[
-              ['markets',      '📊 Markets'],
-              ['intelligence', '🧠 Intelligence'],
-              ['strategy',     '🎯 Strategy'],
-              ['backtest',     '📈 Backtest'],
-              ['single',       '🧮 Calculator'],
-              ['scanner',      '🔍 Scanner'],
-              ['journal',      '📓 Journal'],
-              ['paper',        '📝 Paper Trade'],
-            ].map(([tab,label])=>(
-              <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}>
-                {label}
-              </span>
-            ))}
-          </div>
+	<span 
+              className={activeTab === 'home' ? 'active' : ''}
+              onClick={() => setActiveTab('home')}
+            >
+              Home
+            </span>
 
-          {/* Right controls — always visible */}
-          <div className="navbar-right">
-            {!authLoading && (currentUser ? (
-              <>
-                {/* Trial / Pro badge */}
-                <button onClick={()=>setShowTgSetup(true)}
-                  title={tgChatId?'Telegram connected — click to update':'Connect Telegram for alerts'}
-                  style={{background:'none',border:'none',cursor:'pointer',padding:'4px',fontSize:'1.2rem',lineHeight:1,opacity:tgChatId?1:0.6}}>
-                  {tgChatId ? '🔔' : '🔕'}
-                </button>
-                <div style={{cursor:'pointer'}} onClick={handleSignOut} title="Click to sign out">
-                  {currentUser?.photoURL
-                    ? <img src={currentUser.photoURL} alt="" style={{width:'30px',height:'30px',borderRadius:'50%',border:'2px solid var(--accent)',display:'block',objectFit:'cover'}}/>
-                    : <div style={{width:'30px',height:'30px',borderRadius:'50%',background:'var(--accent)',color:'#000',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:'0.85rem'}}>{(currentUser?.displayName||currentUser?.email||'U')[0].toUpperCase()}</div>
-                  }
-                </div>
-              </>
-            ) : (
-              <button onClick={()=>setShowAuthModal(true)}
-                style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.35rem 0.85rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem',whiteSpace:'nowrap'}}>
-                Sign In
-              </button>
-            ))}
-            <a href="https://wa.me/917506218502?text=Hi%20DeltaBuddy%20Team%2C%20I%20need%20help%20with..."
-              target="_blank" rel="noreferrer" className="help-link">
-              💬 <span className="help-text">Help</span>
-            </a>
-            {isAdmin && (
-              <span title="Admin Settings" onClick={()=>setShowSettings(s=>!s)}
-                style={{cursor:'pointer',fontSize:'1.1rem',padding:'0.25rem 0.5rem',borderRadius:'6px',background:showSettings?'var(--accent)':'transparent',lineHeight:1}}>
-                ⚙️
-              </span>
-            )}
-            {/* Hamburger — mobile only */}
-            <button onClick={()=>setShowMobileMenu(m=>!m)}
-              className="hamburger-btn" aria-label="Toggle menu"
-              style={{fontSize:'1.4rem'}}>
-              {showMobileMenu ? '✕' : '☰'}
-            </button>
+            <span 
+              className={activeTab === 'single' ? 'active' : ''}
+              onClick={() => setActiveTab('single')}
+            >
+              Calculator
+            </span>
+            <span 
+              className={activeTab === 'strategy' ? 'active' : ''}
+              onClick={() => setActiveTab('strategy')}
+            >
+              Strategies
+            </span>
+           <span 
+              className={activeTab === 'scanner' ? 'active' : ''}
+              onClick={() => setActiveTab('scanner')}
+            >
+              Scanner
+            </span>
+
+            <span className="premium-badge">Premium</span>
           </div>
         </div>
       </nav>
 
-      {/* ── MOBILE MENU — rendered outside navbar to avoid clipping ── */}
-      {showMobileMenu && (
-        <div style={{
-          position:'fixed', top:'56px', left:0, right:0, bottom:0,
-          background:'#070d1a', zIndex:9998,
-          display:'flex', flexDirection:'column',
-          borderTop:'2px solid #f97316',
-          overflowY:'auto',
-        }}>
-          {[
-            ['markets',      '📊 Markets'],
-            ['intelligence', '🧠 Intelligence'],
-            ['strategy',     '🎯 Strategy'],
-            ['backtest',     '📈 Backtest'],
-            ['single',       '🧮 Calculator'],
-            ['scanner',      '🔍 Scanner'],
-            ['journal',      '📓 Journal'],
-            ['paper',        '📝 Paper Trade'],
-          ].map(([tab,label])=>(
-            <div key={tab}
-              onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}
-              style={{
-                padding:'1.1rem 1.5rem',
-                borderBottom:'1px solid rgba(255,255,255,0.07)',
-                fontSize:'1.05rem',
-                fontWeight: activeTab===tab ? 700 : 500,
-                color: activeTab===tab ? '#f97316' : '#e2e8f0',
-                background: activeTab===tab ? 'rgba(249,115,22,0.08)' : 'transparent',
-                cursor:'pointer',
-                display:'flex', alignItems:'center', gap:'0.5rem',
-              }}>
-              {label}
-              {activeTab===tab && <span style={{marginLeft:'auto',color:'#f97316'}}>●</span>}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{minHeight:'80vh'}}>
+      <div className="container main-content">
         {showSaveModal && (
           <div className="modal-overlay" onClick={() => setShowSaveModal(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -2245,170 +1419,6 @@ Respond ONLY with valid JSON:
           </div>
         )}
 
-        {/* AUTH MODAL */}
-        {/* ── TELEGRAM SETUP MODAL — for regular users ── */}
-        {/* ── PAYWALL MODAL ── */}
-        {showTgSetup && (
-          <div className="modal-overlay" onClick={()=>setShowTgSetup(false)}>
-            <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'440px',width:'95%'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem'}}>
-                <h2 style={{margin:0,fontSize:'1.15rem'}}>📱 Connect Telegram</h2>
-                <button onClick={()=>setShowTgSetup(false)} style={{background:'none',border:'none',color:'var(--text-dim)',fontSize:'1.5rem',cursor:'pointer'}}>✕</button>
-              </div>
-
-              <p style={{color:'var(--text-dim)',fontSize:'0.85rem',marginBottom:'1.25rem',lineHeight:1.6}}>
-                Get instant alerts for high-impact news and scanner signals — directly on Telegram. Free, takes 60 seconds.
-              </p>
-
-              {/* Steps */}
-              {[
-                ['1', 'Open Telegram', 'Search for our bot: ', '@DeltaBuddyAlertBot', 'https://t.me/DeltaBuddyAlertBot'],
-                ['2', 'Start the bot', 'Press the Start button or send /start to the bot', null, null],
-                ['3', 'Get your Chat ID', 'The bot will reply with your unique Chat ID number. Copy it.', null, null],
-              ].map(([num, title, desc, link, href])=>(
-                <div key={num} style={{display:'flex',gap:'0.75rem',marginBottom:'1rem',alignItems:'flex-start'}}>
-                  <div style={{width:'28px',height:'28px',borderRadius:'50%',background:'var(--accent)',color:'#000',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:'0.85rem',flexShrink:0}}>{num}</div>
-                  <div>
-                    <div style={{fontWeight:600,fontSize:'0.88rem',marginBottom:'2px'}}>{title}</div>
-                    <div style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>
-                      {desc}
-                      {link && <a href={href} target="_blank" rel="noreferrer" style={{color:'var(--accent)',fontWeight:600}}>{link}</a>}
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {/* Chat ID input */}
-              <div style={{background:'var(--bg-dark)',borderRadius:'8px',padding:'0.75rem',marginBottom:'1rem'}}>
-                <label style={{fontSize:'0.78rem',color:'var(--text-dim)',display:'block',marginBottom:'0.4rem'}}>Paste your Chat ID here:</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  placeholder="e.g. 6458200459"
-                  value={tgChatId}
-                  onChange={e=>setTgChatId(e.target.value.trim())}
-                  style={{width:'100%',boxSizing:'border-box',fontSize:'1rem',letterSpacing:'0.05em'}}
-                />
-              </div>
-
-              <div style={{display:'flex',gap:'0.75rem'}}>
-                <button
-                  onClick={async()=>{
-                    await testTelegram();
-                    if(currentUser) {
-                      try { await setDoc(doc(db,'users',currentUser.uid),{tgChatId,updatedAt:serverTimestamp()},{merge:true}); } catch(e){}
-                    }
-                    // Subscribe to backend alert engine for 24/7 alerts
-                    if (tgChatId) {
-                      try {
-                        await fetch(`${BACKEND_URL}/api/alert-subscribe`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ chat_id: tgChatId }),
-                        });
-                      } catch(e) {}
-                    }
-                  }}
-                  disabled={!tgChatId||tgStatus==='testing'}
-                  style={{flex:1,background:'#229ED9',color:'white',border:'none',borderRadius:'8px',padding:'0.6rem',fontWeight:700,cursor:'pointer',fontSize:'0.88rem'}}>
-                  {tgStatus==='testing'?'⏳ Sending test...':'📤 Send Test Message'}
-                </button>
-                {tgStatus==='ok' && (
-                  <button onClick={()=>setShowTgSetup(false)}
-                    style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.88rem'}}>
-                    Done ✓
-                  </button>
-                )}
-              </div>
-              {tgStatus==='ok' && <p style={{color:'#22c55e',fontSize:'0.82rem',marginTop:'0.5rem',textAlign:'center'}}>✅ Connected! You'll now receive DeltaBuddy alerts on Telegram.</p>}
-              {tgStatus==='error' && <p style={{color:'#ef4444',fontSize:'0.82rem',marginTop:'0.5rem',textAlign:'center'}}>❌ Couldn't send. Make sure you've pressed Start on the bot first.</p>}
-            </div>
-          </div>
-        )}
-
-        {showAuthModal && (
-          <div className="modal-overlay" onClick={()=>{setShowAuthModal(false);setAuthError('');}}>
-            <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'400px',width:'95%'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.5rem'}}>
-                <h2 style={{margin:0}}>{authMode==='login'?'Welcome Back':'Create Account'}</h2>
-                <button onClick={()=>{setShowAuthModal(false);setAuthError('');}} style={{background:'none',border:'none',color:'var(--text-dim)',fontSize:'1.4rem',cursor:'pointer'}}>x</button>
-              </div>
-              <button onClick={signInWithGoogle} disabled={authSubmitting}
-                style={{width:'100%',padding:'0.75rem',background:'#fff',color:'#333',border:'none',borderRadius:'8px',fontWeight:600,fontSize:'0.95rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'0.6rem',marginBottom:'1rem'}}>
-                Continue with Google
-              </button>
-              <div style={{display:'flex',flexDirection:'column',gap:'0.6rem'}}>
-                {authMode==='signup' && <input type="text" className="input-field" placeholder="Your name" value={authName} onChange={e=>setAuthName(e.target.value)} style={{width:'100%',boxSizing:'border-box'}}/>}
-                <input type="email" className="input-field" placeholder="Email address" value={authEmail} onChange={e=>setAuthEmail(e.target.value)} style={{width:'100%',boxSizing:'border-box'}}/>
-                <input type="password" className="input-field" placeholder="Password" value={authPassword} onChange={e=>setAuthPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')signInWithEmail();}} style={{width:'100%',boxSizing:'border-box'}}/>
-              </div>
-              {authError && <div style={{background:'#450a0a',border:'1px solid #ef4444',borderRadius:'6px',padding:'0.5rem 0.75rem',marginTop:'0.75rem',color:'#fca5a5',fontSize:'0.82rem'}}>{authError}</div>}
-              <button onClick={signInWithEmail} disabled={authSubmitting||!authEmail||!authPassword}
-                style={{width:'100%',marginTop:'1rem',padding:'0.75rem',background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',fontWeight:700,fontSize:'0.95rem',cursor:'pointer'}}>
-                {authSubmitting?'Please wait...':authMode==='login'?'Sign In':'Create Account'}
-              </button>
-              <p style={{textAlign:'center',marginTop:'1rem',fontSize:'0.84rem',color:'var(--text-dim)'}}>
-                {authMode==='login'?"No account? ":"Have account? "}
-                <span style={{color:'var(--accent)',cursor:'pointer',fontWeight:600}} onClick={()=>{setAuthMode(m=>m==='login'?'signup':'login');setAuthError('');}}>
-                  {authMode==='login'?'Sign up free':'Sign in'}
-                </span>
-              </p>
-            </div>
-          </div>
-        )}
-
-        {showSettings && (
-          <div className="modal-overlay" onClick={()=>setShowSettings(false)}>
-            <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'500px',width:'95%',maxHeight:'90vh',overflowY:'auto'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.5rem'}}>
-                <h2 style={{margin:0}}>⚙️ Settings</h2>
-                <button onClick={()=>setShowSettings(false)} style={{background:'none',border:'none',color:'var(--text-dim)',fontSize:'1.5rem',cursor:'pointer',lineHeight:1}}>✕</button>
-              </div>
-
-              <div style={{marginBottom:'1.25rem',padding:'1rem',background:'var(--bg-dark)',borderRadius:'8px',border:'1px solid var(--border)'}}>
-                <h3 style={{margin:'0 0 0.5rem',color:'var(--accent)',fontSize:'0.95rem'}}>🤖 Groq AI — News Intelligence (Free)</h3>
-                <p style={{color:'var(--text-dim)',fontSize:'0.78rem',margin:'0 0 0.6rem'}}>Free at <a href="https://console.groq.com" target="_blank" rel="noreferrer" style={{color:'var(--accent)'}}>console.groq.com</a> — 14,400 requests/day. Model: Llama 3.3 70B.</p>
-                <input type="password" className="input-field" placeholder="Groq API key (gsk_...)" value={groqApiKey} onChange={e=>setGroqApiKey(e.target.value)} style={{width:'100%',boxSizing:'border-box',marginBottom:'0.5rem'}}/>
-                <div style={{display:'flex',gap:'0.5rem',alignItems:'center',flexWrap:'wrap'}}>
-                  <button className="btn-action" onClick={testGroq} disabled={!groqApiKey||groqStatus==='testing'}>{groqStatus==='testing'?'⏳ Testing...':'🔌 Test'}</button>
-                  {groqStatus==='ok' && <button className="btn-action" style={{background:'#22c55e',color:'#000'}} onClick={()=>{setShowSettings(false);fetchIntelligentNews();}}>✅ Save & Load News</button>}
-                  {groqStatus==='error' && <span style={{color:'#ef4444',fontSize:'0.82rem'}}>❌ Failed — check key</span>}
-                  {groqStatus==='timeout' && <span style={{color:'#f59e0b',fontSize:'0.82rem'}}>⏳ Server waking up — wait 30s and try again</span>}
-                  {!groqApiKey && <span style={{color:'var(--text-dim)',fontSize:'0.78rem'}}>No key — keyword mode</span>}
-                </div>
-              </div>
-
-              <div style={{marginBottom:'1.25rem',padding:'1rem',background:'var(--bg-dark)',borderRadius:'8px',border:'1px solid #1e3a5f'}}>
-                <h3 style={{margin:'0 0 0.5rem',color:'#229ED9',fontSize:'0.95rem'}}>📱 Telegram Bot — Admin Config</h3>
-                <p style={{color:'var(--text-dim)',fontSize:'0.78rem',margin:'0 0 0.75rem'}}>
-                  Bot token is set on Render as <code style={{background:'#1e293b',padding:'1px 5px',borderRadius:'3px'}}>TG_BOT_TOKEN</code> env variable. Users connect via Chat ID only — they never see the token.
-                </p>
-                <p style={{color:'var(--text-dim)',fontSize:'0.78rem',margin:'0 0 0.6rem'}}>
-                  Your admin Chat ID (for your own alerts):
-                </p>
-                <input type="text" className="input-field" placeholder="Your Chat ID (e.g. 6458200459)" value={tgChatId} onChange={e=>setTgChatId(e.target.value)} style={{width:'100%',boxSizing:'border-box',marginBottom:'0.5rem'}}/>
-                <div style={{display:'flex',gap:'0.5rem',alignItems:'center',flexWrap:'wrap'}}>
-                  <button className="btn-action" onClick={testTelegram} disabled={!tgChatId||tgStatus==='testing'}>{tgStatus==='testing'?'⏳ Sending...':'📤 Test Alert'}</button>
-                  {tgStatus==='ok' && <span style={{color:'#22c55e',fontSize:'0.82rem'}}>✅ Sent! Check Telegram.</span>}
-                  {tgStatus==='error' && <span style={{color:'#ef4444',fontSize:'0.82rem'}}>❌ Add TG_BOT_TOKEN to <b>backend</b> service on Render (not frontend)</span>}
-                </div>
-              </div>
-
-              <div style={{padding:'1rem',background:'var(--bg-dark)',borderRadius:'8px',border:'1px solid var(--border)'}}>
-                <h3 style={{margin:'0 0 0.75rem',fontSize:'0.95rem'}}>🔔 Notify Me When</h3>
-                <label style={{display:'flex',alignItems:'center',gap:'0.6rem',marginBottom:'0.6rem',cursor:'pointer'}}>
-                  <input type="checkbox" checked={notifyHighImpact} onChange={e=>setNotifyHighImpact(e.target.checked)}/>
-                  📰 High-impact news detected by AI
-                </label>
-                <label style={{display:'flex',alignItems:'center',gap:'0.6rem',cursor:'pointer'}}>
-                  <input type="checkbox" checked={notifyScanner} onChange={e=>setNotifyScanner(e.target.checked)}/>
-                  🔍 Scanner alerts (IV Crush, PCR Extreme, Gamma Squeeze)
-                </label>
-              </div>
-            </div>
-          </div>
-        )}
-
         {savedStrategies.length > 0 && (
           <div className="saved-strategies-bar">
             <h3>📁 Saved Strategies ({savedStrategies.length})</h3>
@@ -2434,61 +1444,6 @@ Respond ONLY with valid JSON:
         )}
 {activeTab === 'home' ? (
           <>
-            {/* ── TELEGRAM ONBOARDING BANNER — shown if not connected ── */}
-            {!tgChatId && currentUser && (
-              <div style={{
-                background:'linear-gradient(135deg,rgba(34,158,217,0.15),rgba(0,255,136,0.08))',
-                border:'1px solid rgba(34,158,217,0.4)',
-                borderRadius:'12px',
-                padding:'1rem 1.25rem',
-                margin:'1rem 1.5rem 0',
-                display:'flex',
-                alignItems:'center',
-                justifyContent:'space-between',
-                gap:'1rem',
-                flexWrap:'wrap',
-              }}>
-                <div style={{display:'flex',alignItems:'center',gap:'0.75rem'}}>
-                  <span style={{fontSize:'1.8rem'}}>🔔</span>
-                  <div>
-                    <div style={{fontWeight:700,fontSize:'0.95rem',color:'#f0f9ff'}}>Get instant market alerts on Telegram</div>
-                    <div style={{fontSize:'0.82rem',color:'#94a3b8',marginTop:'2px'}}>Breaking news · Scanner signals · Risk alerts — delivered 24/7, even when you're away</div>
-                  </div>
-                </div>
-                <button
-                  onClick={()=>setShowTgSetup(true)}
-                  style={{background:'#229ED9',color:'white',border:'none',borderRadius:'8px',padding:'0.6rem 1.25rem',fontWeight:700,fontSize:'0.88rem',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
-                  ⚡ Connect in 60s
-                </button>
-              </div>
-            )}
-            {!currentUser && (
-              <div style={{
-                background:'linear-gradient(135deg,rgba(249,115,22,0.12),rgba(0,255,136,0.06))',
-                border:'1px solid rgba(249,115,22,0.3)',
-                borderRadius:'12px',
-                padding:'1rem 1.25rem',
-                margin:'1rem 1.5rem 0',
-                display:'flex',
-                alignItems:'center',
-                justifyContent:'space-between',
-                gap:'1rem',
-                flexWrap:'wrap',
-              }}>
-                <div style={{display:'flex',alignItems:'center',gap:'0.75rem'}}>
-                  <span style={{fontSize:'1.8rem'}}>👋</span>
-                  <div>
-                    <div style={{fontWeight:700,fontSize:'0.95rem',color:'#f0f9ff'}}>Welcome to DeltaBuddy</div>
-                    <div style={{fontSize:'0.82rem',color:'#94a3b8',marginTop:'2px'}}>Sign in to save strategies, get Telegram alerts, and access all features</div>
-                  </div>
-                </div>
-                <button
-                  onClick={()=>setShowAuthModal(true)}
-                  style={{background:'#f97316',color:'white',border:'none',borderRadius:'8px',padding:'0.6rem 1.25rem',fontWeight:700,fontSize:'0.88rem',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
-                  Sign In Free →
-                </button>
-              </div>
-            )}
             {/* GLOBAL INDICES TICKER */}
             <div className="global-ticker-bar">
               <div className="ticker-header">
@@ -2505,22 +1460,24 @@ Respond ONLY with valid JSON:
                   {isLiveMode ? '⏸ Pause' : '▶ Resume'}
                 </button>
               </div>
-              <div style={{overflow:'hidden',flex:1}}>
-                <style>{`
-                  @keyframes fastTicker {
-                    0%   { transform: translateX(0); }
-                    100% { transform: translateX(-50%); }
-                  }
-                  .ticker-fast { animation: fastTicker 25s linear infinite; display:flex; width:max-content; }
-                  .ticker-fast:hover { animation-play-state: paused; }
-                `}</style>
-                <div className="ticker-fast">
-                  {[...Object.entries(globalIndices), ...Object.entries(globalIndices)].map(([name, data], i) => (
-                    <div key={i} style={{display:'flex',alignItems:'center',gap:'0.5rem',padding:'0.35rem 1.5rem',borderRight:'1px solid rgba(255,255,255,0.07)',whiteSpace:'nowrap'}}>
-                      <span style={{fontSize:'0.95rem',fontWeight:600,color:'#94a3b8'}}>{name}</span>
-                      <span style={{fontSize:'1rem',fontWeight:700,color:'#f0f9ff'}}>{data.value.toLocaleString()}</span>
-                      <span style={{fontSize:'0.9rem',fontWeight:700,color:data.change>=0?'#4ade80':'#f87171'}}>
-                        {data.change>=0?'▲':'▼'} {Math.abs(data.change).toFixed(2)}%
+              <div className="ticker-scroll">
+                <div className="ticker-items">
+                  {Object.entries(globalIndices).map(([name, data]) => (
+                    <div key={name} className="ticker-item">
+                      <span className="ticker-name">{name}</span>
+                      <span className="ticker-value">{data.value.toLocaleString()}</span>
+                      <span className={`ticker-change ${data.change >= 0 ? 'positive' : 'negative'}`}>
+                        {data.change >= 0 ? '▲' : '▼'} {Math.abs(data.change)}%
+                      </span>
+                    </div>
+                  ))}
+                  {/* Duplicate for seamless scroll */}
+                  {Object.entries(globalIndices).map(([name, data]) => (
+                    <div key={`${name}-dup`} className="ticker-item">
+                      <span className="ticker-name">{name}</span>
+                      <span className="ticker-value">{data.value.toLocaleString()}</span>
+                      <span className={`ticker-change ${data.change >= 0 ? 'positive' : 'negative'}`}>
+                        {data.change >= 0 ? '▲' : '▼'} {Math.abs(data.change)}%
                       </span>
                     </div>
                   ))}
@@ -2528,624 +1485,1294 @@ Respond ONLY with valid JSON:
               </div>
             </div>
 
-            {/* HOME CONTENT */}
-            <div className="home-content" style={{maxWidth:'1280px',margin:'0 auto'}}>
+            <div className="page-header">
+              <h1>📊 Market Intelligence</h1>
+              <p className="subtitle">AI-powered analysis with real-time trading insights</p>
+              <button className="btn-action" onClick={() => { fetchLivePrices(); fetchIntelligentNews(); }} disabled={isLoadingNews}>
+                {isLoadingNews ? '⏳ Loading...' : '🔄 Refresh All'}
+              </button>
+            </div>
 
-            {/* ── AI INSIGHT + MARKET PULSE ── */}
-            <div style={{background:'var(--bg-card)',border:'1px solid var(--border-light)',borderRadius:'var(--radius-lg)',padding:'1.5rem',marginBottom:'1.5rem',position:'relative',overflow:'hidden'}}>
-              <div style={{position:'absolute',top:0,right:0,width:'300px',height:'100%',background:'radial-gradient(ellipse at top right,var(--accent-glow),transparent 70%)',pointerEvents:'none'}}/>
-              <div className="ai-pulse-row" style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'1.5rem'}}>
+            {/* INDEX SELECTOR */}
+            <div className="panel index-selector-panel">
+              <h3>📈 Track Your Indices & Stocks</h3>
+              <p style={{color: 'var(--text-dim)', fontSize: '0.9rem', marginBottom: '1rem'}}>
+                Select from 3 categories: NSE Indices, BSE Indices, and FNO Stocks
+              </p>
+              
+              <div className="three-category-grid">
+                <div className="category-dropdown-box">
+                  <h4>📊 NSE Indices</h4>
+                  <select 
+                    value={selectedIndices[0] || ''}
+                    onChange={(e) => {
+                      const newSelected = [...selectedIndices];
+                      newSelected[0] = e.target.value;
+                      setSelectedIndices(newSelected.filter(Boolean));
+                    }}
+                    className="category-dropdown"
+                  >
+                    <option value="">-- Select NSE Index --</option>
+                    <option value="Nifty 50">Nifty 50</option>
+                    <option value="Bank Nifty">Bank Nifty</option>
+                    <option value="Nifty IT">Nifty IT</option>
+                    <option value="Nifty Pharma">Nifty Pharma</option>
+                    <option value="Nifty Auto">Nifty Auto</option>
+                    <option value="Nifty Financial Services">Nifty Financial Services</option>
+                    <option value="Nifty FMCG">Nifty FMCG</option>
+                    <option value="Nifty Metal">Nifty Metal</option>
+                    <option value="Nifty Realty">Nifty Realty</option>
+                    <option value="Nifty Energy">Nifty Energy</option>
+                  </select>
+                </div>
+                
+                <div className="category-dropdown-box">
+                  <h4>🏦 BSE Indices</h4>
+                  <select 
+                    value={selectedIndices[1] || ''}
+                    onChange={(e) => {
+                      const newSelected = [...selectedIndices];
+                      newSelected[1] = e.target.value;
+                      setSelectedIndices(newSelected.filter(Boolean));
+                    }}
+                    className="category-dropdown"
+                  >
+                    <option value="">-- Select BSE Index --</option>
+                    <option value="Sensex">Sensex</option>
+                    <option value="BSE 100">BSE 100</option>
+                    <option value="BSE 200">BSE 200</option>
+                    <option value="BSE 500">BSE 500</option>
+                    <option value="BSE Midcap">BSE Midcap</option>
+                    <option value="BSE Smallcap">BSE Smallcap</option>
+                  </select>
+                </div>
+                
+                <div className="category-dropdown-box">
+                  <h4>🏢 FNO Stocks</h4>
+                  <select 
+                    value={selectedIndices[2] || ''}
+                    onChange={(e) => {
+                      const newSelected = [...selectedIndices];
+                      newSelected[2] = e.target.value;
+                      setSelectedIndices(newSelected.filter(Boolean));
+                    }}
+                    className="category-dropdown"
+                  >
+                    <option value="">-- Select Stock --</option>
+                    <option value="RELIANCE">RELIANCE</option>
+                    <option value="TCS">TCS</option>
+                    <option value="HDFCBANK">HDFC BANK</option>
+                    <option value="INFY">INFOSYS</option>
+                    <option value="ICICIBANK">ICICI BANK</option>
+                    <option value="ITC">ITC</option>
+                    <option value="SBIN">SBI</option>
+                    <option value="BHARTIARTL">BHARTI AIRTEL</option>
+                    <option value="LT">L&T</option>
+                    <option value="HCLTECH">HCL TECH</option>
+                    <option value="AXISBANK">AXIS BANK</option>
+                    <option value="MARUTI">MARUTI</option>
+                    <option value="WIPRO">WIPRO</option>
+                    <option value="SUNPHARMA">SUN PHARMA</option>
+                    <option value="TATAMOTORS">TATA MOTORS</option>
+                    <option value="TATASTEEL">TATA STEEL</option>
+                    <option value="ONGC">ONGC</option>
+                    <option value="NTPC">NTPC</option>
+                    <option value="ADANIPORTS">ADANI PORTS</option>
+                    <option value="JSWSTEEL">JSW STEEL</option>
+                  </select>
+                </div>
+              </div>
+              
+              <button 
+                className="btn-primary" 
+                onClick={fetchLivePrices}
+                style={{marginTop: '1rem'}}
+              >
+                🔄 Update Live Prices
+              </button>
+            </div>
 
-                {/* LEFT: AI Insight */}
-                <div style={{flex:1,minWidth:'260px'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.75rem'}}>
-                    <span style={{background:'var(--green-dim)',color:'var(--green)',padding:'3px 10px',borderRadius:'99px',fontSize:'0.75rem',fontWeight:700,letterSpacing:'0.04em'}}>
-                      🤖 AI INSIGHT OF THE DAY
+            {/* MARKET TICKER */}
+            <div className="market-summary">
+              {selectedIndices.slice(0, 6).map(indexName => {
+                const value = livePrices[indexName];
+                const change = indexName === 'Nifty 50' ? marketData.nifty.change : 
+                               indexName === 'Bank Nifty' ? marketData.bankNifty.change : 0;
+                return (
+                  <div key={indexName} className="market-item">
+                    <span className="market-label">
+                      {indexName} {isPriceLoading && <span className="price-loading">⟳</span>}
                     </span>
+                    <span className="market-value">{value?.toLocaleString() || 'N/A'}</span>
+                    {change !== 0 && (
+                      <span className={change >= 0 ? 'market-change positive' : 'market-change negative'}>
+                        {change >= 0 ? '↑' : '↓'} {Math.abs(change)}%
+                      </span>
+                    )}
+                    {change === 0 && <span className="market-change" style={{color: 'var(--text-dim)'}}>Live</span>}
                   </div>
-                  {intelligentNews.length>0 ? (() => {
-                    const top = intelligentNews.find(n=>n.analysis?.impact==='high')||intelligentNews[0];
-                    const em  = top.analysis?.sentiment==='bullish'?'🟢':top.analysis?.sentiment==='bearish'?'🔴':'⚪';
-                    return (
-                      <div>
-                        <h3 style={{margin:'0 0 0.5rem',lineHeight:1.4,color:'var(--text-main)'}}>{top.title}</h3>
-                        {top.analysis?.keyInsight && <p style={{color:'var(--blue)',fontSize:'0.875rem',margin:'0 0 0.75rem',lineHeight:1.6}}>💡 {top.analysis.keyInsight}</p>}
-                        <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap',alignItems:'center'}}>
-                          <span style={{background:top.analysis?.sentiment==='bullish'?'var(--green-dim)':top.analysis?.sentiment==='bearish'?'var(--red-dim)':'var(--bg-surface)',color:top.analysis?.sentiment==='bullish'?'var(--green)':top.analysis?.sentiment==='bearish'?'var(--red)':'var(--text-dim)',padding:'3px 10px',borderRadius:'99px',fontSize:'0.75rem',fontWeight:600}}>{em} {(top.analysis?.sentiment||'').toUpperCase()}</span>
-                          {top.analysis?.impact==='high' && <span style={{background:'var(--red-dim)',color:'var(--red)',padding:'3px 10px',borderRadius:'99px',fontSize:'0.75rem',fontWeight:600}}>⚠️ HIGH IMPACT</span>}
-                          <button onClick={()=>setActiveTab('intelligence')} style={{background:'var(--accent-glow)',border:'1px solid var(--accent-dim)',color:'var(--accent)',borderRadius:'6px',padding:'3px 10px',fontSize:'0.75rem',cursor:'pointer',fontWeight:600}}>
-                            Full analysis →
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })() : (
-                    <div>
-                      <h3 style={{margin:'0 0 0.4rem',color:'var(--text-main)'}}>AI-Powered Market Intelligence</h3>
-                      <p style={{fontSize:'0.875rem',margin:'0 0 0.75rem'}}>News analysis, OI signals, strategy ideas — all AI-powered.</p>
-                      <button onClick={()=>setActiveTab('intelligence')} className="btn-primary">
-                        Open Market Intelligence →
-                      </button>
-                    </div>
-                  )}
+                );
+              })}
+              
+              {/* Always show PCR and Max Pain */}
+              <div className="market-item">
+                <span className="market-label">PCR</span>
+                <span className="market-value">{pcrData.pcr}</span>
+                <span className={pcrData.pcr > 1 ? 'market-change positive' : 'market-change negative'}>
+                  {pcrData.signal}
+                </span>
+              </div>
+              <div className="market-item">
+                <span className="market-label">Max Pain</span>
+                <span className="market-value">{maxPainData.maxPain.toLocaleString()}</span>
+                <span className="market-change" style={{color: '#F59E0B'}}>
+                  {maxPainData.currentSpot > maxPainData.maxPain ? `↓ ${maxPainData.currentSpot - maxPainData.maxPain} away` : `↑ ${maxPainData.maxPain - maxPainData.currentSpot} away`}
+                </span>
+              </div>
+            </div>
+
+            {/* HOME SUB-TABS */}
+            <div className="home-tabs">
+              {['news', 'option-chain', 'candlestick', 'charts', 'institutional', 'events', 'business-news', 'oi-chart', 'fii-dii', 'pcr', 'max-pain'].map(tab => (
+                <button
+                  key={tab}
+                  className={`home-tab-btn ${activeHomeTab === tab ? 'active' : ''}`}
+                  onClick={() => setActiveHomeTab(tab)}
+                >
+                  {tab === 'news' && '📰 News Intelligence'}
+                  {tab === 'option-chain' && '⚡ Live Option Chain'}
+                  {tab === 'candlestick' && '📊 Candlestick Chart'}
+                  {tab === 'charts' && '📈 OI/IV Charts'}
+                  {tab === 'institutional' && '🏦 Institutional Activity'}
+                  {tab === 'events' && '📅 Events Calendar'}
+                  {tab === 'business-news' && '📰 Business News'}
+                  {tab === 'oi-chart' && '📊 OI Analysis'}
+                  {tab === 'fii-dii' && '🏦 FII / DII'}
+                  {tab === 'pcr' && '⚡ PCR Meter'}
+                  {tab === 'max-pain' && '🎯 Max Pain'}
+                </button>
+              ))}
+            </div>
+
+            {/* OPTION CHAIN TAB */}
+            {activeHomeTab === 'option-chain' && (
+              <div className="panel">
+                <div className="option-chain-header">
+                  <div>
+                    <h2>⚡ Live Option Chain</h2>
+                    <p style={{color: 'var(--text-dim)', marginTop: '0.5rem'}}>
+                      Real-time option data with Greeks • Updates every 10 seconds
+                    </p>
+                  </div>
+                  <div className="chain-controls">
+                    <select 
+                      value={selectedUnderlying} 
+                      onChange={(e) => { setSelectedUnderlying(e.target.value); generateLiveOptionChain(e.target.value); }}
+                      className="chain-select"
+                    >
+                      <option value="NIFTY">NIFTY</option>
+                      <option value="BANKNIFTY">BANK NIFTY</option>
+                      <option value="FINNIFTY">FIN NIFTY</option>
+                    </select>
+                    <select value={selectedExpiry} onChange={(e) => setSelectedExpiry(e.target.value)} className="chain-select">
+                      <option value="current">Current Week</option>
+                      <option value="next">Next Week</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                    <button className="btn-action" onClick={() => generateLiveOptionChain(selectedUnderlying)} disabled={isLoadingChain}>
+                      {isLoadingChain ? '⏳' : '🔄'} Refresh
+                    </button>
+                  </div>
                 </div>
 
-                {/* RIGHT: Market Pulse */}
-                <div style={{display:'flex',flexDirection:'column',gap:'0.5rem',minWidth:'200px'}}>
-                  <div style={{fontSize:'0.75rem',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:'0.25rem'}}>Market Pulse</div>
-                  {[
-                    {label:'NIFTY',     val:marketData.nifty.value,    chg:marketData.nifty.change},
-                    {label:'BANKNIFTY', val:marketData.bankNifty.value, chg:marketData.bankNifty.change},
-                    {label:'VIX',       val:marketData.nifty?.vix,      chg:null, vix:true},
-                    {label:'PCR',       val:pcrData?.pcr?.toFixed(2),   chg:null, pcr:true},
-                  ].map((r,i)=>{
-                    const pos = (r.chg||0) >= 0;
-                    const vixCol = r.vix ? ((r.val||14)<13?'var(--green)':(r.val||14)>18?'var(--red)':'var(--yellow)') : null;
-                    const pcrCol = r.pcr ? (r.val>1.2?'var(--green)':r.val<0.8?'var(--red)':'var(--yellow)') : null;
-                    const chgCol = pos ? 'var(--green)' : 'var(--red)';
-                    const valCol = vixCol || pcrCol || chgCol;
+                {isLoadingChain && liveOptionChain.length === 0 ? (
+                  <div style={{textAlign: 'center', padding: '3rem', color: 'var(--text-dim)'}}>
+                    <p>Loading option chain...</p>
+                  </div>
+                ) : (
+                  <div className="option-chain-table-wrapper">
+                    <table className="live-option-chain">
+                      <thead>
+                        <tr>
+                          <th colSpan="6" className="ce-header">CALLS (CE)</th>
+                          <th className="strike-header">STRIKE</th>
+                          <th colSpan="6" className="pe-header">PUTS (PE)</th>
+                        </tr>
+                        <tr>
+                          <th>OI</th>
+                          <th>Volume</th>
+                          <th>IV</th>
+                          <th>LTP</th>
+                          <th>Change</th>
+                          <th>Bid/Ask</th>
+                          <th className="strike-header">PRICE</th>
+                          <th>Bid/Ask</th>
+                          <th>Change</th>
+                          <th>LTP</th>
+                          <th>IV</th>
+                          <th>Volume</th>
+                          <th>OI</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {liveOptionChain.map((row, idx) => {
+                          const isATM = row.atmDistance < 50;
+                          const isITM_CE = row.strike < (selectedUnderlying === 'NIFTY' ? marketData.nifty.value : marketData.bankNifty.value);
+                          const isITM_PE = row.strike > (selectedUnderlying === 'NIFTY' ? marketData.nifty.value : marketData.bankNifty.value);
+                          
+                          return (
+                            <tr key={idx} className={isATM ? 'atm-row' : ''}>
+                              <td className={isITM_CE ? 'itm-cell' : ''}>{(row.ce.oi / 1000).toFixed(0)}K</td>
+                              <td>{(row.ce.volume / 1000).toFixed(1)}K</td>
+                              <td>{row.ce.iv}%</td>
+                              <td className="ltp-cell ce-color">₹{row.ce.ltp}</td>
+                              <td className={parseFloat(row.ce.change) >= 0 ? 'positive' : 'negative'}>
+                                {parseFloat(row.ce.change) >= 0 ? '+' : ''}{row.ce.change}%
+                              </td>
+                              <td className="bid-ask-cell">{row.ce.bid}/{row.ce.ask}</td>
+                              <td className={`strike-cell ${isATM ? 'atm-strike' : ''}`}>{row.strike.toLocaleString()}</td>
+                              <td className="bid-ask-cell">{row.pe.bid}/{row.pe.ask}</td>
+                              <td className={parseFloat(row.pe.change) >= 0 ? 'positive' : 'negative'}>
+                                {parseFloat(row.pe.change) >= 0 ? '+' : ''}{row.pe.change}%
+                              </td>
+                              <td className="ltp-cell pe-color">₹{row.pe.ltp}</td>
+                              <td>{row.pe.iv}%</td>
+                              <td>{(row.pe.volume / 1000).toFixed(1)}K</td>
+                              <td className={isITM_PE ? 'itm-cell' : ''}>{(row.pe.oi / 1000).toFixed(0)}K</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <div className="chain-summary">
+                  <div className="chain-stat">
+                    <span>Total CE OI</span>
+                    <span className="ce-color">{(liveOptionChain.reduce((sum, r) => sum + r.ce.oi, 0) / 1000000).toFixed(2)}M</span>
+                  </div>
+                  <div className="chain-stat">
+                    <span>Total PE OI</span>
+                    <span className="pe-color">{(liveOptionChain.reduce((sum, r) => sum + r.pe.oi, 0) / 1000000).toFixed(2)}M</span>
+                  </div>
+                  <div className="chain-stat">
+                    <span>Put/Call Ratio</span>
+                    <span className="pcr-value">
+                      {(liveOptionChain.reduce((sum, r) => sum + r.pe.oi, 0) / liveOptionChain.reduce((sum, r) => sum + r.ce.oi, 0)).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="chain-stat">
+                    <span>Max CE OI</span>
+                    <span>{Math.max(...liveOptionChain.map(r => r.strike)).toLocaleString()}</span>
+                  </div>
+                  <div className="chain-stat">
+                    <span>Max PE OI</span>
+                    <span>{Math.min(...liveOptionChain.map(r => r.strike)).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* CHARTS TAB */}
+            {activeHomeTab === 'charts' && (
+              <div className="panel">
+                <div className="charts-header">
+                  <h2>📈 Interactive Charts</h2>
+                  <div className="chart-type-selector">
+                    {['oi', 'iv', 'volume'].map(type => (
+                      <button
+                        key={type}
+                        className={`chart-type-btn ${chartType === type ? 'active' : ''}`}
+                        onClick={() => setChartType(type)}
+                      >
+                        {type === 'oi' && '📊 OI Chart'}
+                        {type === 'iv' && '📉 IV Chart'}
+                        {type === 'volume' && '📈 Volume Chart'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {chartType === 'oi' && (
+                  <div className="chart-container">
+                    <h3>Open Interest by Strike</h3>
+                    <div className="bar-chart">
+                      {chartData.oi.map((row, idx) => {
+                        const maxOI = Math.max(...chartData.oi.map(r => Math.max(r.ce, r.pe)));
+                        return (
+                          <div key={idx} className="chart-row">
+                            <div className="chart-strike">{row.strike}</div>
+                            <div className="chart-bars">
+                              <div className="chart-bar ce" style={{width: `${(row.ce / maxOI) * 100}%`}}>
+                                <span className="bar-label">{row.ce.toFixed(0)}K</span>
+                              </div>
+                              <div className="chart-bar pe" style={{width: `${(row.pe / maxOI) * 100}%`}}>
+                                <span className="bar-label">{row.pe.toFixed(0)}K</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="chart-legend">
+                      <span className="legend-item"><span className="legend-ce">■</span> Call OI</span>
+                      <span className="legend-item"><span className="legend-pe">■</span> Put OI</span>
+                    </div>
+                  </div>
+                )}
+
+                {chartType === 'iv' && (
+                  <div className="chart-container">
+                    <h3>Implied Volatility Smile</h3>
+                    <div className="line-chart">
+                      <svg viewBox="0 0 800 400" className="iv-chart-svg">
+                        <defs>
+                          <linearGradient id="ceGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style={{stopColor: '#EF4444', stopOpacity: 0.3}} />
+                            <stop offset="100%" style={{stopColor: '#EF4444', stopOpacity: 0}} />
+                          </linearGradient>
+                          <linearGradient id="peGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style={{stopColor: '#10B981', stopOpacity: 0.3}} />
+                            <stop offset="100%" style={{stopColor: '#10B981', stopOpacity: 0}} />
+                          </linearGradient>
+                        </defs>
+                        
+                        {/* Grid lines */}
+                        {[0, 100, 200, 300, 400].map(y => (
+                          <line key={y} x1="50" y1={y} x2="750" y2={y} stroke="rgba(100,116,139,0.2)" strokeWidth="1" />
+                        ))}
+                        
+                        {/* CE Line */}
+                        <polyline
+                          points={chartData.iv.map((d, i) => {
+                            const x = 50 + (i / chartData.iv.length) * 700;
+                            const y = 350 - (d.ce * 10);
+                            return `${x},${y}`;
+                          }).join(' ')}
+                          fill="url(#ceGrad)"
+                          stroke="#EF4444"
+                          strokeWidth="3"
+                        />
+                        
+                        {/* PE Line */}
+                        <polyline
+                          points={chartData.iv.map((d, i) => {
+                            const x = 50 + (i / chartData.iv.length) * 700;
+                            const y = 350 - (d.pe * 10);
+                            return `${x},${y}`;
+                          }).join(' ')}
+                          fill="url(#peGrad)"
+                          stroke="#10B981"
+                          strokeWidth="3"
+                        />
+                        
+                        {/* Axes */}
+                        <line x1="50" y1="350" x2="750" y2="350" stroke="#64748b" strokeWidth="2" />
+                        <line x1="50" y1="50" x2="50" y2="350" stroke="#64748b" strokeWidth="2" />
+                        
+                        <text x="400" y="380" textAnchor="middle" fill="#94a3b8" fontSize="14">Strike Price</text>
+                        <text x="20" y="200" textAnchor="middle" fill="#94a3b8" fontSize="14" transform="rotate(-90 20 200)">IV %</text>
+                      </svg>
+                    </div>
+                    <div className="chart-legend">
+                      <span className="legend-item"><span className="legend-ce">■</span> Call IV</span>
+                      <span className="legend-item"><span className="legend-pe">■</span> Put IV</span>
+                    </div>
+                  </div>
+                )}
+
+                {chartType === 'volume' && (
+                  <div className="chart-container">
+                    <h3>Trading Volume by Strike</h3>
+                    <div className="bar-chart">
+                      {chartData.volume.map((row, idx) => {
+                        const maxVol = Math.max(...chartData.volume.map(r => Math.max(r.ce, r.pe)));
+                        return (
+                          <div key={idx} className="chart-row">
+                            <div className="chart-strike">{row.strike}</div>
+                            <div className="chart-bars">
+                              <div className="chart-bar ce" style={{width: `${(row.ce / maxVol) * 100}%`}}>
+                                <span className="bar-label">{row.ce.toFixed(1)}K</span>
+                              </div>
+                              <div className="chart-bar pe" style={{width: `${(row.pe / maxVol) * 100}%`}}>
+                                <span className="bar-label">{row.pe.toFixed(1)}K</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="chart-legend">
+                      <span className="legend-item"><span className="legend-ce">■</span> Call Volume</span>
+                      <span className="legend-item"><span className="legend-pe">■</span> Put Volume</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* NEWS TAB */}
+
+            {/* CANDLESTICK CHART TAB */}
+            {activeHomeTab === 'candlestick' && (
+              <div className="panel">
+                <div className="candlestick-header">
+                  <div>
+                    <h2>📊 Candlestick Chart with Indicators</h2>
+                    <p style={{color: 'var(--text-dim)', marginTop: '0.5rem'}}>
+                      Professional trading chart • Updates every 5 minutes
+                    </p>
+                  </div>
+                  <div className="chart-controls-grid">
+                    <div className="chart-control-group">
+                      <label>Symbol</label>
+                      <select 
+                        value={selectedChartSymbol} 
+                        onChange={(e) => { setSelectedChartSymbol(e.target.value); generateCandlestickData(e.target.value, chartTimeframe); }}
+                        className="chart-control-select"
+                      >
+                        <option value="NIFTY">NIFTY 50</option>
+                        <option value="BANKNIFTY">BANK NIFTY</option>
+                        <option value="RELIANCE">RELIANCE</option>
+                        <option value="TCS">TCS</option>
+                        <option value="HDFCBANK">HDFC BANK</option>
+                        <option value="INFY">INFOSYS</option>
+                      </select>
+                    </div>
+                    
+                    <div className="chart-control-group">
+                      <label>Chart Type</label>
+                      <select
+                        value={candlestickType}
+                        onChange={(e) => setCandlestickType(e.target.value)}
+                        className="chart-control-select"
+                      >
+                        <option value="candlestick">Candlestick</option>
+                        <option value="heikin-ashi">Heiken Ashi</option>
+                        <option value="renko">Renko</option>
+                        <option value="kagi">Kagi</option>
+                        <option value="line">Line Chart</option>
+                        <option value="area">Area Chart</option>
+                      </select>
+                    </div>
+                    
+                    <div className="chart-control-group">
+                      <label>Timeframe</label>
+                      <select 
+                        value={chartTimeframe} 
+                        onChange={(e) => { setChartTimeframe(e.target.value); generateCandlestickData(selectedChartSymbol, e.target.value); }}
+                        className="chart-control-select"
+                      >
+                        <option value="1m">1 Minute</option>
+                        <option value="3m">3 Minutes</option>
+                        <option value="5m">5 Minutes</option>
+                        <option value="15m">15 Minutes</option>
+                        <option value="30m">30 Minutes</option>
+                        <option value="1H">1 Hour</option>
+                        <option value="4H">4 Hours</option>
+                        <option value="1D">1 Day</option>
+                        <option value="1W">1 Week</option>
+                        <option value="1M">1 Month</option>
+                        <option value="3M">3 Months</option>
+                        <option value="6M">6 Months</option>
+                        <option value="1Y">1 Year</option>
+                      </select>
+                    </div>
+                    
+                    <div className="chart-control-group">
+                      <label>Indicators</label>
+                      <select
+                        multiple
+                        value={chartIndicators}
+                        onChange={(e) => {
+                          const selected = Array.from(e.target.selectedOptions, option => option.value);
+                          setChartIndicators(selected);
+                        }}
+                        className="chart-control-select"
+                        style={{height: '80px'}}
+                      >
+                        <option value="SMA">SMA (Simple Moving Avg)</option>
+                        <option value="EMA">EMA (Exponential MA)</option>
+                        <option value="RSI">RSI (Relative Strength)</option>
+                        <option value="MACD">MACD (Moving Avg Convergence)</option>
+                        <option value="BB">BB (Bollinger Bands)</option>
+                      </select>
+                      <p style={{fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.5rem'}}>
+                        Hold Ctrl/Cmd to select multiple
+                      </p>
+                    </div>
+                    
+                    <div className="live-status-bar">
+                      <span className="live-indicator-pulse">● LIVE</span>
+                      <span className="live-timestamp">Updated: {lastChartUpdate.toLocaleTimeString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="candlestick-chart-container">
+                  <svg viewBox="0 0 1000 500" className="candlestick-svg">
+                    <defs>
+                      <linearGradient id="volumeGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" style={{stopColor: 'var(--accent)', stopOpacity: 0.3}} />
+                        <stop offset="100%" style={{stopColor: 'var(--accent)', stopOpacity: 0}} />
+                      </linearGradient>
+                    </defs>
+                    
+                    {/* Grid lines */}
+                    {[0, 100, 200, 300, 400].map(y => (
+                      <line key={y} x1="50" y1={y} x2="950" y2={y} stroke="rgba(100,116,139,0.2)" strokeWidth="1" />
+                    ))}
+                    
+                    {/* Candlesticks */}
+                    {candlestickData.map((candle, idx) => {
+                      const x = 60 + (idx / candlestickData.length) * 880;
+                      const open = parseFloat(candle.open);
+                      const close = parseFloat(candle.close);
+                      const high = parseFloat(candle.high);
+                      const low = parseFloat(candle.low);
+                      const isGreen = close > open;
+                      
+                      const priceRange = Math.max(...candlestickData.map(c => parseFloat(c.high))) - Math.min(...candlestickData.map(c => parseFloat(c.low)));
+                      const minPrice = Math.min(...candlestickData.map(c => parseFloat(c.low)));
+                      
+                      const yOpen = 350 - ((open - minPrice) / priceRange) * 300;
+                      const yClose = 350 - ((close - minPrice) / priceRange) * 300;
+                      const yHigh = 350 - ((high - minPrice) / priceRange) * 300;
+                      const yLow = 350 - ((low - minPrice) / priceRange) * 300;
+                      
+                      return (
+                        <g key={idx}>
+                          <line x1={x} y1={yHigh} x2={x} y2={yLow} stroke={isGreen ? 'var(--accent)' : '#EF4444'} strokeWidth="1" />
+                          <rect 
+                            x={x - 2} 
+                            y={Math.min(yOpen, yClose)} 
+                            width="4" 
+                            height={Math.abs(yClose - yOpen) || 1}
+                            fill={isGreen ? 'var(--accent)' : '#EF4444'}
+                          />
+                        </g>
+                      );
+                    })}
+                    
+                    {/* SMA if enabled */}
+                    {chartIndicators.includes('SMA') && (
+                      <polyline
+                        points={calculateSMA(candlestickData).map((d, i) => {
+                          if (!d.value) return '';
+                          const x = 60 + (i / candlestickData.length) * 880;
+                          const priceRange = Math.max(...candlestickData.map(c => parseFloat(c.high))) - Math.min(...candlestickData.map(c => parseFloat(c.low)));
+                          const minPrice = Math.min(...candlestickData.map(c => parseFloat(c.low)));
+                          const y = 350 - ((d.value - minPrice) / priceRange) * 300;
+                          return `${x},${y}`;
+                        }).filter(p => p).join(' ')}
+                        fill="none"
+                        stroke="#F59E0B"
+                        strokeWidth="2"
+                      />
+                    )}
+                    
+                    {/* Axes */}
+                    <line x1="50" y1="350" x2="950" y2="350" stroke="#64748b" strokeWidth="2" />
+                    <line x1="50" y1="50" x2="50" y2="350" stroke="#64748b" strokeWidth="2" />
+                    
+                    <text x="500" y="390" textAnchor="middle" fill="#94a3b8" fontSize="14">
+                      {selectedChartSymbol} • {chartTimeframe}
+                    </text>
+                    <text x="20" y="200" textAnchor="middle" fill="#94a3b8" fontSize="14" transform="rotate(-90 20 200)">Price</text>
+                  </svg>
+                  
+                  {/* RSI Sub-chart */}
+                  {chartIndicators.includes('RSI') && (
+                    <svg viewBox="0 0 1000 150" className="rsi-chart-svg">
+                      <line x1="50" y1="75" x2="950" y2="75" stroke="rgba(100,116,139,0.3)" strokeWidth="1" strokeDasharray="5,5" />
+                      <line x1="50" y1="25" x2="950" y2="25" stroke="rgba(239,68,68,0.3)" strokeWidth="1" strokeDasharray="5,5" />
+                      <line x1="50" y1="125" x2="950" y2="125" stroke="rgba(16,185,129,0.3)" strokeWidth="1" strokeDasharray="5,5" />
+                      
+                      <polyline
+                        points={calculateRSI(candlestickData).map((d, i) => {
+                          if (!d.value) return '';
+                          const x = 60 + (i / candlestickData.length) * 880;
+                          const y = 125 - (d.value * 1);
+                          return `${x},${y}`;
+                        }).filter(p => p).join(' ')}
+                        fill="none"
+                        stroke="#8B5CF6"
+                        strokeWidth="2"
+                      />
+                      
+                      <text x="20" y="75" fill="#94a3b8" fontSize="12">RSI</text>
+                      <text x="960" y="30" fill="#EF4444" fontSize="10">70</text>
+                      <text x="960" y="130" fill="var(--accent)" fontSize="10">30</text>
+                    </svg>
+                  )}
+                </div>
+                
+                
+                <div className="tradingview-timeframe-bar">
+                  <div className="timeframe-buttons">
+                    {['1m', '3m', '5m', '15m', '30m', '1H', '4H', '1D', '1W', '1M', '3M', '6M', '1Y'].map(tf => (
+                      <button
+                        key={tf}
+                        className={`timeframe-btn ${chartTimeframe === tf ? 'active' : ''}`}
+                        onClick={() => { setChartTimeframe(tf); generateCandlestickData(selectedChartSymbol, tf); }}
+                      >
+                        {tf}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="chart-type-switcher">
+                    <button
+                      className={`type-btn ${candlestickType === 'candlestick' ? 'active' : ''}`}
+                      onClick={() => setCandlestickType('candlestick')}
+                      title="Candlestick"
+                    >
+                      📊
+                    </button>
+                    <button
+                      className={`type-btn ${candlestickType === 'heikin-ashi' ? 'active' : ''}`}
+                      onClick={() => setCandlestickType('heikin-ashi')}
+                      title="Heiken Ashi"
+                    >
+                      🔸
+                    </button>
+                    <button
+                      className={`type-btn ${candlestickType === 'line' ? 'active' : ''}`}
+                      onClick={() => setCandlestickType('line')}
+                      title="Line Chart"
+                    >
+                      📈
+                    </button>
+                  </div>
+                </div>
+
+                <div className="chart-stats">
+                  <div className="stat-item">
+                    <span>Open</span>
+                    <span className="stat-value">{candlestickData[candlestickData.length - 1]?.open}</span>
+                  </div>
+                  <div className="stat-item">
+                    <span>High</span>
+                    <span className="stat-value positive">{candlestickData[candlestickData.length - 1]?.high}</span>
+                  </div>
+                  <div className="stat-item">
+                    <span>Low</span>
+                    <span className="stat-value negative">{candlestickData[candlestickData.length - 1]?.low}</span>
+                  </div>
+                  <div className="stat-item">
+                    <span>Close</span>
+                    <span className="stat-value">{candlestickData[candlestickData.length - 1]?.close}</span>
+                  </div>
+                  <div className="stat-item">
+                    <span>Volume</span>
+                    <span className="stat-value">{(candlestickData[candlestickData.length - 1]?.volume / 1000000).toFixed(2)}M</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+
+            {/* INSTITUTIONAL ACTIVITY TAB */}
+            {activeHomeTab === 'institutional' && (
+              <div className="panel">
+                <div className="institutional-header">
+                  <div>
+                    <h2>🏦 Institutional Activity</h2>
+                    <p style={{color: 'var(--text-dim)', marginTop: '0.5rem'}}>
+                      FII/DII Activity, Bulk Deals, Block Deals, and Option Strike Analysis
+                    </p>
+                  </div>
+                  <div className="inst-summary">
+                    <div className="inst-summary-card fii">
+                      <span className="inst-label">FII Net</span>
+                      <span className={`inst-value ${institutionalActivity.fii.net >= 0 ? 'positive' : 'negative'}`}>
+                        {institutionalActivity.fii.net >= 0 ? '+' : ''}{institutionalActivity.fii.net} Cr
+                      </span>
+                    </div>
+                    <div className="inst-summary-card dii">
+                      <span className="inst-label">DII Net</span>
+                      <span className={`inst-value ${institutionalActivity.dii.net >= 0 ? 'positive' : 'negative'}`}>
+                        {institutionalActivity.dii.net >= 0 ? '+' : ''}{institutionalActivity.dii.net} Cr
+                      </span>
+                    </div>
+                    <div className="inst-summary-card total">
+                      <span className="inst-label">Combined Net</span>
+                      <span className={`inst-value ${(institutionalActivity.fii.net + institutionalActivity.dii.net) >= 0 ? 'positive' : 'negative'}`}>
+                        {(institutionalActivity.fii.net + institutionalActivity.dii.net) >= 0 ? '+' : ''}{institutionalActivity.fii.net + institutionalActivity.dii.net} Cr
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* FII/DII DETAILED BREAKDOWN */}
+                <div className="institutional-section">
+                  <h3>📊 FII & DII Activity (Today)</h3>
+                  <div className="fii-dii-breakdown">
+                    <div className="breakdown-card">
+                      <h4>🌍 Foreign Institutional Investors (FII)</h4>
+                      <div className="breakdown-grid">
+                        <div className="breakdown-item">
+                          <span className="label">Buy</span>
+                          <span className="value positive">₹{institutionalActivity.fii.buy} Cr</span>
+                        </div>
+                        <div className="breakdown-item">
+                          <span className="label">Sell</span>
+                          <span className="value negative">₹{institutionalActivity.fii.sell} Cr</span>
+                        </div>
+                        <div className="breakdown-item highlight">
+                          <span className="label">Net</span>
+                          <span className={`value ${institutionalActivity.fii.net >= 0 ? 'positive' : 'negative'}`}>
+                            {institutionalActivity.fii.net >= 0 ? '+' : ''}₹{institutionalActivity.fii.net} Cr
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="breakdown-card">
+                      <h4>🏛️ Domestic Institutional Investors (DII)</h4>
+                      <div className="breakdown-grid">
+                        <div className="breakdown-item">
+                          <span className="label">Buy</span>
+                          <span className="value positive">₹{institutionalActivity.dii.buy} Cr</span>
+                        </div>
+                        <div className="breakdown-item">
+                          <span className="label">Sell</span>
+                          <span className="value negative">₹{institutionalActivity.dii.sell} Cr</span>
+                        </div>
+                        <div className="breakdown-item highlight">
+                          <span className="label">Net</span>
+                          <span className={`value ${institutionalActivity.dii.net >= 0 ? 'positive' : 'negative'}`}>
+                            {institutionalActivity.dii.net >= 0 ? '+' : ''}₹{institutionalActivity.dii.net} Cr
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* BULK DEALS */}
+                <div className="institutional-section">
+                  <h3>📦 Bulk Deals (Today)</h3>
+                  <p className="section-subtitle">Trades above 0.5% of total equity</p>
+                  <div className="deals-table-wrapper">
+                    <table className="deals-table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Stock</th>
+                          <th>Client Name</th>
+                          <th>Type</th>
+                          <th>Quantity</th>
+                          <th>Price (₹)</th>
+                          <th>Value (Cr)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bulkDeals.map((deal, idx) => (
+                          <tr key={idx} className={deal.type === 'BUY' ? 'buy-row' : 'sell-row'}>
+                            <td>{deal.date}</td>
+                            <td className="stock-name">{deal.stock}</td>
+                            <td className="client-name">{deal.client}</td>
+                            <td>
+                              <span className={`deal-type ${deal.type.toLowerCase()}`}>
+                                {deal.type === 'BUY' ? '🟢 BUY' : '🔴 SELL'}
+                              </span>
+                            </td>
+                            <td>{deal.quantity.toLocaleString()}</td>
+                            <td>₹{deal.price.toFixed(2)}</td>
+                            <td className="value-cell">₹{deal.value} Cr</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* BLOCK DEALS */}
+                <div className="institutional-section">
+                  <h3>🏢 Block Deals (Today)</h3>
+                  <p className="section-subtitle">Large institutional trades via separate window</p>
+                  <div className="deals-table-wrapper">
+                    <table className="deals-table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Stock</th>
+                          <th>Client Name</th>
+                          <th>Type</th>
+                          <th>Quantity</th>
+                          <th>Price (₹)</th>
+                          <th>Value (Cr)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {blockDeals.map((deal, idx) => (
+                          <tr key={idx} className={deal.type === 'BUY' ? 'buy-row' : 'sell-row'}>
+                            <td>{deal.date}</td>
+                            <td className="stock-name">{deal.stock}</td>
+                            <td className="client-name">{deal.client}</td>
+                            <td>
+                              <span className={`deal-type ${deal.type.toLowerCase()}`}>
+                                {deal.type === 'BUY' ? '🟢 BUY' : '🔴 SELL'}
+                              </span>
+                            </td>
+                            <td>{deal.quantity.toLocaleString()}</td>
+                            <td>₹{deal.price.toFixed(2)}</td>
+                            <td className="value-cell">₹{deal.value} Cr</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* OPTION STRIKE INSTITUTIONAL ACTIVITY */}
+                <div className="institutional-section">
+                  <h3>⚡ Option Strike Institutional Activity</h3>
+                  <p className="section-subtitle">FII/DII activity in option strikes</p>
+                  <div className="option-inst-table-wrapper">
+                    <table className="option-inst-table">
+                      <thead>
+                        <tr>
+                          <th>Strike</th>
+                          <th>Type</th>
+                          <th>FII OI</th>
+                          <th>FII Change</th>
+                          <th>DII OI</th>
+                          <th>DII Change</th>
+                          <th>Signal</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {optionInstitutionalActivity.map((row, idx) => (
+                          <tr key={idx}>
+                            <td className="strike-cell">{row.strike}</td>
+                            <td>
+                              <span className={`option-type ${row.type.toLowerCase()}`}>
+                                {row.type}
+                              </span>
+                            </td>
+                            <td>{(row.fiiOI / 1000).toFixed(0)}K</td>
+                            <td className={row.fiiChange.startsWith('+') ? 'positive' : 'negative'}>
+                              {row.fiiChange}
+                            </td>
+                            <td>{(row.diiOI / 1000).toFixed(0)}K</td>
+                            <td className={row.diiChange.startsWith('+') ? 'positive' : 'negative'}>
+                              {row.diiChange}
+                            </td>
+                            <td>
+                              {row.fiiChange.startsWith('+') && row.diiChange.startsWith('+') ? (
+                                <span className="signal bullish">🟢 Bullish</span>
+                              ) : row.fiiChange.startsWith('-') && row.diiChange.startsWith('-') ? (
+                                <span className="signal bearish">🔴 Bearish</span>
+                              ) : (
+                                <span className="signal neutral">⚪ Mixed</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="inst-footer">
+                  <p style={{color: 'var(--text-dim)', fontSize: '0.85rem'}}>
+                    📍 Data Source: NSE India • Updated: {institutionalActivity.lastUpdated.toLocaleTimeString()} • 
+                    Auto-refresh: Every 5 minutes
+                  </p>
+                  <p style={{color: '#F59E0B', fontSize: '0.85rem', marginTop: '0.5rem'}}>
+                    ⚠️ Note: This is sample data. Connect to NSE API for real-time institutional activity.
+                  </p>
+                </div>
+              </div>
+            )}
+
+
+            {/* EVENTS CALENDAR TAB */}
+            {activeHomeTab === 'events' && (
+              <div className="panel">
+                <h2>📅 Events Calendar</h2>
+                <p style={{color: 'var(--text-dim)', marginBottom: '1.5rem'}}>
+                  Upcoming market events, earnings, economic data, and expiry dates
+                </p>
+                
+                <div className="events-timeline">
+                  {events.sort((a, b) => new Date(a.date) - new Date(b.date)).map((event, idx) => {
+                    const eventDate = new Date(event.date);
+                    const isToday = eventDate.toDateString() === new Date().toDateString();
+                    const isPast = eventDate < new Date();
+                    
                     return (
-                      <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'var(--bg-surface)',borderRadius:'var(--radius-sm)',padding:'0.4rem 0.75rem',gap:'0.75rem'}}>
-                        <span style={{fontSize:'0.875rem',color:'var(--text-dim)',fontWeight:600}}>{r.label}</span>
-                        <div style={{textAlign:'right'}}>
-                          <span style={{fontSize:'0.95rem',fontWeight:800,color:r.chg!=null?chgCol:'var(--text-main)'}}>{r.val?.toLocaleString() || '—'}</span>
-                          {r.chg!=null && <span style={{fontSize:'0.75rem',color:chgCol,marginLeft:'5px'}}>{pos?'▲':'▼'}{Math.abs(r.chg||0).toFixed(2)}%</span>}
-                          {r.pcr && <span style={{fontSize:'0.75rem',color:pcrCol,marginLeft:'5px',fontWeight:700}}>{r.val>1.2?'BULL':r.val<0.8?'BEAR':'NEUT'}</span>}
-                          {r.vix && <span style={{fontSize:'0.75rem',color:vixCol,marginLeft:'5px'}}>{(r.val||14)<13?'LOW':(r.val||14)>18?'HIGH':'MOD'}</span>}
+                      <div key={idx} className={`event-card ${event.impact} ${isToday ? 'today' : ''} ${isPast ? 'past' : ''}`}>
+                        <div className="event-date">
+                          <div className="event-day">{eventDate.getDate()}</div>
+                          <div className="event-month">{eventDate.toLocaleDateString('en-US', { month: 'short' })}</div>
+                        </div>
+                        <div className="event-details">
+                          <div className="event-header">
+                            <span className={`event-type ${event.type}`}>
+                              {event.type === 'earnings' && '📊'}
+                              {event.type === 'economy' && '🏛️'}
+                              {event.type === 'expiry' && '⏰'}
+                              {' '}{event.type.toUpperCase()}
+                            </span>
+                            <span className={`event-impact ${event.impact}`}>
+                              {event.impact === 'high' && '🔥 HIGH IMPACT'}
+                              {event.impact === 'medium' && '⚡ MEDIUM IMPACT'}
+                              {event.impact === 'low' && '📍 LOW IMPACT'}
+                            </span>
+                          </div>
+                          <h3 className="event-title">{event.title}</h3>
+                          {event.company && <p className="event-company">{event.company}</p>}
                         </div>
                       </div>
                     );
                   })}
-                  <button onClick={()=>fetchLivePrices()} disabled={isPriceLoading} className="btn-secondary" style={{marginTop:'0.25rem',fontSize:'0.875rem',padding:'0.3rem'}}>
-                    {isPriceLoading ? '⟳ Loading…' : '⟳ Refresh'}
-                  </button>
                 </div>
-
               </div>
-            </div>
+            )}
 
-
-            
-            {/* ══ TRACK YOUR INDICES & STOCKS ══ */}
-            <div className="panel" style={{marginBottom:'1.5rem'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem'}}>
-                <h3 style={{margin:0}}>📊 Track Your Indices &amp; Stocks</h3>
-                <button onClick={fetchLivePrices} disabled={isPriceLoading} style={{background:'transparent',border:'1px solid var(--border-light)',color:'var(--accent)',borderRadius:'6px',padding:'0.3rem 0.85rem',fontSize:'0.875rem',cursor:'pointer',fontFamily:'inherit'}}>
-                  {isPriceLoading ? '⟳ Loading…' : '🔄 Refresh'}
-                </button>
-              </div>
-
-              {/* Tab switcher */}
-              <div style={{display:'flex',borderBottom:'1px solid var(--border)',marginBottom:'1.25rem'}}>
-                {[['nse','📊 NSE'],['bse','🏦 BSE'],['stocks','🏢 Stocks']].map(([key,label])=>(
-                  <button key={key} onClick={()=>setWatchTab(key)} style={{background:'none',border:'none',borderBottom:watchTab===key?'2px solid var(--accent)':'2px solid transparent',color:watchTab===key?'var(--accent)':'var(--text-dim)',padding:'0.5rem 1.25rem',fontWeight:watchTab===key?700:500,fontSize:'0.95rem',cursor:'pointer',fontFamily:'inherit',marginBottom:'-1px'}}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {/* NSE TAB */}
-              {watchTab==='nse' && (
-                <div>
-                  <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'1rem',flexWrap:'wrap'}}>
-                    <select value="" onChange={e=>{if(e.target.value&&!watchNSE.includes(e.target.value))setWatchNSE(p=>[...p,e.target.value]);}} style={{background:'var(--bg-surface)',border:'1px solid var(--border-light)',color:'var(--text-main)',borderRadius:'8px',padding:'0.45rem 0.85rem',fontSize:'0.875rem',cursor:'pointer',minWidth:'210px',fontFamily:'inherit'}}>
-                      <option value="">+ Add NSE Index</option>
-                      {['Nifty 50','Bank Nifty','Nifty IT','Nifty Pharma','Nifty Auto','Nifty Financial Services','Nifty FMCG','Nifty Metal','Nifty Realty','Nifty Energy','Nifty Midcap 50','Nifty Smallcap 50','Nifty Next 50','Nifty 100','Nifty 200'].filter(n=>!watchNSE.includes(n)).map(n=>(
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
-                    <span style={{fontSize:'0.875rem',color:'var(--text-muted)'}}>Click × on a card to remove</span>
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:'0.75rem'}}>
-                    {watchNSE.length===0 && <div style={{color:'var(--text-muted)',fontSize:'0.875rem',gridColumn:'1/-1'}}>Add indices from dropdown above.</div>}
-                    {watchNSE.map(name=>{
-                      const val=livePrices[name];
-                      const chg=liveChanges[name]; // may be 0, which is valid
-                      const prev=livePrevClose[name];
-                      const pos=(chg||0)>=0;
-                      const pts=val&&chg!=null?Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0):(val&&prev?Math.abs(val-prev).toFixed(0):null);
-                      const border=val!=null?(pos?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'):'var(--border)';
-                      return (
-                        <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+border,borderRadius:'12px',padding:'0.9rem 1rem',position:'relative'}}>
-                          <button onClick={()=>setWatchNSE(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.35rem',right:'0.5rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
-                          <div style={{fontSize:'0.75rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.3rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
-                          <div style={{fontSize:'1.25rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em'}}>{val!=null ? val.toLocaleString() : <span style={{fontSize:'0.875rem',color:'var(--text-muted)'}}>Loading…</span>}</div>
-                          {val!=null && (
-                            <div style={{marginTop:'0.3rem'}}>
-                              {chg!=null ? (
-                                <div style={{display:'flex',gap:'0.4rem',alignItems:'baseline'}}>
-                                  <span style={{fontSize:'0.875rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
-                                  {pts && <span style={{fontSize:'0.875rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}{pts} pts</span>}
-                                </div>
-                              ) : <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>—</div>}
-                              {prev && <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.1rem'}}>Prev: {prev.toLocaleString()}</div>}
-                            </div>
-                          )}
-                          {val==null && <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* BSE TAB */}
-              {watchTab==='bse' && (
-                <div>
-                  <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'1rem',flexWrap:'wrap'}}>
-                    <select value="" onChange={e=>{if(e.target.value&&!watchBSE.includes(e.target.value))setWatchBSE(p=>[...p,e.target.value]);}} style={{background:'var(--bg-surface)',border:'1px solid var(--border-light)',color:'var(--text-main)',borderRadius:'8px',padding:'0.45rem 0.85rem',fontSize:'0.875rem',cursor:'pointer',minWidth:'210px',fontFamily:'inherit'}}>
-                      <option value="">+ Add BSE Index</option>
-                      {['Sensex','BSE 100','BSE 200','BSE 500','BSE Midcap','BSE Smallcap'].filter(n=>!watchBSE.includes(n)).map(n=>(
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
-                    <span style={{fontSize:'0.875rem',color:'var(--text-muted)'}}>Click × on a card to remove</span>
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:'0.75rem'}}>
-                    {watchBSE.length===0 && <div style={{color:'var(--text-muted)',fontSize:'0.875rem',gridColumn:'1/-1'}}>Add indices from dropdown above.</div>}
-                    {watchBSE.map(name=>{
-                      const val=livePrices[name];
-                      const chg=liveChanges[name];
-                      const prev=livePrevClose[name];
-                      const pos=(chg||0)>=0;
-                      const pts=val&&chg!=null?Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0):(val&&prev?Math.abs(val-prev).toFixed(0):null);
-                      const border=val!=null?(pos?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'):'var(--border)';
-                      return (
-                        <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+border,borderRadius:'12px',padding:'0.9rem 1rem',position:'relative'}}>
-                          <button onClick={()=>setWatchBSE(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.35rem',right:'0.5rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
-                          <div style={{fontSize:'0.75rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.3rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
-                          <div style={{fontSize:'1.25rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em'}}>{val!=null ? val.toLocaleString() : <span style={{fontSize:'0.875rem',color:'var(--text-muted)'}}>Loading…</span>}</div>
-                          {val!=null && (
-                            <div style={{marginTop:'0.3rem'}}>
-                              {chg!=null ? (
-                                <div style={{display:'flex',gap:'0.4rem',alignItems:'baseline'}}>
-                                  <span style={{fontSize:'0.875rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
-                                  {pts && <span style={{fontSize:'0.875rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}{pts} pts</span>}
-                                </div>
-                              ) : <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>—</div>}
-                              {prev && <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.1rem'}}>Prev: {prev.toLocaleString()}</div>}
-                            </div>
-                          )}
-                          {val==null && <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* STOCKS TAB */}
-              {watchTab==='stocks' && (
-                <div>
-                  <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'1rem',flexWrap:'wrap'}}>
-                    <select value="" onChange={e=>{if(e.target.value&&!watchStocks.includes(e.target.value))setWatchStocks(p=>[...p,e.target.value]);}} style={{background:'var(--bg-surface)',border:'1px solid var(--border-light)',color:'var(--text-main)',borderRadius:'8px',padding:'0.45rem 0.85rem',fontSize:'0.875rem',cursor:'pointer',minWidth:'210px',fontFamily:'inherit'}}>
-                      <option value="">+ Add FNO Stock</option>
-                      {['Reliance','TCS','HDFC Bank','Infosys','ICICI Bank','Bharti Airtel','ITC','SBI','LT','Kotak Bank','HCL Tech','Axis Bank','Maruti Suzuki','Titan','Bajaj Finance','Wipro','Sun Pharma','Tata Motors','Asian Paints','Adani Ports','ONGC','NTPC','Power Grid','M&M','Tech Mahindra','Bajaj Auto','Hero MotoCorp','Eicher Motors','Dr Reddy','Cipla','Tata Steel','JSW Steel','Coal India','Hindalco','Britannia'].filter(n=>!watchStocks.includes(n)).map(n=>(
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
-                    <span style={{fontSize:'0.875rem',color:'var(--text-muted)'}}>Click × on a card to remove</span>
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:'0.85rem'}}>
-                    {watchStocks.length===0 && <div style={{color:'var(--text-muted)',fontSize:'0.875rem',gridColumn:'1/-1'}}>Add stocks from dropdown above.</div>}
-                    {watchStocks.map(name=>{
-                      const val=livePrices[name];
-                      const chg=liveChanges[name];
-                      const prev=livePrevClose[name];
-                      const pos=(chg||0)>=0;
-                      const pts=val&&chg!=null?Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0):(val&&prev?Math.abs(val-prev).toFixed(0):null);
-                      // Find AI insight for this stock from news
-                      const newsHit=intelligentNews.find(n=>n.analysis?.affectedStocks?.some(s=>s.toLowerCase().includes(name.toLowerCase()))||n.title.toLowerCase().includes(name.toLowerCase().split(' ')[0]));
-                      const sentiment=newsHit?.analysis?.sentiment;
-                      const sentColor=sentiment==='bullish'?'var(--green)':sentiment==='bearish'?'var(--red)':'var(--text-muted)';
-                      const sentEmoji=sentiment==='bullish'?'🟢':sentiment==='bearish'?'🔴':'⚪';
-                      return (
-                        <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+(val!=null?(pos?'rgba(74,222,128,0.22)':'rgba(248,113,113,0.22)'):'var(--border)'),borderRadius:'12px',padding:'1rem',position:'relative'}}>
-                          <button onClick={()=>setWatchStocks(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.4rem',right:'0.6rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
-                          {/* Stock name + price */}
-                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'0.5rem',paddingRight:'1rem'}}>
-                            <div style={{fontSize:'0.875rem',color:'var(--text-dim)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
-                            {val!=null&&chg!=null && <div style={{fontSize:'0.75rem',background:pos?'rgba(74,222,128,0.12)':'rgba(248,113,113,0.12)',color:pos?'var(--green)':'var(--red)',padding:'1px 6px',borderRadius:'4px',fontWeight:700}}>{pos?'▲':'▼'}{Math.abs(chg).toFixed(2)}%</div>}
-                          </div>
-                          <div style={{fontSize:'1.4rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em',marginBottom:'0.2rem'}}>
-                            {val!=null ? '₹'+val.toLocaleString() : <span style={{fontSize:'0.875rem',color:'var(--text-muted)'}}>Loading…</span>}
-                          </div>
-                          <div style={{marginBottom:'0.6rem'}}>
-                            {val!=null&&chg!=null ? (
-                              <span style={{fontSize:'0.875rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}₹{pts} pts vs prev close {prev?'('+prev.toLocaleString()+')':''}</span>
-                            ) : val!=null ? (
-                              <span style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>Click Refresh for change data</span>
-                            ) : null}
-                          </div>
-                          {/* AI Report Card */}
-                          <div style={{borderTop:'1px solid var(--border)',paddingTop:'0.5rem',marginTop:'0.25rem'}}>
-                            <div style={{fontSize:'0.75rem',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.05em',marginBottom:'0.3rem'}}>🤖 AI SIGNAL</div>
-                            {newsHit ? (
-                              <div>
-                                <div style={{display:'flex',alignItems:'center',gap:'0.35rem',marginBottom:'0.25rem'}}>
-                                  <span style={{fontSize:'0.875rem',fontWeight:700,color:sentColor}}>{sentEmoji} {(sentiment||'neutral').toUpperCase()}</span>
-                                  {newsHit.analysis?.impact==='high' && <span style={{fontSize:'0.75rem',background:'rgba(239,68,68,0.12)',color:'var(--red)',padding:'1px 5px',borderRadius:'4px',fontWeight:600}}>HIGH IMPACT</span>}
-                                </div>
-                                <div style={{fontSize:'0.75rem',color:'var(--text-dim)',lineHeight:1.4}}>
-                                  {newsHit.analysis?.keyInsight ? newsHit.analysis.keyInsight.slice(0,80)+'…' : newsHit.title.slice(0,70)+'…'}
-                                </div>
-                                {newsHit.analysis?.tradingIdea?.strategy && (
-                                  <div style={{fontSize:'0.75rem',color:'var(--accent)',marginTop:'0.3rem',fontWeight:600}}>Strategy: {newsHit.analysis.tradingIdea.strategy}</div>
-                                )}
-                              </div>
-                            ) : (
-                              <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>No news signal today</div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* ══ TOP GAINERS & TOP LOSERS ══ */}
-            {(()=>{
-              const STOCKS=['Reliance','TCS','HDFC Bank','Infosys','ICICI Bank','Bharti Airtel','ITC','SBI','LT','Kotak Bank','HCL Tech','Axis Bank','Maruti Suzuki','Titan','Bajaj Finance','Wipro','Sun Pharma','Tata Motors','Adani Ports','NTPC'];
-              const withData=STOCKS.filter(s=>livePrices[s]!=null&&liveChanges[s]!=null).map(s=>({name:s,value:livePrices[s],change:liveChanges[s]}));
-              const gainers=[...withData].sort((a,b)=>b.change-a.change).slice(0,5);
-              const losers=[...withData].sort((a,b)=>a.change-b.change).slice(0,5);
-              const renderRow=(s,isGainer)=>{
-                const pts=Math.abs(((s.change/100)*s.value)/(1+s.change/100)).toFixed(0);
-                const col=isGainer?'var(--green)':'var(--red)';
-                return (
-                  <div key={s.name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.55rem 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
-                    <div>
-                      <div style={{fontSize:'0.875rem',fontWeight:600,color:'var(--text-main)'}}>{s.name}</div>
-                      <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{'₹'+s.value.toLocaleString()}</div>
-                    </div>
-                    <div style={{textAlign:'right'}}>
-                      <div style={{fontSize:'0.9rem',fontWeight:700,color:col}}>{isGainer?'▲':'▼'} {Math.abs(s.change).toFixed(2)}%</div>
-                      <div style={{fontSize:'0.75rem',color:col,opacity:0.8}}>{isGainer?'+':'−'}{'₹'+pts+' pts'}</div>
-                    </div>
-                  </div>
-                );
-              };
-              return (
-                <div className="gainers-losers-grid" style={{display:'grid',gap:'1rem',marginBottom:'1.5rem'}}>
-                  <div style={{background:'var(--bg-card)',border:'1px solid rgba(74,222,128,0.2)',borderRadius:'16px',padding:'1.25rem'}}>
-                    <div style={{fontSize:'0.875rem',fontWeight:700,color:'var(--green)',letterSpacing:'0.06em',marginBottom:'0.85rem',textTransform:'uppercase'}}>🚀 Top Gainers</div>
-                    {withData.length===0 ? (
-                      <div style={{color:'var(--text-muted)',fontSize:'0.875rem',padding:'0.5rem 0'}}>Click Refresh above to load data</div>
-                    ) : gainers.map(s=>renderRow(s,true))}
-                  </div>
-                  <div style={{background:'var(--bg-card)',border:'1px solid rgba(248,113,113,0.2)',borderRadius:'16px',padding:'1.25rem'}}>
-                    <div style={{fontSize:'0.875rem',fontWeight:700,color:'var(--red)',letterSpacing:'0.06em',marginBottom:'0.85rem',textTransform:'uppercase'}}>📉 Top Losers</div>
-                    {withData.length===0 ? (
-                      <div style={{color:'var(--text-muted)',fontSize:'0.875rem',padding:'0.5rem 0'}}>Click Refresh above to load data</div>
-                    ) : losers.map(s=>renderRow(s,false))}
-                  </div>
-                </div>
-              );
-            })()}
-
-                        {/* Market data → go to Markets tab */}
-
-            {/* ══ 6 INSIGHT CARDS ══ */}
-            <div className="insight-cards-grid" style={{display:'grid',gap:'1rem',marginBottom:'2rem'}}>
-
-              {/* CARD 1 — EXPIRY COUNTDOWN */}
-              {(()=>{
-                const now = new Date();
-                const msInDay = 86400000;
-                const getNext = (dow) => {
-                  const d = new Date(now);
-                  const diff = (dow - d.getDay() + 7) % 7 || 7;
-                  d.setDate(d.getDate() + diff);
-                  d.setHours(15,30,0,0);
-                  return d;
-                };
-                const rows = [
-                  {sym:'NIFTY',   label:'NIFTY Weekly',    d:getNext(4), col:'#4ade80'},
-                  {sym:'BNKNIFTY',label:'BANKNIFTY Weekly',d:getNext(2), col:'#60a5fa'},
-                  {sym:'FINNIFTY',label:'FINNIFTY Weekly', d:getNext(2), col:'#f59e0b'},
-                  {sym:'MONTHLY', label:'Monthly Expiry',  d:getNext(4), col:'#c084fc'},
-                ];
-                return (
-                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'1.25rem'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'1rem'}}>
-                      <span>⏳</span>
-                      <span style={{fontWeight:700,fontSize:'0.95rem'}}>Expiry Countdown</span>
-                    </div>
-                    {rows.map((r,i)=>{
-                      const ms   = r.d - now;
-                      const days = Math.floor(ms / msInDay);
-                      const hrs  = Math.floor((ms % msInDay) / 3600000);
-                      const mins = Math.floor((ms % 3600000) / 60000);
-                      const urgent = days < 1;
-                      return (
-                        <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.5rem 0.75rem',background:'var(--bg-surface)',borderRadius:'var(--radius-sm)',border:'1px solid var(--border)',marginBottom:'0.4rem'}}>
-                          <div>
-                            <div style={{fontSize:'0.875rem',fontWeight:700,color:r.col}}>{r.sym}</div>
-                            <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{r.label}</div>
-                          </div>
-                          <div style={{textAlign:'right'}}>
-                            <div style={{fontSize:'1.1rem',fontWeight:800,color:urgent?'#f87171':r.col}}>
-                              {days > 0 ? (days + 'd ' + hrs + 'h') : (hrs + 'h ' + mins + 'm')}
-                            </div>
-                            {urgent && <div style={{fontSize:'0.75rem',color:'var(--red)',fontWeight:700}}>TODAY</div>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-
-              {/* CARD 2 — F&amp;O BAN LIST */}
-              <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'1.25rem'}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
-                    <span>🚫</span>
-                    <span style={{fontWeight:700,fontSize:'0.95rem'}}>F&amp;O Ban List</span>
-                  </div>
-                  <button onClick={fetchBanList} style={{background:'none',border:'1px solid var(--border)',color:'var(--accent)',borderRadius:'5px',padding:'2px 8px',fontSize:'0.75rem',cursor:'pointer'}}>
-                    {banLoading ? '…' : '↻ Refresh'}
-                  </button>
-                </div>
-                {banLoading ? (
-                  <div style={{color:'var(--text-muted)',fontSize:'0.875rem'}}>Fetching from NSE…</div>
-                ) : banList.length > 0 ? (
+            {/* BUSINESS NEWS TAB */}
+            {activeHomeTab === 'business-news' && (
+              <div className="panel">
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem'}}>
                   <div>
-                    <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginBottom:'0.5rem'}}>Stocks in ban — no fresh F&amp;O positions allowed</div>
-                    <div style={{display:'flex',flexWrap:'wrap',gap:'0.4rem'}}>
-                      {banList.map((s,i) => (
-                        <span key={i} style={{background:'var(--red-dim)',border:'1px solid rgba(248,113,113,0.3)',color:'var(--red)',borderRadius:'6px',padding:'3px 8px',fontSize:'0.875rem',fontWeight:700}}>{s}</span>
-                      ))}
-                    </div>
+                    <h2>📰 Business News</h2>
+                    <p style={{color: 'var(--text-dim)', marginTop: '0.5rem'}}>
+                      Latest business, economy, and market news
+                    </p>
                   </div>
-                ) : banFetched ? (
-                  <div style={{textAlign:'center',padding:'0.75rem'}}>
-                    <div style={{fontSize:'1.4rem'}}>✅</div>
-                    <div style={{fontSize:'0.875rem',color:'var(--green)',fontWeight:600}}>No stocks in ban today</div>
-                    <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>All F&amp;O stocks tradeable</div>
+                  <button className="btn-action" onClick={fetchBusinessNews} disabled={isLoadingBusinessNews}>
+                    {isLoadingBusinessNews ? '⏳' : '🔄'} Refresh
+                  </button>
+                </div>
+
+                {isLoadingBusinessNews && businessNews.length === 0 ? (
+                  <div style={{textAlign: 'center', padding: '3rem', color: 'var(--text-dim)'}}>
+                    <p>Loading business news...</p>
                   </div>
                 ) : (
-                  <div style={{color:'var(--text-muted)',fontSize:'0.875rem'}}>Click Refresh to load…</div>
-                )}
-              </div>
-
-              {/* CARD 3 — MARKET MOOD-O-METER */}
-              {(()=>{
-                const vix = marketData.nifty?.vix || 14.5;
-                const pcr = pcrData?.pcr || 1.0;
-                const spot = marketData.nifty?.value || 23500;
-                const prev = livePrevClose['Nifty 50'] || spot;
-                let score = 50;
-                if (vix > 22) { score -= 20; } else if (vix > 18) { score -= 10; } else if (vix < 12) { score += 15; } else if (vix < 15) { score += 8; }
-                if (pcr > 1.4) { score += 15; } else if (pcr > 1.2) { score += 8; } else if (pcr < 0.7) { score -= 15; } else if (pcr < 0.9) { score -= 8; }
-                if (spot > prev) { score += 8; } else if (spot < prev) { score -= 8; }
-                score = Math.max(0, Math.min(100, score));
-                const label = score < 20 ? 'Extreme Fear' : score < 40 ? 'Fear' : score < 60 ? 'Neutral' : score < 80 ? 'Greed' : 'Extreme Greed';
-                const col   = score < 20 ? '#ef4444' : score < 40 ? '#f87171' : score < 60 ? '#fbbf24' : score < 80 ? '#4ade80' : '#22c55e';
-                const zones = [
-                  {label:'Extreme Fear',pct:20,col:'#ef4444'},
-                  {label:'Fear',        pct:20,col:'#f87171'},
-                  {label:'Neutral',     pct:20,col:'#fbbf24'},
-                  {label:'Greed',       pct:20,col:'#4ade80'},
-                  {label:'Extreme Greed',pct:20,col:'#22c55e'},
-                ];
-                const activeZone = Math.min(4, Math.floor(score / 20));
-                return (
-                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'1.25rem'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'1rem'}}>
-                      <span>🎯</span>
-                      <span style={{fontWeight:700,fontSize:'0.95rem'}}>Market Mood-O-Meter</span>
-                    </div>
-                    <div style={{textAlign:'center',marginBottom:'1rem'}}>
-                      <div style={{fontSize:'2rem',fontWeight:900,color:col}}>{label}</div>
-                      <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.2rem'}}>Score: {Math.round(score)}/100 · VIX {vix} · PCR {pcr}</div>
-                    </div>
-                    <div style={{display:'flex',borderRadius:'var(--radius-sm)',overflow:'hidden',height:'12px',marginBottom:'0.75rem'}}>
-                      {zones.map((z,i) => (
-                        <div key={i} style={{flex:1,background:z.col,opacity:i===activeZone?1:0.3,transition:'opacity 0.3s'}}/>
-                      ))}
-                    </div>
-                    <div style={{display:'flex',justifyContent:'space-between'}}>
-                      {zones.map((z,i) => (
-                        <div key={i} style={{fontSize:'0.75rem',color:i===activeZone?z.col:'var(--text-muted)',fontWeight:i===activeZone?700:400,textAlign:'center',flex:1}}>{z.label}</div>
-                      ))}
-                    </div>
-                    <div style={{marginTop:'0.75rem',display:'flex',gap:'0.5rem',justifyContent:'center',flexWrap:'wrap'}}>
-                      {[['VIX',vix,'#f87171'],['PCR',pcr,'#4ade80'],['Score',Math.round(score),'#60a5fa']].map(([k,v,c],i)=>(
-                        <div key={i} style={{background:'var(--bg-surface)',borderRadius:'6px',padding:'0.3rem 0.6rem',textAlign:'center'}}>
-                          <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{k}</div>
-                          <div style={{fontSize:'0.875rem',fontWeight:700,color:c}}>{v}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* CARD 4 — OPEN POSITIONS */}
-              {(()=>{
-                const openTrades = tradeLog.filter(t => !t.exitPrice || t.exitPrice === '');
-                let totalPnl = 0;
-                openTrades.forEach(t => {
-                  const ltp = livePrices[t.symbol] || 0;
-                  const entry = parseFloat(t.entryPrice) || 0;
-                  if (ltp && entry) {
-                    totalPnl += (ltp - entry) * (t.action === 'BUY' ? 1 : -1) * (parseInt(t.qty) || 1) * 50;
-                  }
-                });
-                const pnlPos = totalPnl >= 0;
-                return (
-                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'1.25rem'}}>
-                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
-                        <span>💼</span>
-                        <span style={{fontWeight:700,fontSize:'0.95rem'}}>Open Positions</span>
-                      </div>
-                      <button onClick={() => setActiveTab('journal')} style={{background:'none',border:'1px solid var(--border)',color:'var(--accent)',borderRadius:'5px',padding:'2px 10px',fontSize:'0.75rem',cursor:'pointer'}}>Journal →</button>
-                    </div>
-                    {openTrades.length === 0 ? (
-                      <div style={{textAlign:'center',padding:'0.75rem',color:'var(--text-muted)'}}>
-                        <div style={{fontSize:'1.4rem',marginBottom:'0.3rem'}}>📭</div>
-                        <div style={{fontSize:'0.875rem'}}>No open positions</div>
-                        <div style={{fontSize:'0.75rem',marginTop:'0.2rem'}}>Add trades in Journal tab</div>
-                      </div>
-                    ) : (
-                      <div>
-                        <div style={{background:pnlPos?'rgba(74,222,128,0.08)':'rgba(248,113,113,0.08)',border:'1px solid '+(pnlPos?'rgba(74,222,128,0.2)':'rgba(248,113,113,0.2)'),borderRadius:'10px',padding:'0.75rem',marginBottom:'0.75rem',textAlign:'center'}}>
-                          <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginBottom:'0.2rem'}}>UNREALISED P&amp;L</div>
-                          <div style={{fontSize:'1.4rem',fontWeight:800,color:pnlPos?'var(--green)':'var(--red)'}}>{pnlPos?'+':'-'}&#8377;{Math.abs(Math.round(totalPnl)).toLocaleString()}</div>
-                          <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{openTrades.length} open {openTrades.length === 1 ? 'position' : 'positions'}</div>
-                        </div>
-                        <div style={{display:'flex',flexDirection:'column',gap:'0.4rem',maxHeight:'150px',overflowY:'auto'}}>
-                          {openTrades.slice(0,5).map((t,i) => {
-                            const ltp   = livePrices[t.symbol] || 0;
-                            const entry = parseFloat(t.entryPrice) || 0;
-                            const lots  = parseInt(t.qty) || 1;
-                            const pnl   = ltp && entry ? (ltp - entry) * (t.action === 'BUY' ? 1 : -1) * lots * 50 : null;
-                            return (
-                              <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.35rem 0.5rem',background:'var(--bg-surface)',borderRadius:'6px'}}>
-                                <div>
-                                  <span style={{fontSize:'0.875rem',fontWeight:700}}>{t.symbol} {t.type}</span>
-                                  <span style={{fontSize:'0.75rem',color:t.action==='BUY'?'var(--green)':'var(--red)',marginLeft:'6px'}}>{t.action}</span>
-                                </div>
-                                <span style={{fontSize:'0.875rem',fontWeight:700,color:pnl==null?'var(--text-muted)':pnl>=0?'var(--green)':'var(--red)'}}>
-                                  {pnl == null ? 'No LTP' : ((pnl >= 0 ? '+' : '-') + '&#8377;' + Math.abs(Math.round(pnl)).toLocaleString())}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* CARD 5 — ECONOMIC CALENDAR */}
-              {(()=>{
-                const now  = new Date();
-                const yr   = now.getFullYear();
-                const mo   = now.getMonth();
-                const evts = [
-                  {date:new Date(yr,mo,6),  label:'RBI MPC Decision',    impact:'HIGH',   icon:'🏦'},
-                  {date:new Date(yr,mo,10), label:'US CPI Release',       impact:'HIGH',   icon:'🇺🇸'},
-                  {date:new Date(yr,mo,15), label:'India WPI Data',       impact:'MED',    icon:'📊'},
-                  {date:new Date(yr,mo,20), label:'US Fed Meeting',       impact:'HIGH',   icon:'💵'},
-                  {date:new Date(yr,mo,25), label:'F&amp;O Monthly Expiry',impact:'HIGH',  icon:'⏰'},
-                  {date:new Date(yr,mo+1,1),label:'GDP Data Release',     impact:'HIGH',   icon:'📈'},
-                  {date:new Date(yr,mo+1,5),label:'RBI Policy Review',    impact:'MED',    icon:'🏦'},
-                ].map(e => ({...e, days: Math.ceil((e.date - now) / 86400000)}))
-                 .filter(e => e.days >= -1)
-                 .sort((a,b) => a.days - b.days)
-                 .slice(0, 6);
-                return (
-                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'1.25rem'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'1rem'}}>
-                      <span>📅</span>
-                      <span style={{fontWeight:700,fontSize:'0.95rem'}}>Economic Calendar</span>
-                    </div>
-                    {evts.map((e,i) => (
-                      <div key={i} style={{display:'flex',alignItems:'center',gap:'0.75rem',padding:'0.45rem 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
-                        <span style={{fontSize:'1.1rem',flexShrink:0}}>{e.icon}</span>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:'0.875rem',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.label}</div>
-                          <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{e.date.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</div>
-                        </div>
-                        <div style={{textAlign:'right',flexShrink:0}}>
-                          <div style={{fontSize:'0.75rem',fontWeight:700,color:e.impact==='HIGH'?'#f87171':'#fbbf24'}}>{e.impact}</div>
-                          <div style={{fontSize:'0.75rem',color:e.days<=0?'#f87171':e.days<=3?'#fbbf24':'var(--text-muted)',fontWeight:e.days<=1?700:400}}>
-                            {e.days <= 0 ? 'TODAY' : e.days === 1 ? 'Tomorrow' : (e.days + 'd away')}
+                  <div className="business-news-grid">
+                    {businessNews.map(news => (
+                      <div key={news.id} className="business-news-card">
+                        {news.image && (
+                          <img src={news.image} alt={news.title} className="news-image" onError={(e) => e.target.style.display = 'none'} />
+                        )}
+                        <div className="news-card-content">
+                          <div className="news-card-header">
+                            <span className="news-card-source">{news.source}</span>
+                            <span className="news-card-time">{formatNewsTime(news.publishedAt)}</span>
                           </div>
+                          <h3 className="news-card-title">{news.title}</h3>
+                          {news.description && (
+                            <p className="news-card-description">{news.description.slice(0, 150)}...</p>
+                          )}
+                          <a href={news.url} target="_blank" rel="noopener noreferrer" className="news-card-link">
+                            Read more →
+                          </a>
                         </div>
                       </div>
                     ))}
                   </div>
-                );
-              })()}
+                )}
+              </div>
+            )}
 
-              {/* CARD 6 — UNUSUAL OI ACTIVITY */}
-              {(()=>{
-                const spot = marketData.nifty?.value || 23500;
-                const unusual = liveOptionChain
-                  .filter(r => r.strike && (r.ce?.oi > 0 || r.pe?.oi > 0))
-                  .map(r => {
-                    const pr    = prevOI[r.strike];
-                    const ceOI  = r.ce?.oi || 0;
-                    const peOI  = r.pe?.oi || 0;
-                    const cePrv = pr?.ce || ceOI;
-                    const pePrv = pr?.pe || peOI;
-                    const ceChg = cePrv > 0 ? Math.round(((ceOI - cePrv) / cePrv) * 100) : 0;
-                    const peChg = pePrv > 0 ? Math.round(((peOI - pePrv) / pePrv) * 100) : 0;
-                    const side  = Math.abs(ceChg) >= Math.abs(peChg) ? 'CE' : 'PE';
-                    const chg   = side === 'CE' ? ceChg : peChg;
-                    const oi    = side === 'CE' ? ceOI  : peOI;
-                    return {strike: r.strike, side, chg, oi};
-                  })
-                  .filter(r => Math.abs(r.chg) >= 15)
-                  .sort((a,b) => Math.abs(b.chg) - Math.abs(a.chg))
-                  .slice(0, 6);
-                return (
-                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'1.25rem'}}>
-                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
-                        <span>🔥</span>
-                        <span style={{fontWeight:700,fontSize:'0.95rem'}}>Unusual OI Activity</span>
-                      </div>
-                      <span style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>&#8805;15% OI change</span>
-                    </div>
-                    {liveOptionChain.length === 0 ? (
-                      <div style={{textAlign:'center',padding:'1rem',color:'var(--text-muted)'}}>
-                        <div style={{fontSize:'0.875rem',marginBottom:'0.5rem'}}>Load option chain in Markets tab first</div>
-                        <button onClick={() => setActiveTab('markets')} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'5px',padding:'4px 12px',fontSize:'0.875rem',cursor:'pointer'}}>Go to Markets</button>
-                      </div>
-                    ) : unusual.length === 0 ? (
-                      <div style={{textAlign:'center',padding:'1rem',color:'var(--text-muted)',fontSize:'0.875rem'}}>
-                        <div style={{fontSize:'1.25rem',marginBottom:'0.3rem'}}>😴</div>
-                        <div>No unusual activity yet</div>
-                        <div style={{fontSize:'0.75rem',marginTop:'0.2rem'}}>Updates every 10s with option chain</div>
-                      </div>
-                    ) : (
-                      <div style={{display:'flex',flexDirection:'column',gap:'0.45rem'}}>
-                        {unusual.map((u,i) => {
-                          const isUp  = u.chg > 0;
-                          const col   = u.side === 'CE' ? '#f87171' : '#4ade80';
-                          const sig   = isUp ? (u.side === 'CE' ? '🚧 Resistance building' : '🛡️ Support building') : (u.side === 'CE' ? '📉 CE unwinding' : '📈 PE unwinding');
-                          return (
-                            <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.45rem 0.6rem',background:'var(--bg-surface)',borderRadius:'var(--radius-sm)',borderLeft:'3px solid '+col}}>
-                              <div>
-                                <div style={{fontSize:'0.875rem',fontWeight:700}}>{u.strike.toLocaleString()} {u.side}</div>
-                                <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{sig}</div>
+            {activeHomeTab === 'news' && (
+              <div className="panel">
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem'}}>
+                  <h2>🎯 Intelligent News Feed</h2>
+                  <span className="live-indicator">🟢 Live - Updates every 30s</span>
+                </div>
+                {isLoadingNews && intelligentNews.length === 0 ? (
+                  <div style={{textAlign: 'center', padding: '3rem', color: 'var(--text-dim)'}}>
+                    <p>Loading intelligent news analysis...</p>
+                  </div>
+                ) : (
+                  <div className="intelligent-news-feed">
+                    {intelligentNews.map(news => (
+                      <div key={news.id} className="intelligent-news-card">
+                        <div className="news-main-header">
+                          <h3 className="intelligent-news-title">{news.title}</h3>
+                          <div className="news-meta">
+                            <span className="news-source">{news.source}</span>
+                            <span className="news-time">{formatNewsTime(news.publishedAt)}</span>
+                          </div>
+                        </div>
+                        <div className="news-tags">
+                          <span className={`sentiment-tag ${news.analysis.sentiment}`}>
+                            {news.analysis.sentiment === 'bullish' ? '🟢 BULLISH' :
+                             news.analysis.sentiment === 'bearish' ? '🔴 BEARISH' : '⚪ NEUTRAL'}
+                          </span>
+                          <span className={`impact-tag ${news.analysis.impact}`}>
+                            {news.analysis.impact === 'high' ? '🔥🔥🔥 HIGH IMPACT' :
+                             news.analysis.impact === 'medium' ? '🔥🔥 MEDIUM IMPACT' : '🔥 LOW IMPACT'}
+                          </span>
+                          <span className="index-tag">📊 {news.analysis.affectedIndex}</span>
+                        </div>
+                        <div className="news-analysis-section">
+                          <div className="analysis-block">
+                            <h4>📊 Key Levels</h4>
+                            <div className="levels-grid">
+                              <div className="level-item">
+                                <span className="level-label">Support:</span>
+                                <span className="level-values">{news.analysis.keyLevels.support.join(', ')}</span>
                               </div>
-                              <div style={{textAlign:'right'}}>
-                                <div style={{fontSize:'0.875rem',fontWeight:700,color:isUp?'var(--green)':'var(--red)'}}>{isUp?'+':''}{u.chg}%</div>
-                                <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{u.oi >= 100000 ? ((u.oi/100000).toFixed(1)+'L') : ((u.oi/1000).toFixed(0)+'K')} OI</div>
+                              <div className="level-item">
+                                <span className="level-label">Resistance:</span>
+                                <span className="level-values">{news.analysis.keyLevels.resistance.join(', ')}</span>
                               </div>
                             </div>
-                          );
-                        })}
+                          </div>
+                          <div className="trading-idea-section">
+                            <h4>💡 Trading Strategy</h4>
+                            <div className="strategy-details">
+                              <div className="strategy-name">{news.analysis.tradingIdea.strategy}</div>
+                              <p className="strategy-reasoning">{news.analysis.tradingIdea.reasoning}</p>
+                              {news.analysis.tradingIdea.strikes && (
+                                <div className="strategy-strikes">
+                                  {news.analysis.tradingIdea.strikes.buy && <span>Buy: {news.analysis.tradingIdea.strikes.buy}</span>}
+                                  {news.analysis.tradingIdea.strikes.sell && <span>Sell: {news.analysis.tradingIdea.strikes.sell}</span>}
+                                </div>
+                              )}
+                              <div className="strategy-metrics">
+                                <span>Risk: {news.analysis.tradingIdea.risk}</span>
+                                <span>Timeframe: {news.analysis.tradingIdea.timeframe}</span>
+                                <span>Probability: {news.analysis.tradingIdea.probability}</span>
+                              </div>
+                              {news.analysis.tradingIdea.strategy !== 'Wait and Watch' && (
+                                <button className="load-strategy-btn" onClick={() => loadStrategyFromNews(news.analysis.tradingIdea)}>
+                                  Load Strategy in Calculator →
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        {news.description && <p className="news-description">{news.description}</p>}
+                        <a href={news.url} target="_blank" rel="noopener noreferrer" className="read-more-link">Read full article →</a>
                       </div>
-                    )}
+                    ))}
                   </div>
-                );
-              })()}
+                )}
+              </div>
+            )}
 
-            </div>{/* end 6 insight cards grid */}
+            {/* OI CHART TAB */}
+            {activeHomeTab === 'oi-chart' && (
+              <div className="panel">
+                <h2>📊 Open Interest Chart</h2>
+                <p style={{color: 'var(--text-dim)', marginBottom: '1.5rem'}}>CE vs PE open interest by strike. Update option chain in Scanner tab for live data.</p>
+                <div className="oi-chart-container">
+                  <div className="oi-chart-legend">
+                    <span className="oi-legend-ce">■ Call OI (CE)</span>
+                    <span className="oi-legend-pe">■ Put OI (PE)</span>
+                  </div>
+                  {oiChartData.map((row, idx) => (
+                    <div key={idx} className="oi-chart-row">
+                      <div className="oi-strike-label">{row.strike.toLocaleString()}</div>
+                      <div className="oi-bars">
+                        <div className="oi-bar-group">
+                          <div className="oi-bar-label">{row.ceOI}K</div>
+                          <div className="oi-bar ce" style={{width: `${Math.min(100, (row.ceOI / Math.max(...oiChartData.map(d => d.ceOI))) * 100)}%`}}></div>
+                        </div>
+                        <div className="oi-bar-group">
+                          <div className="oi-bar-label">{row.peOI}K</div>
+                          <div className="oi-bar pe" style={{width: `${Math.min(100, (row.peOI / Math.max(...oiChartData.map(d => d.peOI))) * 100)}%`}}></div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="oi-summary">
+                    <div className="oi-summary-item">
+                      <span>Total CE OI</span>
+                      <span className="ce-color">{(pcrData.totalCE / 1000).toFixed(0)}K</span>
+                    </div>
+                    <div className="oi-summary-item">
+                      <span>Total PE OI</span>
+                      <span className="pe-color">{(pcrData.totalPE / 1000).toFixed(0)}K</span>
+                    </div>
+                    <div className="oi-summary-item">
+                      <span>PCR</span>
+                      <span style={{color: pcrData.pcr > 1 ? 'var(--accent)' : '#EF4444'}}>{pcrData.pcr}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
-            </div>{/* end home content wrapper */}
+            {/* FII / DII TAB */}
+            {activeHomeTab === 'fii-dii' && (
+              <div className="panel">
+                <h2>🏦 FII / DII Activity</h2>
+                <p style={{color: 'var(--text-dim)', marginBottom: '1.5rem'}}>Institutional flow data (₹ Crores). Positive = Buying, Negative = Selling.</p>
+                <div className="fii-dii-container">
+                  <div className="fii-dii-summary">
+                    <div className={`fii-summary-card ${fiiDiiData[0]?.fii >= 0 ? 'positive' : 'negative'}`}>
+                      <span className="fii-label">FII Today</span>
+                      <span className="fii-value">₹{fiiDiiData[0]?.fii?.toLocaleString()} Cr</span>
+                      <span className="fii-signal">{fiiDiiData[0]?.fii >= 0 ? '📈 Buying' : '📉 Selling'}</span>
+                    </div>
+                    <div className={`fii-summary-card ${fiiDiiData[0]?.dii >= 0 ? 'positive' : 'negative'}`}>
+                      <span className="fii-label">DII Today</span>
+                      <span className="fii-value">₹{fiiDiiData[0]?.dii?.toLocaleString()} Cr</span>
+                      <span className="fii-signal">{fiiDiiData[0]?.dii >= 0 ? '📈 Buying' : '📉 Selling'}</span>
+                    </div>
+                    <div className="fii-summary-card neutral">
+                      <span className="fii-label">Net Flow</span>
+                      <span className="fii-value">₹{((fiiDiiData[0]?.fii || 0) + (fiiDiiData[0]?.dii || 0)).toLocaleString()} Cr</span>
+                      <span className="fii-signal">{((fiiDiiData[0]?.fii || 0) + (fiiDiiData[0]?.dii || 0)) >= 0 ? '🟢 Net Positive' : '🔴 Net Negative'}</span>
+                    </div>
+                  </div>
+                  <table className="fii-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>FII (₹ Cr)</th>
+                        <th>DII (₹ Cr)</th>
+                        <th>Net</th>
+                        <th>Signal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fiiDiiData.map((row, idx) => {
+                        const net = row.fii + row.dii;
+                        return (
+                          <tr key={idx}>
+                            <td>{row.date}</td>
+                            <td className={row.fii >= 0 ? 'positive' : 'negative'}>{row.fii >= 0 ? '+' : ''}{row.fii.toLocaleString()}</td>
+                            <td className={row.dii >= 0 ? 'positive' : 'negative'}>{row.dii >= 0 ? '+' : ''}{row.dii.toLocaleString()}</td>
+                            <td className={net >= 0 ? 'positive' : 'negative'}>{net >= 0 ? '+' : ''}{net.toLocaleString()}</td>
+                            <td>{net >= 0 ? '🟢' : '🔴'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <p className="data-note">⚠️ Data updated manually. Live NSE feed coming soon.</p>
+                </div>
+              </div>
+            )}
+
+            {/* PCR METER TAB */}
+            {activeHomeTab === 'pcr' && (
+              <div className="panel">
+                <h2>⚡ PCR Meter</h2>
+                <p style={{color: 'var(--text-dim)', marginBottom: '1.5rem'}}>Put-Call Ratio measures market sentiment. Based on your Scanner option chain data.</p>
+                <div className="pcr-container">
+                  <div className="pcr-gauge-wrapper">
+                    <div className="pcr-big-number" style={{color: pcrData.pcr > 1.2 ? 'var(--accent)' : pcrData.pcr < 0.8 ? '#EF4444' : '#F59E0B'}}>
+                      {pcrData.pcr}
+                    </div>
+                    <div className="pcr-signal-badge" style={{background: pcrData.pcr > 1.2 ? 'rgba(16,185,129,0.2)' : pcrData.pcr < 0.8 ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)'}}>
+                      {pcrData.signal}
+                    </div>
+                    <div className="pcr-meter">
+                      <div className="pcr-meter-bar">
+                        <div className="pcr-meter-fill" style={{width: `${Math.min(100, (pcrData.pcr / 2) * 100)}%`, background: pcrData.pcr > 1.2 ? 'var(--accent)' : pcrData.pcr < 0.8 ? '#EF4444' : '#F59E0B'}}></div>
+                      </div>
+                      <div className="pcr-meter-labels">
+                        <span>0 Bearish</span>
+                        <span>1.0 Neutral</span>
+                        <span>2.0 Bullish</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="pcr-breakdown">
+                    <div className="pcr-stat">
+                      <span>Total CE OI</span>
+                      <span className="ce-color">{pcrData.totalCE.toLocaleString()}</span>
+                    </div>
+                    <div className="pcr-stat">
+                      <span>Total PE OI</span>
+                      <span className="pe-color">{pcrData.totalPE.toLocaleString()}</span>
+                    </div>
+                    <div className="pcr-stat">
+                      <span>PCR Ratio</span>
+                      <span>{pcrData.pcr}</span>
+                    </div>
+                  </div>
+                  <div className="pcr-legend">
+                    <div className="pcr-legend-item bullish">PCR &gt; 1.3 = Bullish (Put writers confident)</div>
+                    <div className="pcr-legend-item neutral">PCR 0.9 - 1.3 = Neutral</div>
+                    <div className="pcr-legend-item bearish">PCR &lt; 0.9 = Bearish (Call writers confident)</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* MAX PAIN TAB */}
+            {activeHomeTab === 'max-pain' && (
+              <div className="panel">
+                <h2>🎯 Max Pain Calculator</h2>
+                <p style={{color: 'var(--text-dim)', marginBottom: '1.5rem'}}>The strike where option writers lose the least money at expiry. Market tends to gravitate here.</p>
+                <div className="maxpain-container">
+                  <div className="maxpain-display">
+                    <div className="maxpain-big">
+                      <span className="maxpain-label">Max Pain Strike</span>
+                      <span className="maxpain-value">{maxPainData.maxPain.toLocaleString()}</span>
+                    </div>
+                    <div className="maxpain-vs">
+                      <div className="maxpain-stat">
+                        <span>Current Spot</span>
+                        <span>{maxPainData.currentSpot.toLocaleString()}</span>
+                      </div>
+                      <div className="maxpain-stat">
+                        <span>Distance</span>
+                        <span style={{color: '#F59E0B'}}>{Math.abs(maxPainData.currentSpot - maxPainData.maxPain)} pts</span>
+                      </div>
+                      <div className="maxpain-stat">
+                        <span>Direction</span>
+                        <span style={{color: maxPainData.currentSpot > maxPainData.maxPain ? '#EF4444' : 'var(--accent)'}}>
+                          {maxPainData.currentSpot > maxPainData.maxPain ? '↓ Expect fall to Max Pain' : '↑ Expect rise to Max Pain'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="maxpain-chart">
+                    {optionChainData.map((row, idx) => {
+                      const isMaxPain = row.strike === maxPainData.maxPain;
+                      const isSpot = Math.abs(row.strike - spot) < 100;
+                      return (
+                        <div key={idx} className={`maxpain-row ${isMaxPain ? 'highlight' : ''}`}>
+                          <span className="maxpain-strike">
+                            {row.strike.toLocaleString()}
+                            {isMaxPain && <span className="maxpain-tag">🎯 MAX PAIN</span>}
+                            {isSpot && <span className="spot-tag">📍 SPOT</span>}
+                          </span>
+                          <span className="ce-color">CE OI: {row.ceOI.toLocaleString()}</span>
+                          <span className="pe-color">PE OI: {row.peOI.toLocaleString()}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="data-note">💡 Update option chain in Scanner tab for accurate Max Pain calculation.</p>
+                </div>
+              </div>
+            )}
+
+            {/* QUICK ACTIONS */}
+            <div className="panel">
+              <h2>🚀 Quick Actions</h2>
+              <div className="quick-actions-grid">
+                <div className="quick-action-card" onClick={() => setActiveTab('single')}>
+                  <div className="action-icon">📊</div>
+                  <h3>Options Calculator</h3>
+                  <p>Calculate P&L and Greeks</p>
+                </div>
+                <div className="quick-action-card" onClick={() => setActiveTab('strategy')}>
+                  <div className="action-icon">🎯</div>
+                  <h3>Strategy Builder</h3>
+                  <p>10 multi-leg strategies</p>
+                </div>
+                <div className="quick-action-card" onClick={() => setActiveTab('scanner')}>
+                  <div className="action-icon">🔍</div>
+                  <h3>Market Scanner</h3>
+                  <p>5 live alert filters</p>
+                </div>
+              </div>
+            </div>
           </>
-        ) : !currentUser ? (
-          /* Not logged in — prompt sign in */
-          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',padding:'2rem'}}>
-            <div style={{fontSize:'3.5rem',marginBottom:'1rem'}}>🔐</div>
-            <h2 style={{marginBottom:'0.5rem'}}>Sign in to continue</h2>
-            <p style={{color:'var(--text-dim)',marginBottom:'1.5rem',maxWidth:'360px'}}>Create a free account to access all DeltaBuddy features — 3 months free, no card needed.</p>
-            <button onClick={()=>setShowAuthModal(true)}
-              style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'10px',padding:'0.85rem 2rem',fontWeight:800,fontSize:'1rem',cursor:'pointer'}}>
-              Sign In Free →
-            </button>
-          </div>
         ) : activeTab === 'single' ? (
           <>
             <div className="page-header">
@@ -3801,979 +3428,6 @@ Respond ONLY with valid JSON:
               </div>
             </div>
           </>
-        ) : activeTab === 'markets' ? (
-          <div>
-            {/* ── STOCK DEEP DIVE ── */}
-            <div style={{background:'linear-gradient(135deg,#0f172a,#1a2744)',border:'1px solid #1e3a5f',borderRadius:'12px',padding:'1.25rem',marginBottom:'1.5rem'}}>
-              <div style={{fontWeight:700,fontSize:'1rem',marginBottom:'0.75rem',color:'#f0f9ff'}}>🔬 Stock Deep Dive</div>
-              <p style={{color:'#64748b',fontSize:'0.82rem',marginBottom:'0.75rem'}}>Search any FnO stock to get OI analysis, key levels, PCR and AI strategy in one shot.</p>
-              <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap'}}>
-                <input
-                  type="text"
-                  value={deepDiveSymbol}
-                  onChange={e=>setDeepDiveSymbol(e.target.value.toUpperCase())}
-                  onKeyDown={e=>{if(e.key==='Enter')runDeepDive(deepDiveSymbol);}}
-                  placeholder="e.g. RELIANCE, HDFCBANK, TCS"
-                  className="input-field"
-                  style={{flex:1,minWidth:'200px',fontSize:'0.9rem',padding:'0.5rem 0.75rem'}}
-                />
-                <button onClick={()=>runDeepDive(deepDiveSymbol)} disabled={deepDiveLoading||!deepDiveSymbol}
-                  style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.5rem 1.25rem',fontWeight:700,cursor:'pointer',fontSize:'0.88rem',whiteSpace:'nowrap'}}>
-                  {deepDiveLoading?'Analyzing...':'Analyse'}
-                </button>
-              </div>
-              {/* Quick picks */}
-              <div style={{display:'flex',gap:'0.4rem',flexWrap:'wrap',marginTop:'0.75rem'}}>
-                {['NIFTY','BANKNIFTY','RELIANCE','TCS','HDFCBANK','ICICIBANK','SBIN','INFY'].map(s=>(
-                  <button key={s} onClick={()=>{setDeepDiveSymbol(s);runDeepDive(s);}}
-                    style={{background:'rgba(255,255,255,0.06)',color:'var(--text-dim)',border:'1px solid var(--border)',borderRadius:'99px',padding:'2px 10px',fontSize:'0.75rem',cursor:'pointer'}}>
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Deep Dive Result */}
-            {deepDiveLoading && (
-              <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>
-                <div style={{fontSize:'2rem',marginBottom:'0.5rem'}}>🔬</div>
-                <p>Analysing {deepDiveSymbol}...</p>
-              </div>
-            )}
-
-            {deepDiveData && !deepDiveLoading && (
-              <div style={{marginBottom:'1.5rem'}}>
-                {/* Company card */}
-                <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1.25rem',marginBottom:'1rem'}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'0.75rem'}}>
-                    <div>
-                      <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'0.4rem'}}>
-                        <h2 style={{margin:0,fontSize:'1.25rem'}}>{deepDiveData.symbol}</h2>
-                        <span style={{background:'#1e293b',color:'#94a3b8',padding:'2px 10px',borderRadius:'99px',fontSize:'0.75rem'}}>{deepDiveData.meta.sector}</span>
-                      </div>
-                      <div style={{fontSize:'0.88rem',color:'#94a3b8',marginBottom:'0.5rem'}}>{deepDiveData.meta.name}</div>
-                      <p style={{color:'var(--text-dim)',fontSize:'0.82rem',maxWidth:'500px',lineHeight:1.5}}>{deepDiveData.meta.desc}</p>
-                    </div>
-                    <div style={{display:'flex',flexDirection:'column',gap:'0.35rem',minWidth:'140px'}}>
-                      <div style={{background:'#0f172a',borderRadius:'8px',padding:'0.5rem 0.75rem',textAlign:'center'}}>
-                        <div style={{fontSize:'0.7rem',color:'#64748b'}}>LOT SIZE</div>
-                        <div style={{fontSize:'1.1rem',fontWeight:700,color:'var(--accent)'}}>{deepDiveData.meta.lot}</div>
-                      </div>
-                      <div style={{background:'#0f172a',borderRadius:'8px',padding:'0.5rem 0.75rem',textAlign:'center'}}>
-                        <div style={{fontSize:'0.7rem',color:'#64748b'}}>PCR</div>
-                        <div style={{fontSize:'1.1rem',fontWeight:700,color:deepDiveData.pcrSentiment==='Bullish'?'#4ade80':deepDiveData.pcrSentiment==='Bearish'?'#f87171':'#fbbf24'}}>{deepDiveData.pcr}</div>
-                        <div style={{fontSize:'0.7rem',color:'#64748b'}}>{deepDiveData.pcrSentiment}</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* OI Grid */}
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem',marginBottom:'1rem'}}>
-                  {/* Resistance */}
-                  <div style={{background:'var(--bg-card)',border:'1px solid #991b1b',borderRadius:'10px',padding:'1rem'}}>
-                    <div style={{fontWeight:700,color:'#f87171',marginBottom:'0.6rem',fontSize:'0.88rem'}}>🔴 Resistance (Top CE OI)</div>
-                    {deepDiveData.ceTop.map((row,i)=>(
-                      <div key={row.strike} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.35rem 0',borderBottom:'1px solid #1e293b',fontSize:'0.85rem'}}>
-                        <div style={{display:'flex',alignItems:'center',gap:'0.4rem'}}>
-                          {i===0&&<span style={{background:'#991b1b',color:'white',borderRadius:'99px',padding:'0px 6px',fontSize:'0.68rem',fontWeight:700}}>MAX</span>}
-                          <span style={{fontWeight:700}}>{row.strike?.toLocaleString()}</span>
-                        </div>
-                        <span style={{color:'#f87171'}}>{((row.ce?.oi||0)/100000).toFixed(2)} L OI</span>
-                        <span style={{color:'#64748b',fontSize:'0.75rem'}}>₹{row.ce?.ltp}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {/* Support */}
-                  <div style={{background:'var(--bg-card)',border:'1px solid #166534',borderRadius:'10px',padding:'1rem'}}>
-                    <div style={{fontWeight:700,color:'#4ade80',marginBottom:'0.6rem',fontSize:'0.88rem'}}>🟢 Support (Top PE OI)</div>
-                    {deepDiveData.peTop.map((row,i)=>(
-                      <div key={row.strike} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.35rem 0',borderBottom:'1px solid #1e293b',fontSize:'0.85rem'}}>
-                        <div style={{display:'flex',alignItems:'center',gap:'0.4rem'}}>
-                          {i===0&&<span style={{background:'#166534',color:'white',borderRadius:'99px',padding:'0px 6px',fontSize:'0.68rem',fontWeight:700}}>MAX</span>}
-                          <span style={{fontWeight:700}}>{row.strike?.toLocaleString()}</span>
-                        </div>
-                        <span style={{color:'#4ade80'}}>{((row.pe?.oi||0)/100000).toFixed(2)} L OI</span>
-                        <span style={{color:'#64748b',fontSize:'0.75rem'}}>₹{row.pe?.ltp}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* AI Strategy */}
-                {deepDiveData.strategy ? (
-                  <div style={{background:'linear-gradient(135deg,#0a1f0a,#0f2744)',border:'1px solid #1e5f3a',borderRadius:'10px',padding:'1.25rem',marginBottom:'1rem'}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem',flexWrap:'wrap',gap:'0.5rem'}}>
-                      <div style={{fontWeight:700,color:'#4ade80',fontSize:'0.9rem'}}>🤖 AI Strategy Suggestion</div>
-                      <div style={{display:'flex',gap:'0.4rem'}}>
-                        <span style={{background:'#1e293b',color:deepDiveData.strategy.sentiment==='Bullish'?'#4ade80':deepDiveData.strategy.sentiment==='Bearish'?'#f87171':'#fbbf24',padding:'2px 8px',borderRadius:'99px',fontSize:'0.72rem',fontWeight:600}}>{deepDiveData.strategy.sentiment}</span>
-                        <span style={{background:'#1e293b',color:'#94a3b8',padding:'2px 8px',borderRadius:'99px',fontSize:'0.72rem'}}>Risk: {deepDiveData.strategy.risk}</span>
-                        <span style={{background:'#1e293b',color:'#94a3b8',padding:'2px 8px',borderRadius:'99px',fontSize:'0.72rem'}}>{deepDiveData.strategy.timeframe}</span>
-                      </div>
-                    </div>
-                    <div style={{fontSize:'1rem',fontWeight:700,color:'#f0f9ff',marginBottom:'0.4rem'}}>{deepDiveData.strategy.strategy}</div>
-                    <div style={{fontSize:'0.9rem',color:'var(--accent)',fontWeight:600,marginBottom:'0.4rem'}}>Trade: {deepDiveData.strategy.action}</div>
-                    <p style={{color:'#94a3b8',fontSize:'0.84rem',margin:0,lineHeight:1.5}}>{deepDiveData.strategy.reasoning}</p>
-                  </div>
-                ) : !groqApiKey ? (
-                  <div style={{background:'#1a1a00',border:'1px solid #f59e0b',borderRadius:'10px',padding:'1rem',marginBottom:'1rem',fontSize:'0.85rem',color:'#fbbf24'}}>
-                    ⚡ Add your Groq API key in ⚙️ Settings to get AI strategy suggestions for this stock.
-                  </div>
-                ) : null}
-
-                {/* Block & Bulk Deals */}
-                <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',padding:'1rem'}}>
-                  <div style={{fontWeight:700,marginBottom:'0.5rem',fontSize:'0.88rem'}}>💼 Block & Bulk Deals</div>
-                  <p style={{color:'var(--text-dim)',fontSize:'0.78rem',marginBottom:'0.75rem'}}>Institutional trades for {deepDiveData.meta.name}. NSE updates throughout the trading day.</p>
-                  <div style={{display:'flex',gap:'0.75rem',flexWrap:'wrap'}}>
-                    <a href={`https://www.nseindia.com/market-data/block-deal`} target="_blank" rel="noreferrer"
-                      style={{background:'var(--accent)',color:'#000',textDecoration:'none',borderRadius:'6px',padding:'0.4rem 0.9rem',fontWeight:700,fontSize:'0.82rem'}}>
-                      NSE Block Deals →
-                    </a>
-                    <a href={`https://www.nseindia.com/market-data/bulk-deal`} target="_blank" rel="noreferrer"
-                      style={{background:'#1e293b',color:'#94a3b8',textDecoration:'none',borderRadius:'6px',padding:'0.4rem 0.9rem',fontWeight:600,fontSize:'0.82rem',border:'1px solid var(--border)'}}>
-                      NSE Bulk Deals →
-                    </a>
-                    <a href={`https://www.bseindia.com/markets/equity/EQReports/BulkDeal.aspx`} target="_blank" rel="noreferrer"
-                      style={{background:'#1e293b',color:'#94a3b8',textDecoration:'none',borderRadius:'6px',padding:'0.4rem 0.9rem',fontWeight:600,fontSize:'0.82rem',border:'1px solid var(--border)'}}>
-                      BSE Bulk Deals →
-                    </a>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ── MARKETS SUB-TABS ── */}
-            <div className="home-tabs" style={{marginBottom:'1rem'}}>
-              {[
-                ['option-chain','⚡ Option Chain'],
-                ['candlestick','📊 Chart'],
-                ['oi-chart','📈 OI Analysis'],
-                ['pcr','⚡ PCR'],
-                ['max-pain','🎯 Max Pain'],
-                ['fii-dii','🏦 FII/DII'],
-                ['events','📅 Events'],
-              ].map(([tab,label])=>(
-                <button key={tab} className={`home-tab-btn ${activeMarketsTab===tab?'active':''}`} onClick={()=>setActiveMarketsTab(tab)}>{label}</button>
-              ))}
-            </div>
-
-            {/* ── REUSE HOME TAB PANELS with activeMarketsTab ── */}
-            {activeMarketsTab === 'option-chain' && (() => {
-              // Re-render the Kite-style option chain
-              return (
-              <div style={{background:'var(--bg-card)',borderRadius:'12px',padding:'1rem',border:'1px solid var(--border)'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:'0.5rem'}}>
-                  <div style={{display:'flex',alignItems:'baseline',gap:'0.75rem'}}>
-                    <select value={selectedUnderlying} onChange={e=>{setSelectedUnderlying(e.target.value);setNseExpiryDates([]);setSelectedExpiry('');generateLiveOptionChain(e.target.value);}}
-                      style={{background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.3rem 0.5rem',fontWeight:700,fontSize:'0.95rem'}}>
-                      <option value="NIFTY">NIFTY 50</option>
-                      <option value="BANKNIFTY">BANK NIFTY</option>
-                      <option value="FINNIFTY">FIN NIFTY</option>
-                      <option value="MIDCPNIFTY">MIDCAP NIFTY</option>
-                    </select>
-                    <span style={{fontSize:'1.4rem',fontWeight:700,color:'#4ade80'}}>
-                      {(selectedUnderlying==='NIFTY'?marketData.nifty.value:marketData.bankNifty.value)?.toLocaleString()}
-                    </span>
-                    <span style={{fontSize:'0.85rem',color:((selectedUnderlying==='NIFTY'?marketData.nifty.change:marketData.bankNifty.change)||0)>=0?'#4ade80':'#f87171'}}>
-                      {((selectedUnderlying==='NIFTY'?marketData.nifty.change:marketData.bankNifty.change)||0)>=0?'+':''}{selectedUnderlying==='NIFTY'?marketData.nifty.change:marketData.bankNifty.change}%
-                    </span>
-                  </div>
-                  <button onClick={()=>generateLiveOptionChain(selectedUnderlying)} disabled={isLoadingChain}
-                    style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.35rem 0.9rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
-                    {isLoadingChain?'Loading...':'Refresh'}
-                  </button>
-                </div>
-                {nseExpiryDates.length>0 && (
-                  <div style={{display:'flex',gap:'0',marginBottom:'1rem',borderBottom:'2px solid var(--border)',overflowX:'auto'}}>
-                    {nseExpiryDates.slice(0,5).map((exp,i)=>{
-                      const daysLeft = Math.round((new Date(exp.replace(/-/g,'/'))-new Date())/(1000*60*60*24));
-                      const isSelected = selectedExpiry===exp||(i===0&&!selectedExpiry);
-                      return (
-                        <button key={exp} onClick={()=>{setSelectedExpiry(exp);generateLiveOptionChain(selectedUnderlying);}}
-                          style={{background:'none',border:'none',borderBottom:isSelected?'2px solid var(--accent)':'2px solid transparent',marginBottom:'-2px',padding:'0.5rem 1rem',cursor:'pointer',whiteSpace:'nowrap',color:isSelected?'var(--accent)':'var(--text-dim)',fontWeight:isSelected?700:400,fontSize:'0.85rem'}}>
-                          {exp}
-                          <div style={{fontSize:'0.68rem',color:isSelected?'var(--accent)':'#64748b',marginTop:'2px'}}>{daysLeft<=0?'Today':`${daysLeft}D`}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-                {isLoadingChain && liveOptionChain.length===0 ? (
-                  <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>Loading option chain...</div>
-                ) : (
-                  <div style={{overflowX:'auto'}}>
-                    <div style={{display:'grid',gridTemplateColumns:'1fr 80px 1fr',gap:0,marginBottom:'4px'}}>
-                      <div style={{background:'rgba(74,222,128,0.08)',borderRadius:'6px 0 0 0',padding:'4px 8px',fontSize:'0.75rem',fontWeight:700,color:'#4ade80'}}>CALLS</div>
-                      <div/>
-                      <div style={{background:'rgba(248,113,113,0.08)',borderRadius:'0 6px 0 0',padding:'4px 8px',fontSize:'0.75rem',fontWeight:700,color:'#f87171',textAlign:'right'}}>PUTS</div>
-                    </div>
-                    {liveOptionChain.map((row,idx)=>{
-                      const spot = selectedUnderlying==='NIFTY'?marketData.nifty.value:marketData.bankNifty.value;
-                      const isATM = Math.abs(row.strike-spot)<(selectedUnderlying==='NIFTY'?26:51);
-                      const itmCE = row.strike<spot;
-                      const itmPE = row.strike>spot;
-                      const ceOI  = row.ce?.oi||0;
-                      const peOI  = row.pe?.oi||0;
-                      const maxOI = Math.max(...liveOptionChain.map(r=>Math.max(r.ce?.oi||0,r.pe?.oi||0)));
-                      const ceChg = parseFloat(row.ce?.change||0);
-                      const peChg = parseFloat(row.pe?.change||0);
-                      return (
-                        <div key={idx} style={{display:'grid',gridTemplateColumns:'1fr 80px 1fr',borderBottom:'1px solid rgba(255,255,255,0.04)',minHeight:'44px'}}>
-                          <div style={{background:itmCE?'rgba(74,222,128,0.07)':'transparent',display:'flex',alignItems:'stretch',position:'relative',overflow:'hidden'}}>
-                            <div style={{position:'absolute',right:0,top:0,bottom:0,width:`${maxOI>0?(ceOI/maxOI)*60:0}%`,background:'rgba(74,222,128,0.08)',pointerEvents:'none'}}/>
-                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.3rem 0.6rem',width:'100%',zIndex:1}}>
-                              <div>
-                                <div style={{fontSize:'0.8rem',fontWeight:600,color:'#94a3b8'}}>{ceOI>=100000?(ceOI/100000).toFixed(2)+' L':(ceOI/1000).toFixed(0)+'K'}</div>
-                                <div style={{fontSize:'0.7rem',color:ceChg>=0?'#4ade80':'#f87171'}}>{ceChg>=0?'+':''}{ceChg}%</div>
-                              </div>
-                              <div style={{textAlign:'right'}}>
-                                <div style={{fontSize:'0.88rem',fontWeight:700,color:'#4ade80'}}>₹{row.ce?.ltp}</div>
-                                <div style={{fontSize:'0.7rem',color:'#64748b'}}>{row.ce?.iv}% IV</div>
-                              </div>
-                            </div>
-                          </div>
-                          <div style={{display:'flex',alignItems:'center',justifyContent:'center',background:'var(--bg-dark)',borderLeft:'1px solid var(--border)',borderRight:'1px solid var(--border)'}}>
-                            {isATM?<span style={{background:'#f97316',color:'white',borderRadius:'99px',padding:'2px 8px',fontWeight:700,fontSize:'0.82rem'}}>{row.strike?.toLocaleString()}</span>:<span style={{fontSize:'0.82rem',fontWeight:600,color:'var(--text-dim)'}}>{row.strike?.toLocaleString()}</span>}
-                          </div>
-                          <div style={{background:itmPE?'rgba(248,113,113,0.07)':'transparent',display:'flex',alignItems:'stretch',position:'relative',overflow:'hidden'}}>
-                            <div style={{position:'absolute',left:0,top:0,bottom:0,width:`${maxOI>0?(peOI/maxOI)*60:0}%`,background:'rgba(248,113,113,0.08)',pointerEvents:'none'}}/>
-                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.3rem 0.6rem',width:'100%',zIndex:1}}>
-                              <div>
-                                <div style={{fontSize:'0.88rem',fontWeight:700,color:'#f87171'}}>₹{row.pe?.ltp}</div>
-                                <div style={{fontSize:'0.7rem',color:'#64748b'}}>{row.pe?.iv}% IV</div>
-                              </div>
-                              <div style={{textAlign:'right'}}>
-                                <div style={{fontSize:'0.8rem',fontWeight:600,color:'#94a3b8'}}>{peOI>=100000?(peOI/100000).toFixed(2)+' L':(peOI/1000).toFixed(0)+'K'}</div>
-                                <div style={{fontSize:'0.7rem',color:peChg>=0?'#4ade80':'#f87171'}}>{peChg>=0?'+':''}{peChg}%</div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              );
-            })()}
-
-            {activeMarketsTab === 'pcr' && activeHomeTab !== 'pcr' && (() => {
-              const ceOI = liveOptionChain.reduce((s,r)=>s+(r.ce?.oi||0),0);
-              const peOI = liveOptionChain.reduce((s,r)=>s+(r.pe?.oi||0),0);
-              const pcr  = ceOI>0?(peOI/ceOI).toFixed(2):'-';
-              const bull = parseFloat(pcr)>1.2;
-              const bear = parseFloat(pcr)<0.8;
-              const clr  = bull?'#4ade80':bear?'#f87171':'#fbbf24';
-              return (
-                <div className="panel" style={{textAlign:'center'}}>
-                  <h2>⚡ Put/Call Ratio</h2>
-                  <div style={{fontSize:'4rem',fontWeight:900,color:clr,margin:'1rem 0'}}>{pcr}</div>
-                  <div style={{fontSize:'1.2rem',fontWeight:700,color:clr}}>{bull?'BULLISH SENTIMENT':bear?'BEARISH SENTIMENT':'NEUTRAL'}</div>
-                  <p style={{color:'var(--text-dim)',marginTop:'1rem',fontSize:'0.85rem'}}>PCR above 1.2 = more puts = traders hedging downside = market likely to go up.<br/>PCR below 0.8 = more calls = overconfident bulls = possible correction.</p>
-                  <p style={{color:'var(--text-dim)',fontSize:'0.78rem',marginTop:'0.5rem'}}>Refresh option chain for updated PCR.</p>
-                </div>
-              );
-            })()}
-
-            {activeMarketsTab === 'max-pain' && (
-              <div className="panel">
-                <h2>🎯 Max Pain</h2>
-                <p style={{color:'var(--text-dim)',marginBottom:'1.5rem'}}>The strike where option writers lose the least money. Market tends to gravitate here near expiry.</p>
-                <div style={{textAlign:'center',marginBottom:'1.5rem'}}>
-                  <div style={{fontSize:'0.85rem',color:'var(--text-dim)'}}>Max Pain Strike</div>
-                  <div style={{fontSize:'3rem',fontWeight:900,color:'#f59e0b'}}>{maxPainData.maxPain?.toLocaleString()}</div>
-                  <div style={{color:'var(--text-dim)',fontSize:'0.85rem'}}>Current Spot: {maxPainData.currentSpot?.toLocaleString()} · Distance: {Math.abs((maxPainData.currentSpot||0)-(maxPainData.maxPain||0))} pts</div>
-                </div>
-              </div>
-            )}
-
-            {activeMarketsTab === 'fii-dii' && (
-              <div className="panel">
-                <h2>🏦 FII / DII Activity</h2>
-                <p style={{color:'var(--text-dim)',marginBottom:'1rem',fontSize:'0.85rem'}}>Published by NSE after market close. Data in crores (INR).</p>
-                {fiiDiiData.length>0 ? (
-                  <div>{fiiDiiData.slice(0,10).map((row,i)=>(
-                    <div key={i} style={{display:'grid',gridTemplateColumns:'90px 1fr 1fr 1fr',gap:'0.5rem',padding:'0.5rem 0',borderBottom:'1px solid var(--border)',fontSize:'0.85rem',alignItems:'center'}}>
-                      <span style={{color:'var(--text-dim)'}}>{row.date}</span>
-                      <span style={{color:row.fii>=0?'#4ade80':'#f87171',fontWeight:600}}>FII: {row.fii>=0?'+':''}{(row.fii||0).toLocaleString()}</span>
-                      <span style={{color:row.dii>=0?'#60a5fa':'#f87171',fontWeight:600}}>DII: {row.dii>=0?'+':''}{(row.dii||0).toLocaleString()}</span>
-                      <span style={{color:((row.fii||0)+(row.dii||0))>=0?'#4ade80':'#f87171',fontWeight:700}}>Net: {((row.fii||0)+(row.dii||0))>=0?'+':''}{((row.fii||0)+(row.dii||0)).toLocaleString()}</span>
-                    </div>
-                  ))}</div>
-                ) : (
-                  <div style={{textAlign:'center',padding:'2rem',color:'var(--text-dim)'}}>
-                    <a href="https://www.nseindia.com/market-data/fii-dii-activity" target="_blank" rel="noreferrer" style={{color:'var(--accent)'}}>View FII/DII data on NSE →</a>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeMarketsTab === 'events' && (
-              <div className="panel">
-                <h2>📅 Key Market Events</h2>
-                <p style={{color:'var(--text-dim)',fontSize:'0.85rem',marginBottom:'1rem'}}>Upcoming events that could impact options premiums and volatility.</p>
-                {[
-                  {date:'28 Feb 2026',event:'NSE F&O Expiry',impact:'HIGH',type:'expiry'},
-                  {date:'06 Mar 2026',event:'RBI MPC Meeting',impact:'HIGH',type:'macro'},
-                  {date:'07 Mar 2026',event:'GDP Data Release',impact:'MEDIUM',type:'data'},
-                  {date:'13 Mar 2026',event:'NSE F&O Expiry',impact:'HIGH',type:'expiry'},
-                  {date:'18 Mar 2026',event:'US FOMC Meeting',impact:'HIGH',type:'global'},
-                  {date:'27 Mar 2026',event:'NSE Monthly Expiry',impact:'HIGH',type:'expiry'},
-                ].map((ev,i)=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:'1rem',padding:'0.75rem',marginBottom:'0.5rem',background:'var(--bg-dark)',borderRadius:'8px',border:'1px solid var(--border)'}}>
-                    <div style={{minWidth:'80px',fontSize:'0.78rem',color:'var(--text-dim)'}}>{ev.date}</div>
-                    <div style={{flex:1,fontWeight:600,fontSize:'0.88rem'}}>{ev.event}</div>
-                    <span style={{padding:'0.2rem 0.6rem',borderRadius:'4px',fontSize:'0.72rem',fontWeight:700,
-                      background:ev.impact==='HIGH'?'rgba(239,68,68,0.15)':'rgba(251,191,36,0.15)',
-                      color:ev.impact==='HIGH'?'#f87171':'#fbbf24'}}>
-                      {ev.impact}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {activeMarketsTab === 'candlestick' && (() => {
-              const TF_GROUPS = [
-                { label:'Intraday', tfs:['1m','3m','5m','15m','30m'] },
-                { label:'Swing',    tfs:['1H','4H','1D'] },
-                { label:'Long',     tfs:['1W','1M'] },
-              ];
-              const TF_LABELS = {'1m':'1m','3m':'3m','5m':'5m','15m':'15m','30m':'30m','1H':'1H','4H':'4H','1D':'1D','1W':'1W','1M':'1M'};
-              const CANDLE_TYPES = [
-                {v:'candlestick', l:'🕯 Candle'},
-                {v:'heikinashi',  l:'🕯 Heikin-Ashi'},
-                {v:'bar',         l:'▣ Bar'},
-                {v:'line',        l:'📈 Line'},
-                {v:'area',        l:'🏔 Area'},
-                {v:'baseline',    l:'⚖ Baseline'},
-              ];
-              const INDICATOR_GROUPS = [
-                { label:'Moving Averages', items:[
-                  {v:'EMA9',   l:'EMA 9',   col:'#a3e635'},
-                  {v:'EMA20',  l:'EMA 20',  col:'#818cf8'},
-                  {v:'EMA50',  l:'EMA 50',  col:'#c084fc'},
-                  {v:'SMA20',  l:'SMA 20',  col:'#f59e0b'},
-                  {v:'SMA50',  l:'SMA 50',  col:'#fb923c'},
-                  {v:'SMA200', l:'SMA 200', col:'#f43f5e'},
-                  {v:'WMA',    l:'WMA 20',  col:'#34d399'},
-                ]},
-                { label:'Bands & Channels', items:[
-                  {v:'BB',         l:'Bollinger Bands', col:'#60a5fa'},
-                  {v:'VWAP',       l:'VWAP',            col:'#e879f9'},
-                  {v:'Ichimoku',   l:'Ichimoku Cloud',  col:'#94a3b8'},
-                  {v:'SuperTrend', l:'SuperTrend',      col:'#4ade80'},
-                ]},
-                { label:'Oscillators', items:[
-                  {v:'RSI',  l:'RSI 14',       col:'#a78bfa'},
-                  {v:'MACD', l:'MACD 12,26,9', col:'#60a5fa'},
-                ]},
-              ];
-              const toggleIndicator = (v) => setChartIndicators(prev =>
-                prev.includes(v) ? prev.filter(x=>x!==v) : [...prev, v]
-              );
-              const ctrlBtn = (active) => ({
-                padding:'0.28rem 0.65rem', borderRadius:'6px', border:'none', cursor:'pointer',
-                fontSize:'0.75rem', fontWeight: active?700:400,
-                background: active?'var(--accent)':'var(--bg-surface)',
-                color: active?'#000':'var(--text-dim)',
-              });
-              const indBtn = (v, col) => {
-                const active = chartIndicators.includes(v);
-                return {
-                  padding:'0.25rem 0.6rem', borderRadius:'99px', border:`1px solid ${active?col:'var(--border)'}`,
-                  cursor:'pointer', fontSize:'0.72rem', fontWeight: active?700:400,
-                  background: active?`${col}22`:'transparent',
-                  color: active?col:'var(--text-dim)',
-                };
-              };
-              return (
-              <div style={{background:'var(--bg-card)',borderRadius:'12px',border:'1px solid var(--border)',overflow:'hidden'}}>
-
-                {/* ── Row 1: Symbol + Candle type + Refresh ── */}
-                <div style={{display:'flex',gap:'0.5rem',alignItems:'center',padding:'0.75rem 1rem',borderBottom:'1px solid var(--border)',flexWrap:'wrap'}}>
-                  <select value={selectedChartSymbol}
-                    onChange={e=>{setSelectedChartSymbol(e.target.value);generateCandlestickData(e.target.value,chartTimeframe);}}
-                    style={{background:'var(--bg-surface)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.3rem 0.6rem',fontWeight:700,fontSize:'0.85rem'}}>
-                    {['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY',
-                      'RELIANCE','TCS','HDFCBANK','INFY','ICICIBANK','SBIN','BAJFINANCE',
-                      'ITC','WIPRO','AXISBANK','TATAMOTORS','HCLTECH','LT','KOTAKBANK',
-                      'MARUTI','SUNPHARMA','ADANIENT','TITAN','NESTLEIND','POWERGRID',
-                      'NTPC','ONGC','TATASTEEL','JSWSTEEL','HINDALCO','DRREDDY'].map(s=>
-                      <option key={s}>{s}</option>
-                    )}
-                  </select>
-                  <div style={{display:'flex',gap:'0.25rem',flexWrap:'wrap'}}>
-                    {CANDLE_TYPES.map(({v,l})=>(
-                      <button key={v} onClick={()=>setCandlestickType(v)} style={ctrlBtn(candlestickType===v)}>{l}</button>
-                    ))}
-                  </div>
-                  <button onClick={()=>generateCandlestickData(selectedChartSymbol,chartTimeframe)}
-                    style={{marginLeft:'auto',background:'var(--bg-surface)',border:'1px solid var(--border)',color:'var(--text-dim)',borderRadius:'6px',padding:'0.28rem 0.75rem',cursor:'pointer',fontSize:'0.78rem'}}>
-                    🔄 Refresh
-                  </button>
-                </div>
-
-                {/* ── Row 2: Timeframes grouped ── */}
-                <div style={{display:'flex',gap:'0.75rem',alignItems:'center',padding:'0.5rem 1rem',borderBottom:'1px solid var(--border)',flexWrap:'wrap'}}>
-                  {TF_GROUPS.map(({label,tfs})=>(
-                    <div key={label} style={{display:'flex',alignItems:'center',gap:'0.25rem'}}>
-                      <span style={{fontSize:'0.65rem',color:'var(--text-muted)',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em',marginRight:'2px'}}>{label}</span>
-                      {tfs.map(tf=>(
-                        <button key={tf} onClick={()=>{setChartTimeframe(tf);generateCandlestickData(selectedChartSymbol,tf);}}
-                          style={ctrlBtn(chartTimeframe===tf)}>
-                          {TF_LABELS[tf]}
-                        </button>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-
-                {/* ── Row 3: Indicators ── */}
-                <div style={{padding:'0.5rem 1rem',borderBottom:'1px solid var(--border)',background:'var(--bg-surface)'}}>
-                  <div style={{display:'flex',gap:'1rem',flexWrap:'wrap',alignItems:'flex-start'}}>
-                    {INDICATOR_GROUPS.map(({label,items})=>(
-                      <div key={label} style={{display:'flex',alignItems:'center',gap:'0.3rem',flexWrap:'wrap'}}>
-                        <span style={{fontSize:'0.62rem',color:'var(--text-muted)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',whiteSpace:'nowrap'}}>{label}:</span>
-                        {items.map(({v,l,col})=>(
-                          <button key={v} onClick={()=>toggleIndicator(v)} style={indBtn(v,col)}>{l}</button>
-                        ))}
-                      </div>
-                    ))}
-                    {chartIndicators.length > 0 && (
-                      <button onClick={()=>setChartIndicators([])}
-                        style={{marginLeft:'auto',fontSize:'0.7rem',color:'var(--text-muted)',background:'none',border:'none',cursor:'pointer',padding:'0.2rem 0.4rem'}}>
-                        ✕ Clear all
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* ── Chart ── */}
-                {candlestickData && candlestickData.length > 0 ? (
-                  <TradingViewChart
-                    data={candlestickData}
-                    indicators={chartIndicators}
-                    candleType={candlestickType}
-                    symbol={selectedChartSymbol}
-                    timeframe={chartTimeframe}
-                  />
-                ) : (
-                  <div style={{textAlign:'center',padding:'4rem 2rem',color:'var(--text-dim)'}}>
-                    <div style={{fontSize:'3rem',marginBottom:'0.75rem'}}>📊</div>
-                    <div style={{fontSize:'0.9rem',marginBottom:'1.25rem'}}>Select a symbol and timeframe, then load the chart</div>
-                    <button onClick={()=>generateCandlestickData(selectedChartSymbol,chartTimeframe)}
-                      style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 2rem',fontWeight:700,cursor:'pointer',fontSize:'0.9rem'}}>
-                      📈 Load Chart
-                    </button>
-                  </div>
-                )}
-              </div>
-              );
-            })()}
-
-            {activeMarketsTab === 'oi-chart' && (() => {
-              // Build OI data directly from liveOptionChain — always fresh, no stale state
-              const spot = selectedUnderlying==='NIFTY' ? marketData.nifty.value : marketData.bankNifty.value;
-              const chain = liveOptionChain.length > 0 ? liveOptionChain : [];
-              const oiRows = chain
-                .filter(d => d.strike && (d.ce?.oi > 0 || d.pe?.oi > 0))
-                .map(d => ({
-                  strike : d.strike,
-                  ce     : Math.round((d.ce?.oi     || 0) / 1000),
-                  pe     : Math.round((d.pe?.oi     || 0) / 1000),
-                  ceVol  : Math.round((d.ce?.volume || 0) / 1000),
-                  peVol  : Math.round((d.pe?.volume || 0) / 1000),
-                  isATM  : Math.abs(d.strike - spot) < (selectedUnderlying==='NIFTY' ? 26 : 51),
-                }))
-                .sort((a,b) => (b.ce + b.pe) - (a.ce + a.pe));
-              const maxOI = oiRows.length > 0 ? Math.max(...oiRows.map(r => Math.max(r.ce, r.pe))) : 1;
-              // Top CE strikes = resistance, top PE strikes = support
-              const topResistance = [...oiRows].sort((a,b)=>b.ce-a.ce)[0]?.strike;
-              const topSupport    = [...oiRows].sort((a,b)=>b.pe-a.pe)[0]?.strike;
-              return (
-              <div className="panel">
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:'0.5rem'}}>
-                  <h2 style={{margin:0}}>📈 Open Interest Analysis</h2>
-                  <button onClick={()=>generateLiveOptionChain(selectedUnderlying)} disabled={isLoadingChain}
-                    style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.35rem 0.9rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
-                    {isLoadingChain?'Loading...':'🔄 Refresh'}
-                  </button>
-                </div>
-                {oiRows.length === 0 ? (
-                  <div style={{textAlign:'center',padding:'2rem',color:'var(--text-dim)'}}>
-                    <p>Loading option chain data…</p>
-                    <button onClick={()=>generateLiveOptionChain(selectedUnderlying)}
-                      style={{marginTop:'0.5rem',background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer'}}>
-                      Load Now
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    {/* Summary cards */}
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:'0.75rem',marginBottom:'1.25rem'}}>
-                      {[
-                        {label:'🛡️ Key Support (Max PE OI)',  val:topSupport?.toLocaleString(),  col:'var(--green)'},
-                        {label:'🚧 Key Resistance (Max CE OI)',val:topResistance?.toLocaleString(),col:'var(--red)'},
-                        {label:'🎯 Spot',                      val:spot?.toLocaleString(),         col:'var(--accent)'},
-                        {label:'📊 Strikes Loaded',            val:oiRows.length,                  col:'var(--text-dim)'},
-                      ].map(c=>(
-                        <div key={c.label} style={{background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'10px',padding:'0.75rem 1rem'}}>
-                          <div style={{fontSize:'0.68rem',color:'var(--text-muted)',marginBottom:'0.2rem'}}>{c.label}</div>
-                          <div style={{fontSize:'1.2rem',fontWeight:800,color:c.col}}>{c.val||'—'}</div>
-                        </div>
-                      ))}
-                    </div>
-                    {/* OI bar chart visual */}
-                    <p style={{color:'var(--text-dim)',fontSize:'0.8rem',marginBottom:'0.75rem'}}>Top 15 strikes by total OI. Bar width = relative OI size. CE = resistance zones, PE = support zones.</p>
-                    <div style={{overflowX:'auto'}}>
-                      <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.84rem'}}>
-                        <thead>
-                          <tr style={{borderBottom:'2px solid var(--border)'}}>
-                            <th style={{padding:'0.5rem 0.75rem',textAlign:'left',color:'var(--text-dim)',fontWeight:600}}>Strike</th>
-                            <th style={{padding:'0.5rem 0.75rem',color:'#f87171',fontWeight:600}}>CE OI (K) — Resistance</th>
-                            <th style={{padding:'0.5rem 0.75rem',color:'#4ade80',fontWeight:600}}>PE OI (K) — Support</th>
-                            <th style={{padding:'0.5rem 0.75rem',textAlign:'right',color:'var(--text-dim)',fontWeight:600}}>CE Vol</th>
-                            <th style={{padding:'0.5rem 0.75rem',textAlign:'right',color:'var(--text-dim)',fontWeight:600}}>PE Vol</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {oiRows.slice(0,15).map((row,i)=>(
-                            <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)',background:row.isATM?'rgba(249,115,22,0.08)':i%2===0?'transparent':'rgba(255,255,255,0.01)'}}>
-                              <td style={{padding:'0.45rem 0.75rem',fontWeight:700,color:row.isATM?'#f97316':'var(--text-main)'}}>
-                                {row.strike.toLocaleString()}{row.isATM&&<span style={{fontSize:'0.65rem',marginLeft:'4px',background:'#f97316',color:'#fff',borderRadius:'3px',padding:'1px 4px'}}>ATM</span>}
-                              </td>
-                              <td style={{padding:'0.45rem 0.75rem'}}>
-                                <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
-                                  <div style={{height:'8px',background:'rgba(248,113,113,0.7)',borderRadius:'2px',width:maxOI>0?Math.max(4,row.ce/maxOI*120)+'px':'4px',flexShrink:0}}/>
-                                  <span style={{color:'#f87171',fontWeight:600}}>{row.ce.toLocaleString()}</span>
-                                </div>
-                              </td>
-                              <td style={{padding:'0.45rem 0.75rem'}}>
-                                <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
-                                  <div style={{height:'8px',background:'rgba(74,222,128,0.7)',borderRadius:'2px',width:maxOI>0?Math.max(4,row.pe/maxOI*120)+'px':'4px',flexShrink:0}}/>
-                                  <span style={{color:'#4ade80',fontWeight:600}}>{row.pe.toLocaleString()}</span>
-                                </div>
-                              </td>
-                              <td style={{padding:'0.45rem 0.75rem',textAlign:'right',color:'var(--text-dim)'}}>{row.ceVol.toLocaleString()}</td>
-                              <td style={{padding:'0.45rem 0.75rem',textAlign:'right',color:'var(--text-dim)'}}>{row.peVol.toLocaleString()}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-              );
-            })()}
-          </div>
-
-        ) : activeTab === 'backtest' ? (
-          <div>
-            {/* ── HEADER ── */}
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'1.5rem',flexWrap:'wrap',gap:'1rem'}}>
-              <div>
-                <h2 style={{margin:0,fontSize:'1.35rem'}}>📈 Strategy Backtester</h2>
-                <p style={{color:'var(--text-dim)',fontSize:'0.82rem',margin:'0.3rem 0 0'}}>
-                  Test options strategies on historical data. Uses Yahoo Finance OHLCV + Black-Scholes pricing.
-                </p>
-              </div>
-              <button onClick={runBacktest} disabled={btRunning}
-                style={{background:btRunning?'#1e293b':'var(--accent)',color:btRunning?'var(--text-dim)':'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1.5rem',fontWeight:700,cursor:btRunning?'not-allowed':'pointer',fontSize:'0.9rem',minWidth:'140px'}}>
-                {btRunning ? '⏳ Running...' : '▶ Run Backtest'}
-              </button>
-            </div>
-
-            {/* ── CONFIG PANEL ── */}
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:'1rem',marginBottom:'1.5rem'}}>
-
-              {/* Symbol + Period */}
-              <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',padding:'1rem'}}>
-                <div style={{fontWeight:600,marginBottom:'0.75rem',fontSize:'0.88rem',color:'var(--accent)'}}>Market & Period</div>
-                <div style={{display:'flex',flexDirection:'column',gap:'0.5rem'}}>
-                  <div>
-                    <label style={{fontSize:'0.75rem',color:'var(--text-dim)',display:'block',marginBottom:'3px'}}>Symbol</label>
-                    <select value={btSymbol} onChange={e=>setBtSymbol(e.target.value)}
-                      style={{width:'100%',background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.4rem'}}>
-                      {['NIFTY','BANKNIFTY','FINNIFTY','RELIANCE','TCS','HDFCBANK','INFY','ICICIBANK','SBIN','TATAMOTORS','BAJFINANCE','ITC','WIPRO','AXISBANK'].map(s=><option key={s}>{s}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{fontSize:'0.75rem',color:'var(--text-dim)',display:'block',marginBottom:'3px'}}>Timeframe</label>
-                    <select value={btTimeframe} onChange={e=>setBtTimeframe(e.target.value)}
-                      style={{width:'100%',background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.4rem'}}>
-                      <option value="1D">Daily (1D)</option>
-                      <option value="1W">Weekly (1W)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{fontSize:'0.75rem',color:'var(--text-dim)',display:'block',marginBottom:'3px'}}>Backtest Period</label>
-                    <select value={btPeriod} onChange={e=>setBtPeriod(e.target.value)}
-                      style={{width:'100%',background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.4rem'}}>
-                      <option value="3m">3 Months</option>
-                      <option value="6m">6 Months</option>
-                      <option value="1y">1 Year</option>
-                      <option value="2y">2 Years</option>
-                      <option value="5y">5 Years</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{fontSize:'0.75rem',color:'var(--text-dim)',display:'block',marginBottom:'3px'}}>Starting Capital (₹)</label>
-                    <input type="number" value={btCapital} onChange={e=>setBtCapital(parseInt(e.target.value)||100000)}
-                      style={{width:'100%',background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.4rem',boxSizing:'border-box'}}/>
-                  </div>
-                </div>
-              </div>
-
-              {/* Strategy */}
-              <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',padding:'1rem'}}>
-                <div style={{fontWeight:600,marginBottom:'0.75rem',fontSize:'0.88rem',color:'var(--accent)'}}>Strategy</div>
-                <div style={{display:'flex',flexDirection:'column',gap:'0.5rem'}}>
-                  {[
-                    ['ma_crossover',  '📊 MA Crossover',       'Buy CE on fast MA crossing above slow MA. Buy PE on cross below.'],
-                    ['rsi',           '⚡ RSI Reversal',        'Buy CE when RSI crosses above oversold. Buy PE when crosses below overbought.'],
-                    ['breakout',      '🚀 Breakout Momentum',  'Buy CE on N-bar high breakout. Buy PE on N-bar low breakdown.'],
-                    ['straddle_sell', '💰 Sell Weekly Straddle','Sell ATM straddle every Monday, buy back on Thursday close.'],
-                  ].map(([v, label, desc])=>(
-                    <div key={v} onClick={()=>setBtStrategy(v)}
-                      style={{cursor:'pointer',padding:'0.6rem 0.75rem',borderRadius:'8px',border:`1px solid ${btStrategy===v?'var(--accent)':'var(--border)'}`,background:btStrategy===v?'rgba(0,255,136,0.07)':'transparent',transition:'all 0.15s'}}>
-                      <div style={{fontWeight:600,fontSize:'0.85rem',color:btStrategy===v?'var(--accent)':'var(--text-main)'}}>{label}</div>
-                      <div style={{fontSize:'0.74rem',color:'var(--text-dim)',marginTop:'2px'}}>{desc}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Parameters */}
-              <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',padding:'1rem'}}>
-                <div style={{fontWeight:600,marginBottom:'0.75rem',fontSize:'0.88rem',color:'var(--accent)'}}>Parameters</div>
-                <div style={{display:'flex',flexDirection:'column',gap:'0.5rem'}}>
-                  {btStrategy==='ma_crossover' && (<>
-                    {[['Fast MA Period','fastMA',3,50],['Slow MA Period','slowMA',10,200]].map(([label,key,mn,mx])=>(
-                      <div key={key}>
-                        <label style={{fontSize:'0.75rem',color:'var(--text-dim)',display:'flex',justifyContent:'space-between'}}><span>{label}</span><span style={{color:'var(--accent)'}}>{btParams[key]}</span></label>
-                        <input type="range" min={mn} max={mx} value={btParams[key]} onChange={e=>setBtParams(p=>({...p,[key]:parseInt(e.target.value)}))}
-                          style={{width:'100%',accentColor:'var(--accent)'}}/>
-                      </div>
-                    ))}
-                  </>)}
-                  {btStrategy==='rsi' && (<>
-                    {[['RSI Overbought','rsiOB',60,90],['RSI Oversold','rsiOS',10,40]].map(([label,key,mn,mx])=>(
-                      <div key={key}>
-                        <label style={{fontSize:'0.75rem',color:'var(--text-dim)',display:'flex',justifyContent:'space-between'}}><span>{label}</span><span style={{color:'var(--accent)'}}>{btParams[key]}</span></label>
-                        <input type="range" min={mn} max={mx} value={btParams[key]} onChange={e=>setBtParams(p=>({...p,[key]:parseInt(e.target.value)}))}
-                          style={{width:'100%',accentColor:'var(--accent)'}}/>
-                      </div>
-                    ))}
-                  </>)}
-                  {btStrategy==='breakout' && (
-                    <div>
-                      <label style={{fontSize:'0.75rem',color:'var(--text-dim)',display:'flex',justifyContent:'space-between'}}><span>Lookback Bars</span><span style={{color:'var(--accent)'}}>{btParams.breakoutBars}</span></label>
-                      <input type="range" min={3} max={30} value={btParams.breakoutBars} onChange={e=>setBtParams(p=>({...p,breakoutBars:parseInt(e.target.value)}))}
-                        style={{width:'100%',accentColor:'var(--accent)'}}/>
-                    </div>
-                  )}
-                  <div>
-                    <label style={{fontSize:'0.75rem',color:'var(--text-dim)',display:'flex',justifyContent:'space-between'}}><span>Lot Size</span><span style={{color:'var(--accent)'}}>{btParams.lotSize}</span></label>
-                    <input type="range" min={15} max={1800} step={15} value={btParams.lotSize} onChange={e=>setBtParams(p=>({...p,lotSize:parseInt(e.target.value)}))}
-                      style={{width:'100%',accentColor:'var(--accent)'}}/>
-                    <div style={{fontSize:'0.7rem',color:'var(--text-dim)',marginTop:'2px'}}>NIFTY=75 | BANKNIFTY=15 | Stocks=varies</div>
-                  </div>
-                  <div style={{marginTop:'0.5rem',background:'#0a1628',borderRadius:'6px',padding:'0.5rem',fontSize:'0.75rem',color:'#64748b'}}>
-                    <div style={{color:'#fbbf24',fontWeight:600,marginBottom:'3px'}}>⚠️ Disclaimer</div>
-                    Options P&L calculated using Black-Scholes with IV=16%. Actual premium history is not available in free APIs. Past results do not guarantee future performance.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ── RESULTS ── */}
-            {btRunning && (
-              <div style={{textAlign:'center',padding:'4rem',color:'var(--text-dim)'}}>
-                <div style={{fontSize:'2.5rem',marginBottom:'1rem'}}>⚙️</div>
-                <div style={{fontSize:'1rem',fontWeight:600}}>Running backtest on {btSymbol}...</div>
-                <div style={{fontSize:'0.82rem',marginTop:'0.5rem'}}>Fetching {btPeriod} of data and simulating trades</div>
-              </div>
-            )}
-
-            {btResult?.error && (
-              <div style={{background:'#1a0a00',border:'1px solid #991b1b',borderRadius:'10px',padding:'1.5rem',textAlign:'center',color:'#f87171'}}>
-                ⚠️ {btResult.error}
-              </div>
-            )}
-
-            {btResult && !btResult.error && !btRunning && (
-              <div>
-                {/* ── STATS CARDS ── */}
-                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'0.75rem',marginBottom:'1.5rem'}}>
-                  {[
-                    ['Total Return', btResult.totalReturn+'%', parseFloat(btResult.totalReturn)>=0?'#4ade80':'#f87171'],
-                    ['Final Capital', '₹'+btResult.finalCapital?.toLocaleString(), parseFloat(btResult.totalReturn)>=0?'#4ade80':'#f87171'],
-                    ['Win Rate', btResult.winRate+'%', parseFloat(btResult.winRate)>=50?'#4ade80':'#f59e0b'],
-                    ['Total Trades', btResult.totalTrades, '#94a3b8'],
-                    ['Max Drawdown', btResult.maxDD+'%', '#f87171'],
-                    ['Sharpe Ratio', btResult.sharpe, parseFloat(btResult.sharpe)>=1?'#4ade80':parseFloat(btResult.sharpe)>=0?'#f59e0b':'#f87171'],
-                    ['Best Trade', '₹'+btResult.bestTrade?.toLocaleString(), '#4ade80'],
-                    ['Worst Trade', '₹'+btResult.worstTrade?.toLocaleString(), '#f87171'],
-                  ].map(([label,val,color])=>(
-                    <div key={label} style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',padding:'0.75rem',textAlign:'center'}}>
-                      <div style={{fontSize:'0.72rem',color:'var(--text-dim)',marginBottom:'0.3rem'}}>{label}</div>
-                      <div style={{fontSize:'1.1rem',fontWeight:700,color}}>{val}</div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* ── EQUITY CURVE ── */}
-                <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',padding:'1rem',marginBottom:'1.5rem'}}>
-                  <div style={{fontWeight:600,marginBottom:'0.75rem',fontSize:'0.9rem'}}>📈 Equity Curve</div>
-                  {(() => {
-                    const eq  = btResult.equity;
-                    if(!eq||eq.length<2) return <div style={{color:'var(--text-dim)',textAlign:'center',padding:'2rem'}}>No data</div>;
-                    const min  = Math.min(...eq.map(e=>e.value));
-                    const max  = Math.max(...eq.map(e=>e.value));
-                    const rng  = max-min||1;
-                    const W=800, H=200, PAD=40;
-                    const px = (i)=>(PAD+(i/(eq.length-1))*(W-PAD*2)).toFixed(1);
-                    const py = (v)=>(H-PAD-((v-min)/rng*(H-PAD*2))).toFixed(1);
-                    const pts = eq.map((e,i)=>`${px(i)},${py(e.value)}`).join(' ');
-                    const fillPts = `${px(0)},${H-PAD} ${pts} ${px(eq.length-1)},${H-PAD}`;
-                    const isProfit = eq[eq.length-1].value >= btCapital;
-                    const clr = isProfit?'#4ade80':'#f87171';
-                    const priceLines = [min,min+rng/4,min+rng/2,min+rng*3/4,max];
-                    return (
-                      <div style={{overflowX:'auto'}}>
-                        <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',minWidth:'300px',height:'auto'}}>
-                          <defs>
-                            <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor={clr} stopOpacity="0.3"/>
-                              <stop offset="100%" stopColor={clr} stopOpacity="0.02"/>
-                            </linearGradient>
-                          </defs>
-                          {/* Grid */}
-                          {priceLines.map((p,i)=>(
-                            <g key={i}>
-                              <line x1={PAD} y1={py(p)} x2={W-PAD} y2={py(p)} stroke="rgba(100,116,139,0.15)" strokeWidth="1"/>
-                              <text x={PAD-5} y={parseFloat(py(p))+4} textAnchor="end" fill="#64748b" fontSize="9">
-                                {p>=1000?(p/1000).toFixed(0)+'K':p.toFixed(0)}
-                              </text>
-                            </g>
-                          ))}
-                          {/* Baseline */}
-                          <line x1={PAD} y1={py(btCapital)} x2={W-PAD} y2={py(btCapital)} stroke="rgba(255,255,255,0.15)" strokeWidth="1" strokeDasharray="4,4"/>
-                          {/* Fill area */}
-                          <polygon points={fillPts} fill="url(#eqGrad)"/>
-                          {/* Line */}
-                          <polyline points={pts} fill="none" stroke={clr} strokeWidth="2"/>
-                          {/* Entry/exit dots from trades */}
-                          {btResult.trades.filter(t=>t.type==='ENTRY').map((t,i)=>{
-                            const idx = eq.findIndex(e=>e.date>=t.date);
-                            if(idx<0) return null;
-                            return <circle key={i} cx={px(idx)} cy={py(eq[idx]?.value||min)} r="3" fill="#fbbf24" opacity="0.8"/>;
-                          })}
-                          <text x={W/2} y={H-5} textAnchor="middle" fill="#64748b" fontSize="9">{btResult.symbol} · {btResult.period} · {btResult.strategy}</text>
-                        </svg>
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {/* ── TRADE LOG ── */}
-                <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',padding:'1rem'}}>
-                  <div style={{fontWeight:600,marginBottom:'0.75rem',fontSize:'0.9rem'}}>📋 Trade Log ({btResult.totalTrades} trades)</div>
-                  <div style={{overflowX:'auto'}}>
-                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.8rem'}}>
-                      <thead>
-                        <tr style={{borderBottom:'1px solid var(--border)',color:'#64748b'}}>
-                          {['Date','Type','Side','Strike','Entry ₹','P&L','Capital'].map(h=>(
-                            <th key={h} style={{padding:'0.4rem 0.5rem',textAlign:'left',fontWeight:600,whiteSpace:'nowrap'}}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {btResult.trades.slice(-50).reverse().map((t,i)=>(
-                          <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)',background:i%2===0?'transparent':'rgba(255,255,255,0.02)'}}>
-                            <td style={{padding:'0.35rem 0.5rem',color:'#94a3b8'}}>{t.date}</td>
-                            <td style={{padding:'0.35rem 0.5rem'}}>
-                              <span style={{background:t.type==='ENTRY'?'rgba(96,165,250,0.15)':'rgba(74,222,128,0.1)',color:t.type==='ENTRY'?'#60a5fa':'#4ade80',padding:'1px 6px',borderRadius:'4px',fontSize:'0.72rem',fontWeight:600}}>{t.type}</span>
-                            </td>
-                            <td style={{padding:'0.35rem 0.5rem',color:t.side==='CE'||t.side?.includes('STRADDLE_SELL')?'#4ade80':'#f87171',fontWeight:600}}>{t.side}</td>
-                            <td style={{padding:'0.35rem 0.5rem',color:'var(--text-main)'}}>{t.strike?.toLocaleString()||'-'}</td>
-                            <td style={{padding:'0.35rem 0.5rem',color:'#94a3b8'}}>₹{t.entryPx||'-'}</td>
-                            <td style={{padding:'0.35rem 0.5rem',fontWeight:600,color:t.pnl>=0?'#4ade80':'#f87171'}}>{t.pnl!=null?(t.pnl>=0?'+':'')+t.pnl.toLocaleString():'-'}</td>
-                            <td style={{padding:'0.35rem 0.5rem',color:'#94a3b8'}}>₹{t.capital?.toLocaleString()||'-'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {btResult.trades.length>50 && <div style={{textAlign:'center',padding:'0.5rem',color:'var(--text-dim)',fontSize:'0.75rem'}}>Showing last 50 of {btResult.trades.length} trades</div>}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : activeTab === 'intelligence' ? (
-          <div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem'}}>
-              <div>
-                <h2 style={{margin:0,fontSize:'1.35rem'}}>🧠 Market Intelligence</h2>
-                <p style={{color:groqApiKey?'#4ade80':'#f59e0b',fontSize:'0.8rem',margin:'0.2rem 0 0'}}>
-                  {groqApiKey?'AI-powered by Groq Llama 3.3':'Add Groq key in Settings for AI analysis'}
-                </p>
-              </div>
-              <button onClick={()=>{fetchIntelligentNews();fetchLivePrices();}} disabled={isLoadingNews}
-                style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.5rem 1.2rem',fontWeight:700,cursor:'pointer',fontSize:'0.88rem'}}>
-                {isLoadingNews?'Analyzing...':'Refresh Intelligence'}
-              </button>
-            </div>
-
-            {/* AI NEWS */}
-            <div className="panel" style={{marginBottom:'1.5rem'}}>
-              <h3 style={{marginTop:0,color:'var(--accent)'}}>AI News Analysis</h3>
-              {isLoadingNews && intelligentNews.length===0 ? (
-                <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>
-                  <div style={{fontSize:'2rem',marginBottom:'0.5rem'}}>🤖</div>
-                  <p>AI is analyzing market news...</p>
-                </div>
-              ) : intelligentNews.length===0 ? (
-                <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>
-                  <p>Click Refresh Intelligence to load AI-powered news analysis</p>
-                </div>
-              ) : (
-                <div className="intelligent-news-feed">
-                  {intelligentNews.map(news=>(
-                    <div key={news.id} className="intelligent-news-card">
-                      <div className="news-main-header">
-                        <h3 className="intelligent-news-title">{news.title}</h3>
-                        <div className="news-meta">
-                          <span className="news-source">{news.source}</span>
-                          <span className="news-time">{formatNewsTime(news.publishedAt)}</span>
-                        </div>
-                      </div>
-                      <div className="news-tags">
-                        <span className={`sentiment-tag ${news.analysis.sentiment}`}>{news.analysis.sentiment==='bullish'?'🟢 BULLISH':news.analysis.sentiment==='bearish'?'🔴 BEARISH':'⚪ NEUTRAL'}</span>
-                        <span className={`impact-tag ${news.analysis.impact}`}>{news.analysis.impact==='high'?'HIGH IMPACT':news.analysis.impact==='medium'?'MEDIUM':'LOW'}</span>
-                        {news.analysis.tradingIdea?.aiPowered && <span style={{background:'#1a3a1a',color:'#4ade80',padding:'2px 8px',borderRadius:'99px',fontSize:'0.7rem',fontWeight:600}}>AI</span>}
-                      </div>
-                      {news.analysis.keyInsight && <div style={{background:'#0d1f35',border:'1px solid #1e3a5f',borderRadius:'6px',padding:'0.5rem 0.75rem',margin:'0.4rem 0',fontSize:'0.84rem',color:'#93c5fd'}}>💡 {news.analysis.keyInsight}</div>}
-                      {news.analysis.affectedStocks?.length>0 && (
-                        <div style={{display:'flex',gap:'0.4rem',flexWrap:'wrap',margin:'0.3rem 0',alignItems:'center'}}>
-                          <span style={{fontSize:'0.78rem',color:'var(--text-dim)'}}>Watch:</span>
-                          {news.analysis.affectedStocks.map(s=><span key={s} style={{background:'#1e293b',color:'var(--accent)',padding:'1px 7px',borderRadius:'99px',fontSize:'0.76rem'}}>{s}</span>)}
-                        </div>
-                      )}
-                      <div className="trading-idea-section">
-                        <div className="strategy-details">
-                          <div className="strategy-name">{news.analysis.tradingIdea?.name||news.analysis.tradingIdea?.strategy}</div>
-                          <p className="strategy-reasoning">{news.analysis.tradingIdea?.reasoning}</p>
-                          <div className="strategy-metrics">
-                            <span>Risk: {news.analysis.tradingIdea?.risk}</span>
-                            <span>Timeframe: {news.analysis.tradingIdea?.timeframe}</span>
-                          </div>
-                          {(news.analysis.tradingIdea?.name||news.analysis.tradingIdea?.strategy)!=='Wait and Watch' && (
-                            <button className="load-strategy-btn" onClick={()=>loadStrategyFromNews(news.analysis.tradingIdea)}>Load Strategy in Calculator</button>
-                          )}
-                        </div>
-                      </div>
-                      <a href={news.url} target="_blank" rel="noopener noreferrer" className="read-more-link">Read full article</a>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* INSTITUTIONAL ACTIVITY */}
-            <div className="panel" style={{marginBottom:'1.5rem'}}>
-              <h3 style={{marginTop:0,color:'var(--accent)'}}>Institutional Activity</h3>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:'1rem',marginBottom:'1rem'}}>
-
-                {/* PCR Card */}
-                <div style={{background:'#0f172a',borderRadius:'10px',padding:'1rem',border:'1px solid var(--border)'}}>
-                  <div style={{fontWeight:600,marginBottom:'0.5rem'}}>Put/Call Ratio by Index</div>
-                  <p style={{color:'var(--text-dim)',fontSize:'0.78rem',marginBottom:'0.75rem'}}>PCR above 1.2 = bullish. Below 0.8 = bearish. Calculated from live chain.</p>
-                  {[['NIFTY 50',liveOptionChain]].map(([name,chain])=>{
-                    const ceOI = chain.reduce((s,r)=>s+(r.ce?.oi||0),0);
-                    const peOI = chain.reduce((s,r)=>s+(r.pe?.oi||0),0);
-                    const pcr  = ceOI>0?(peOI/ceOI).toFixed(2):'-';
-                    const bull = parseFloat(pcr)>1.2;
-                    const bear = parseFloat(pcr)<0.8;
-                    const clr  = bull?'#4ade80':bear?'#f87171':'#fbbf24';
-                    const lbl  = bull?'BULLISH':bear?'BEARISH':'NEUTRAL';
-                    return (
-                      <div key={name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.6rem 0',borderBottom:'1px solid #1e293b'}}>
-                        <span style={{color:'var(--text-dim)',fontSize:'0.85rem'}}>{name}</span>
-                        <span style={{fontWeight:700,fontSize:'1.2rem',color:clr}}>{pcr}</span>
-                        <span style={{color:clr,fontSize:'0.8rem',fontWeight:600,background:'rgba(255,255,255,0.05)',padding:'2px 8px',borderRadius:'99px'}}>{lbl}</span>
-                      </div>
-                    );
-                  })}
-                  <p style={{color:'var(--text-dim)',fontSize:'0.72rem',marginTop:'0.5rem'}}>Refresh option chain for latest data</p>
-                </div>
-
-                {/* FII/DII Card */}
-                <div style={{background:'#0f172a',borderRadius:'10px',padding:'1rem',border:'1px solid var(--border)'}}>
-                  <div style={{fontWeight:600,marginBottom:'0.5rem'}}>FII / DII Activity</div>
-                  <p style={{color:'var(--text-dim)',fontSize:'0.78rem',marginBottom:'0.75rem'}}>NSE publishes this end-of-day. Figures in crores (INR).</p>
-                  {fiiDiiData.length>0 ? fiiDiiData.slice(0,5).map((row,i)=>(
-                    <div key={i} style={{display:'grid',gridTemplateColumns:'80px 1fr 1fr 1fr',gap:'0.25rem',padding:'0.35rem 0',borderBottom:'1px solid #1e293b',fontSize:'0.78rem'}}>
-                      <span style={{color:'#64748b'}}>{row.date}</span>
-                      <span style={{color:row.fii>=0?'#4ade80':'#f87171'}}>FII {row.fii>=0?'+':''}{(row.fii||0).toLocaleString()}</span>
-                      <span style={{color:row.dii>=0?'#60a5fa':'#f87171'}}>DII {row.dii>=0?'+':''}{(row.dii||0).toLocaleString()}</span>
-                      <span style={{color:(row.fii+row.dii)>=0?'#4ade80':'#f87171',fontWeight:600}}>Net {((row.fii||0)+(row.dii||0))>=0?'+':''}{((row.fii||0)+(row.dii||0)).toLocaleString()}</span>
-                    </div>
-                  )) : (
-                    <div style={{textAlign:'center',padding:'1rem',color:'var(--text-dim)',fontSize:'0.82rem'}}>
-                      FII/DII data loads from NSE.
-                      <a href="https://www.nseindia.com/market-data/fii-dii-activity" target="_blank" rel="noreferrer" style={{color:'var(--accent)',marginLeft:'0.3rem'}}>View on NSE</a>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* OI Buildup */}
-              <div style={{background:'#0f172a',borderRadius:'10px',padding:'1rem',border:'1px solid var(--border)',marginBottom:'1rem'}}>
-                <div style={{fontWeight:600,marginBottom:'0.5rem'}}>Largest OI Buildup — NIFTY Strikes</div>
-                <p style={{color:'var(--text-dim)',fontSize:'0.78rem',marginBottom:'0.75rem'}}>Highest OI = where institutions are positioned. CE = resistance, PE = support.</p>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem'}}>
-                  <div>
-                    <div style={{color:'#f87171',fontWeight:600,fontSize:'0.82rem',marginBottom:'0.5rem'}}>TOP CE OI — Resistance Levels</div>
-                    {[...liveOptionChain].sort((a,b)=>(b.ce?.oi||0)-(a.ce?.oi||0)).slice(0,6).map(row=>(
-                      <div key={row.strike} style={{display:'flex',justifyContent:'space-between',padding:'0.3rem 0',borderBottom:'1px solid #1e293b',fontSize:'0.82rem'}}>
-                        <span style={{fontWeight:700,color:'#f0f9ff'}}>{row.strike}</span>
-                        <span style={{color:'#f87171'}}>{((row.ce?.oi||0)/1000).toFixed(0)}K OI</span>
-                        <span style={{color:'#64748b',fontSize:'0.75rem'}}>{row.ce?.iv||'-'}% IV</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div>
-                    <div style={{color:'#4ade80',fontWeight:600,fontSize:'0.82rem',marginBottom:'0.5rem'}}>TOP PE OI — Support Levels</div>
-                    {[...liveOptionChain].sort((a,b)=>(b.pe?.oi||0)-(a.pe?.oi||0)).slice(0,6).map(row=>(
-                      <div key={row.strike} style={{display:'flex',justifyContent:'space-between',padding:'0.3rem 0',borderBottom:'1px solid #1e293b',fontSize:'0.82rem'}}>
-                        <span style={{fontWeight:700,color:'#f0f9ff'}}>{row.strike}</span>
-                        <span style={{color:'#4ade80'}}>{((row.pe?.oi||0)/1000).toFixed(0)}K OI</span>
-                        <span style={{color:'#64748b',fontSize:'0.75rem'}}>{row.pe?.iv||'-'}% IV</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Block & Bulk Deals */}
-              <div style={{background:'#0f172a',borderRadius:'10px',padding:'1rem',border:'1px solid var(--border)'}}>
-                <div style={{fontWeight:600,marginBottom:'0.5rem'}}>Block & Bulk Deals</div>
-                <p style={{color:'var(--text-dim)',fontSize:'0.78rem',marginBottom:'0.5rem'}}>
-                  Large institutional trades executed on exchange.
-                  <a href="https://www.nseindia.com/market-data/block-deal" target="_blank" rel="noreferrer" style={{color:'var(--accent)',marginLeft:'0.4rem'}}>View live on NSE</a>
-                  <span style={{marginLeft:'0.4rem'}}>|</span>
-                  <a href="https://www.bseindia.com/markets/equity/EQReports/BulkDeal.aspx" target="_blank" rel="noreferrer" style={{color:'var(--accent)',marginLeft:'0.4rem'}}>View on BSE</a>
-                </p>
-                <div style={{background:'#0a1628',borderRadius:'8px',padding:'1rem',textAlign:'center',fontSize:'0.82rem',color:'#64748b'}}>
-                  Block/Bulk deal real-time integration is planned with the mstock API. Until then, use the NSE/BSE links above for live data — they update throughout the day.
-                </div>
-              </div>
-            </div>
-          </div>
         ) : activeTab === 'scanner' ? (
           <>
             <div className="page-header">
@@ -4992,398 +3646,13 @@ Respond ONLY with valid JSON:
               )}
             </div>
           </>
-        ) : activeTab === 'journal' ? (
-          <div>
-            {/* Sign-in prompt for journal sync */}
-            {!currentUser && (
-              <div style={{background:'#0f2027',border:'1px solid #1e3a5f',borderRadius:'10px',padding:'1rem 1.25rem',marginBottom:'1.25rem',display:'flex',alignItems:'center',gap:'1rem',flexWrap:'wrap'}}>
-                <div style={{flex:1}}>
-                  <div style={{fontWeight:600,color:'#93c5fd'}}>☁️ Sign in to sync your journal across devices</div>
-                  <div style={{fontSize:'0.8rem',color:'var(--text-dim)',marginTop:'0.2rem'}}>Currently saving to this browser only. Sign in to never lose your trade history.</div>
-                </div>
-                <button onClick={()=>setShowAuthModal(true)} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem',whiteSpace:'nowrap'}}>Sign In Free</button>
-              </div>
-            )}
-
-            {/* Cooldown Banner */}
-            {cooldownActive && cooldownEnd && new Date()<cooldownEnd && (
-              <div style={{background:'linear-gradient(135deg,#7f1d1d,#991b1b)',border:'2px solid #ef4444',borderRadius:'12px',padding:'1.25rem 1.5rem',marginBottom:'1.5rem',display:'flex',alignItems:'center',gap:'1rem',flexWrap:'wrap'}}>
-                <div style={{fontSize:'2rem'}}>🛑</div>
-                <div style={{flex:1}}>
-                  <div style={{color:'#fca5a5',fontWeight:700,fontSize:'1.1rem'}}>COOLDOWN ACTIVE — Stop Trading</div>
-                  <div style={{color:'#fecaca',fontSize:'0.85rem',marginTop:'0.25rem'}}>2+ consecutive losses detected. Cooldown until {cooldownEnd.toLocaleTimeString()}. Step away, review your journal, return with clarity.</div>
-                </div>
-                <button onClick={()=>setCooldownActive(false)} style={{background:'#7f1d1d',border:'1px solid #ef4444',color:'#fca5a5',borderRadius:'6px',padding:'0.4rem 0.8rem',cursor:'pointer',fontSize:'0.8rem'}}>Override (not recommended)</button>
-              </div>
-            )}
-
-            {/* Stats Row */}
-            {(() => { const s=journalStats(); return (
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:'0.75rem',marginBottom:'1.5rem'}}>
-                {[['Total Trades',s.total,'📊'],['Win Rate',s.winRate+'%','🎯'],[`Total P&L`,'₹'+parseInt(s.totalPnl).toLocaleString(),parseFloat(s.totalPnl)>=0?'🟢':'🔴'],['Avg Win','₹'+s.avgWin,'💚'],['Avg Loss','₹'+s.avgLoss,'❤'],['Impulse Trades',s.impulse,'⚠️']].map(([label,val,icon])=>(
-                  <div key={label} style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',padding:'1rem',textAlign:'center'}}>
-                    <div style={{fontSize:'1.4rem'}}>{icon}</div>
-                    <div style={{fontSize:'1.2rem',fontWeight:700,color:'var(--accent)',marginTop:'0.25rem'}}>{val}</div>
-                    <div style={{fontSize:'0.72rem',color:'var(--text-dim)',marginTop:'0.15rem'}}>{label}</div>
-                  </div>
-                ))}
-              </div>
-            ); })()}
-
-
-            {/* ── Equity Curve + Emotion Breakdown ── */}
-            {tradeLog.filter(t=>t.pnl!==null).length > 1 && (() => {
-              const closed = [...tradeLog].filter(t=>t.pnl!==null).reverse();
-              // Cumulative P&L points
-              let cum = 0;
-              const points = closed.map(t => { cum += parseFloat(t.pnl); return cum; });
-              const minPnl = Math.min(0, ...points);
-              const maxPnl = Math.max(...points);
-              const range  = maxPnl - minPnl || 1;
-              const W = 700, H = 160, PAD = 30;
-              const px = (i) => PAD + (i/(points.length-1||1))*(W-PAD*2);
-              const py = (v) => H - PAD - ((v-minPnl)/range)*(H-PAD*2);
-              const polyline = points.map((v,i)=>`${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
-              const lastVal  = points[points.length-1];
-              const lineColor = lastVal >= 0 ? '#4ade80' : '#f87171';
-              // Emotion counts
-              const emotions = {};
-              tradeLog.forEach(t => { emotions[t.emotion] = (emotions[t.emotion]||0)+1; });
-              const emotionColors = {Calm:'#4ade80',Confident:'#60a5fa',Anxious:'#fbbf24',Excited:'#a78bfa',Fearful:'#f87171',Greedy:'#fb923c'};
-              return (
-                <div className="gainers-losers-grid" style={{display:'grid',gap:'1rem',marginBottom:'1.5rem'}}>
-                  {/* Equity Curve */}
-                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',padding:'1rem'}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.5rem'}}>
-                      <span style={{fontWeight:600,fontSize:'0.9rem'}}>📈 Equity Curve</span>
-                      <span style={{color:lastVal>=0?'#4ade80':'#f87171',fontWeight:700,fontSize:'0.95rem'}}>
-                        {lastVal>=0?'+':''}₹{parseInt(lastVal).toLocaleString()}
-                      </span>
-                    </div>
-                    <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'130px'}}>
-                      {/* Zero line */}
-                      <line x1={PAD} y1={py(0).toFixed(1)} x2={W-PAD} y2={py(0).toFixed(1)} stroke="#334155" strokeWidth="1" strokeDasharray="4"/>
-                      {/* Area fill */}
-                      <polygon
-                        points={`${px(0)},${py(0)} ${polyline} ${px(points.length-1)},${py(0)}`}
-                        fill={lineColor} fillOpacity="0.12"
-                      />
-                      {/* Line */}
-                      <polyline points={polyline} fill="none" stroke={lineColor} strokeWidth="2.5" strokeLinejoin="round"/>
-                      {/* Last point dot */}
-                      <circle cx={px(points.length-1).toFixed(1)} cy={py(lastVal).toFixed(1)} r="4" fill={lineColor}/>
-                      {/* Labels */}
-                      <text x={PAD} y={H-8} fill="#64748b" fontSize="11">{closed[0] ? new Date(closed[0].timestamp).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : ''}</text>
-                      <text x={W-PAD} y={H-8} fill="#64748b" fontSize="11" textAnchor="end">{closed[closed.length-1] ? new Date(closed[closed.length-1].timestamp).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : ''}</text>
-                      <text x={PAD} y={py(maxPnl)-5} fill="#64748b" fontSize="10">₹{parseInt(maxPnl).toLocaleString()}</text>
-                      <text x={PAD} y={py(minPnl)+12} fill="#64748b" fontSize="10">₹{parseInt(minPnl).toLocaleString()}</text>
-                    </svg>
-                  </div>
-
-                  {/* Emotion Breakdown */}
-                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',padding:'1rem'}}>
-                    <div style={{fontWeight:600,fontSize:'0.9rem',marginBottom:'0.75rem'}}>🧠 Emotion Breakdown</div>
-                    {Object.entries(emotions).sort((a,b)=>b[1]-a[1]).map(([em,count])=>{
-                      const pct = ((count/tradeLog.length)*100).toFixed(0);
-                      return (
-                        <div key={em} style={{marginBottom:'0.5rem'}}>
-                          <div style={{display:'flex',justifyContent:'space-between',fontSize:'0.8rem',marginBottom:'2px'}}>
-                            <span style={{color:emotionColors[em]||'var(--text-main)'}}>{em}</span>
-                            <span style={{color:'var(--text-dim)'}}>{count} trade{count>1?'s':''} · {pct}%</span>
-                          </div>
-                          <div style={{background:'#1e293b',borderRadius:'99px',height:'6px',overflow:'hidden'}}>
-                            <div style={{width:`${pct}%`,height:'100%',background:emotionColors[em]||'var(--accent)',borderRadius:'99px',transition:'width 0.4s'}}/>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Header */}
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:'0.5rem'}}>
-              <h2 style={{margin:0}}>🧠 Trade Journal & Psychology Tracker</h2>
-              <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap'}}>
-                <select value={journalFilter} onChange={e=>setJournalFilter(e.target.value)} style={{background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.4rem 0.7rem',fontSize:'0.85rem'}}>
-                  <option value="all">All Trades</option>
-                  <option value="wins">Wins Only</option>
-                  <option value="losses">Losses Only</option>
-                  <option value="impulse">Impulse Trades</option>
-                  <option value="open">Open Trades</option>
-                </select>
-                <button onClick={()=>setShowTradeEntry(true)} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem'}}>+ Log Trade</button>
-              </div>
-            </div>
-
-            {/* Trade Entry Modal */}
-            {showTradeEntry && (
-              <div className="modal-overlay" onClick={()=>setShowTradeEntry(false)}>
-                <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'480px',width:'95%',maxHeight:'90vh',overflowY:'auto'}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
-                    <h3 style={{margin:0}}>📝 Log Trade</h3>
-                    <button onClick={()=>setShowTradeEntry(false)} style={{background:'none',border:'none',color:'var(--text-dim)',fontSize:'1.4rem',cursor:'pointer'}}>✕</button>
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.75rem'}}>
-                    {[['symbol','Symbol',['NIFTY','BANKNIFTY','FINNIFTY','SENSEX','RELIANCE','TCS','HDFCBANK','ICICIBANK','SBIN','INFY','ITC','AXISBANK'],'select'],['type','Option Type',['CE','PE'],'select'],['action','Action',['BUY','SELL'],'select'],['strike','Strike Price','','text'],['expiry','Expiry Date','','text'],['qty','Qty (Lots)','','number'],['entryPrice','Entry Price','','number'],['exitPrice','Exit Price (if closed)','','number'],['emotion','Emotion Before Trade',['Calm','Confident','Anxious','Excited','Fearful','Greedy'],'select'],['reason','Trade Reason',['Setup','Trend Follow','Reversal','Scalp','Hedge','FOMO','Revenge','Boredom','Tip/News'],'select']].map(([field,label,opts,type])=>(
-                      <div key={field} style={{display:'flex',flexDirection:'column',gap:'0.25rem'}}>
-                        <label style={{fontSize:'0.78rem',color:'var(--text-dim)'}}>{label}</label>
-                        {type==='select'?(<select className="input-field" value={tradeForm[field]} onChange={e=>setTradeForm(p=>({...p,[field]:e.target.value}))} style={{fontSize:'0.85rem',padding:'0.4rem'}}>{opts.map(o=><option key={o} value={o}>{o}</option>)}</select>):(<input type={type} className="input-field" value={tradeForm[field]} onChange={e=>setTradeForm(p=>({...p,[field]:e.target.value}))} placeholder={label} style={{fontSize:'0.85rem',padding:'0.4rem'}}/>)}
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{marginTop:'0.75rem'}}>
-                    <label style={{fontSize:'0.78rem',color:'var(--text-dim)'}}>Notes / Learnings</label>
-                    <textarea className="input-field" rows="2" value={tradeForm.notes} onChange={e=>setTradeForm(p=>({...p,notes:e.target.value}))} placeholder="What did you learn? What would you do differently?" style={{width:'100%',boxSizing:'border-box',marginTop:'0.25rem',fontSize:'0.85rem'}}/>
-                  </div>
-                  {['FOMO','Revenge','Boredom'].includes(tradeForm.reason) && (
-                    <div style={{background:'#451a03',border:'1px solid #f97316',borderRadius:'6px',padding:'0.6rem 0.75rem',marginTop:'0.5rem',fontSize:'0.82rem',color:'#fed7aa'}}>
-                      ⚠️ <b>Warning:</b> You selected <b>{tradeForm.reason}</b> as your reason. These are high-risk emotional trades. Consider waiting 15 minutes before entering.
-                    </div>
-                  )}
-                  <div className="modal-buttons" style={{marginTop:'1rem'}}>
-                    <button className="btn-secondary" onClick={()=>setShowTradeEntry(false)}>Cancel</button>
-                    <button className="btn-primary" onClick={()=>{ addTradeWithSync(tradeForm); setShowTradeEntry(false); setTradeForm({symbol:'NIFTY',type:'CE',strike:'',expiry:'',action:'BUY',qty:1,entryPrice:'',exitPrice:'',notes:'',emotion:'Calm',reason:'Setup'}); }}>Save Trade</button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Trade List */}
-            {tradeLog.filter(t => journalFilter==='all'?true:journalFilter==='wins'?t.pnl&&parseFloat(t.pnl)>0:journalFilter==='losses'?t.pnl&&parseFloat(t.pnl)<0:journalFilter==='impulse'?['FOMO','Revenge','Boredom'].includes(t.reason):t.pnl===null).length === 0 ? (
-              <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>
-                <div style={{fontSize:'3rem',marginBottom:'1rem'}}>📝</div>
-                <p>No trades logged yet. Click <b>+ Log Trade</b> to start tracking.</p>
-                <p style={{fontSize:'0.85rem',marginTop:'0.5rem'}}>Tracking your trades is the fastest way to improve as a trader.</p>
-              </div>
-            ) : tradeLog.filter(t => journalFilter==='all'?true:journalFilter==='wins'?t.pnl&&parseFloat(t.pnl)>0:journalFilter==='losses'?t.pnl&&parseFloat(t.pnl)<0:journalFilter==='impulse'?['FOMO','Revenge','Boredom'].includes(t.reason):t.pnl===null).map(trade=>(
-              <div key={trade.id} style={{background:'var(--bg-card)',border:`1px solid ${trade.pnl===null?'var(--border)':parseFloat(trade.pnl)>=0?'#166534':'#991b1b'}`,borderRadius:'10px',padding:'1rem',marginBottom:'0.75rem',position:'relative'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'0.5rem'}}>
-                  <div style={{display:'flex',gap:'0.5rem',alignItems:'center',flexWrap:'wrap'}}>
-                    <span style={{fontWeight:700,fontSize:'1rem'}}>{trade.symbol} {trade.strike} {trade.type}</span>
-                    <span style={{background:trade.action==='BUY'?'#166534':'#991b1b',color:'white',padding:'1px 8px',borderRadius:'99px',fontSize:'0.75rem'}}>{trade.action}</span>
-                    {['FOMO','Revenge','Boredom'].includes(trade.reason) && <span style={{background:'#451a03',color:'#f97316',padding:'1px 8px',borderRadius:'99px',fontSize:'0.72rem'}}>⚠️ {trade.reason}</span>}
-                    <span style={{background:'#1e293b',color:'var(--text-dim)',padding:'1px 8px',borderRadius:'99px',fontSize:'0.72rem'}}>{trade.emotion}</span>
-                  </div>
-                  <div style={{display:'flex',gap:'0.5rem',alignItems:'center'}}>
-                    {trade.pnl!==null && <span style={{fontWeight:700,fontSize:'1.1rem',color:parseFloat(trade.pnl)>=0?'#4ade80':'#f87171'}}>{parseFloat(trade.pnl)>=0?'+':''}₹{parseInt(trade.pnl).toLocaleString()}</span>}
-                    {trade.pnl===null && <span style={{color:'#fbbf24',fontSize:'0.82rem'}}>● Open</span>}
-                    <button onClick={()=>deleteTrade(trade.id)} style={{background:'none',border:'none',color:'var(--text-dim)',cursor:'pointer',fontSize:'1rem',padding:'0 0.2rem'}}>🗑️</button>
-                  </div>
-                </div>
-                <div style={{display:'flex',gap:'1rem',marginTop:'0.5rem',fontSize:'0.8rem',color:'var(--text-dim)',flexWrap:'wrap'}}>
-                  <span>Entry: <b style={{color:'var(--text-main)'}}>₹{trade.entryPrice}</b></span>
-                  {trade.exitPrice && <span>Exit: <b style={{color:'var(--text-main)'}}>₹{trade.exitPrice}</b></span>}
-                  <span>Qty: <b style={{color:'var(--text-main)'}}>{trade.qty} lot{trade.qty>1?'s':''}</b></span>
-                  <span>Reason: <b style={{color:'var(--text-main)'}}>{trade.reason}</b></span>
-                  <span>{new Date(trade.timestamp).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
-                </div>
-                {trade.notes && <div style={{marginTop:'0.4rem',fontSize:'0.8rem',color:'#93c5fd',fontStyle:'italic'}}>💬 {trade.notes}</div>}
-              </div>
-            ))}
-          </div>
-        ) : activeTab === 'paper' ? (
-          <div className="main-content">
-            <div className="page-header">
-              <h1>📝 Paper Trading</h1>
-              <p className="subtitle">Practice with virtual money — zero real capital at risk</p>
-            </div>
-
-            {/* Stats */}
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'1rem',marginBottom:'1.5rem'}}>
-              {[
-                { label:'Virtual Balance', value:`₹${paperBalance.toLocaleString('en-IN',{maximumFractionDigits:0})}`, color:'var(--accent)' },
-                { label:'Open Positions', value:paperPositions.length, color:'var(--blue)' },
-                { label:'Total Trades', value:paperHistory.length, color:'var(--yellow)' },
-                { label:'Realised P&L', value:`${paperHistory.filter(t=>t.pnl!=null).reduce((s,t)=>s+t.pnl,0)>=0?'+':''}₹${paperHistory.filter(t=>t.pnl!=null).reduce((s,t)=>s+t.pnl,0).toLocaleString('en-IN',{maximumFractionDigits:0})}`, color: paperHistory.filter(t=>t.pnl!=null).reduce((s,t)=>s+t.pnl,0)>=0?'var(--green)':'var(--red)' },
-              ].map(({label,value,color})=>(
-                <div key={label} style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1rem',textAlign:'center'}}>
-                  <div style={{fontSize:'0.75rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'0.4rem'}}>{label}</div>
-                  <div style={{fontSize:'1.4rem',fontWeight:800,color}}>{value}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Order Form */}
-            <div className="panel" style={{marginBottom:'1.5rem'}}>
-              <h3 style={{marginBottom:'1rem'}}>📤 Place Order</h3>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'0.75rem',marginBottom:'1rem'}}>
-                <div>
-                  <label style={{fontSize:'0.78rem',color:'var(--text-dim)',display:'block',marginBottom:'0.3rem'}}>Symbol</label>
-                  <input className="input-field" value={paperOrder.symbol}
-                    onChange={e=>setPaperOrder(o=>({...o,symbol:e.target.value.toUpperCase()}))}
-                    placeholder="NIFTY / RELIANCE" />
-                </div>
-                <div>
-                  <label style={{fontSize:'0.78rem',color:'var(--text-dim)',display:'block',marginBottom:'0.3rem'}}>Action</label>
-                  <select className="input-field" value={paperOrder.type} onChange={e=>setPaperOrder(o=>({...o,type:e.target.value}))}>
-                    <option value="BUY">BUY</option>
-                    <option value="SELL">SELL</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{fontSize:'0.78rem',color:'var(--text-dim)',display:'block',marginBottom:'0.3rem'}}>Quantity</label>
-                  <input className="input-field" type="number" min="1" value={paperOrder.qty}
-                    onChange={e=>setPaperOrder(o=>({...o,qty:parseInt(e.target.value)||1}))} />
-                </div>
-                <div>
-                  <label style={{fontSize:'0.78rem',color:'var(--text-dim)',display:'block',marginBottom:'0.3rem'}}>Order Type</label>
-                  <select className="input-field" value={paperOrder.orderType} onChange={e=>setPaperOrder(o=>({...o,orderType:e.target.value}))}>
-                    <option value="MARKET">MARKET (live price)</option>
-                    <option value="LIMIT">LIMIT (enter price)</option>
-                  </select>
-                </div>
-                {paperOrder.orderType === 'LIMIT' && (
-                  <div>
-                    <label style={{fontSize:'0.78rem',color:'var(--text-dim)',display:'block',marginBottom:'0.3rem'}}>Price ₹</label>
-                    <input className="input-field" type="number" value={paperOrder.price}
-                      onChange={e=>setPaperOrder(o=>({...o,price:e.target.value}))} placeholder="0.00" />
-                  </div>
-                )}
-              </div>
-              <div style={{display:'flex',gap:'0.75rem',alignItems:'center',flexWrap:'wrap'}}>
-                <button onClick={executePaperOrder}
-                  style={{background:paperOrder.type==='BUY'?'#22c55e':'#ef4444',color:'white',border:'none',borderRadius:'8px',padding:'0.65rem 1.5rem',fontWeight:700,fontSize:'0.95rem',cursor:'pointer'}}>
-                  {paperOrder.type==='BUY'?'🟢 BUY':'🔴 SELL'} {paperOrder.symbol}
-                </button>
-                <button onClick={resetPaperAccount}
-                  style={{background:'var(--bg-surface)',color:'var(--text-dim)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.65rem 1rem',fontSize:'0.85rem',cursor:'pointer'}}>
-                  🔄 Reset Account
-                </button>
-                {paperMsg && (
-                  <span style={{fontSize:'0.9rem',fontWeight:600,color:paperMsg.startsWith('✅')?'var(--green)':'var(--red)',flex:1}}>
-                    {paperMsg}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Open Positions */}
-            {paperPositions.length > 0 && (
-              <div className="panel" style={{marginBottom:'1.5rem'}}>
-                <h3 style={{marginBottom:'1rem'}}>📊 Open Positions</h3>
-                <div style={{overflowX:'auto'}}>
-                  <table style={{width:'100%',borderCollapse:'collapse'}}>
-                    <thead>
-                      <tr>
-                        {['Symbol','Qty','Avg Price','Entered','Action'].map(h=>(
-                          <th key={h} style={{padding:'0.6rem 0.85rem',textAlign:'left',color:'var(--text-dim)',fontSize:'0.78rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',borderBottom:'1px solid var(--border)',background:'var(--bg-surface)'}}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paperPositions.map(pos=>(
-                        <tr key={pos.symbol} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
-                          <td style={{padding:'0.65rem 0.85rem',fontWeight:700,color:'var(--accent)'}}>{pos.symbol}</td>
-                          <td style={{padding:'0.65rem 0.85rem'}}>{pos.qty}</td>
-                          <td style={{padding:'0.65rem 0.85rem'}}>₹{pos.avgPrice.toFixed(2)}</td>
-                          <td style={{padding:'0.65rem 0.85rem',fontSize:'0.82rem',color:'var(--text-dim)'}}>{pos.buyTime}</td>
-                          <td style={{padding:'0.65rem 0.85rem'}}>
-                            <button onClick={()=>setPaperOrder({symbol:pos.symbol,type:'SELL',qty:pos.qty,price:'',orderType:'MARKET'})}
-                              style={{background:'var(--red-dim)',color:'var(--red)',border:'none',borderRadius:'6px',padding:'0.3rem 0.8rem',fontSize:'0.82rem',cursor:'pointer',fontWeight:700}}>
-                              Close Position
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* Trade History */}
-            {paperHistory.length > 0 ? (
-              <div className="panel">
-                <h3 style={{marginBottom:'1rem'}}>📋 Trade History</h3>
-                <div style={{overflowX:'auto'}}>
-                  <table style={{width:'100%',borderCollapse:'collapse'}}>
-                    <thead>
-                      <tr>
-                        {['Time','Symbol','Type','Qty','Price','P&L'].map(h=>(
-                          <th key={h} style={{padding:'0.6rem 0.85rem',textAlign:'left',color:'var(--text-dim)',fontSize:'0.78rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',borderBottom:'1px solid var(--border)',background:'var(--bg-surface)'}}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paperHistory.slice(0,50).map(t=>(
-                        <tr key={t.id} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
-                          <td style={{padding:'0.6rem 0.85rem',fontSize:'0.8rem',color:'var(--text-dim)'}}>{t.time}</td>
-                          <td style={{padding:'0.6rem 0.85rem',fontWeight:700}}>{t.symbol}</td>
-                          <td style={{padding:'0.6rem 0.85rem'}}>
-                            <span style={{color:t.type==='BUY'?'var(--green)':'var(--red)',fontWeight:700,fontSize:'0.85rem'}}>{t.type}</span>
-                          </td>
-                          <td style={{padding:'0.6rem 0.85rem'}}>{t.qty}</td>
-                          <td style={{padding:'0.6rem 0.85rem'}}>₹{t.price.toFixed(2)}</td>
-                          <td style={{padding:'0.6rem 0.85rem',fontWeight:700,color:t.pnl==null?'var(--text-muted)':t.pnl>=0?'var(--green)':'var(--red)'}}>
-                            {t.pnl==null?'OPEN':`${t.pnl>=0?'+':''}₹${t.pnl.toFixed(2)}`}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : paperPositions.length === 0 && (
-              <div style={{textAlign:'center',padding:'3rem 1rem',color:'var(--text-muted)'}}>
-                <div style={{fontSize:'3rem',marginBottom:'1rem'}}>📝</div>
-                <div style={{fontSize:'1.15rem',fontWeight:700,marginBottom:'0.5rem',color:'var(--text-main)'}}>No trades yet</div>
-                <div style={{fontSize:'0.9rem'}}>Place your first order above. You start with ₹5,00,000 virtual balance.</div>
-              </div>
-            )}
-          </div>
         ) : null}
 
         <div className="disclaimer">
-          <strong>⚠️ Disclaimer:</strong> DeltaBuddy is for educational purposes only. Options trading involves substantial risk. Always consult a SEBI-registered advisor before trading.
+          <strong>⚠️ Disclaimer:</strong> This calculator is for educational purposes only. 
+          Options trading involves substantial risk. Results are theoretical estimates. 
+          Always consult a SEBI-registered advisor before trading.
         </div>
-
-        {/* ── FLOATING WHATSAPP SUPPORT BUTTON ── */}
-        <a
-          href="https://wa.me/917506218502?text=Hi%20DeltaBuddy%20Team%2C%20I%20need%20help%20with..."
-          target="_blank"
-          rel="noreferrer"
-          title="Chat with us on WhatsApp"
-          style={{
-            position:'fixed', bottom:'24px', right:'24px', zIndex:9999,
-            width:'56px', height:'56px', borderRadius:'50%',
-            background:'#25D366', color:'white',
-            display:'flex', alignItems:'center', justifyContent:'center',
-            boxShadow:'0 4px 20px rgba(37,211,102,0.5)',
-            fontSize:'1.6rem', textDecoration:'none',
-            animation:'waPulse 2s infinite',
-          }}
-        >
-          <svg viewBox="0 0 24 24" width="30" height="30" fill="white">
-            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-            <path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.112 1.522 5.84L.057 23.882a.5.5 0 00.611.611l6.042-1.465A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.907 0-3.698-.5-5.254-1.375l-.375-.214-3.893.944.963-3.786-.234-.393A9.956 9.956 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/>
-          </svg>
-        </a>
-
-        {/* ── PULSE ANIMATION + MOBILE OVERRIDES ── */}
-        <style>{`
-          @keyframes waPulse {
-            0%   { box-shadow: 0 0 0 0 rgba(37,211,102,0.5); }
-            70%  { box-shadow: 0 0 0 12px rgba(37,211,102,0); }
-            100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); }
-          }
-          @media (max-width: 768px) {
-            .main-content, [class*="main-content"] { padding: 0.75rem !important; }
-            .panel, [class*="panel"] { padding: 0.75rem !important; border-radius: 8px !important; }
-            .quick-actions-grid { grid-template-columns: 1fr !important; }
-            .option-chain-table { font-size: 0.72rem !important; }
-            .modal-content { width: 95% !important; max-width: 95% !important; margin: 0.5rem !important; max-height: 85vh !important; }
-            table { display: block !important; overflow-x: auto !important; }
-            .page-header h1 { font-size: 1.3rem !important; }
-            [style*="minmax(260px"] { grid-template-columns: 1fr !important; }
-          }
-          @media (max-width: 480px) {
-            [style*="grid-template-columns: repeat(auto-fit"] { grid-template-columns: 1fr 1fr !important; }
-            .ticker-items { gap: 0.75rem !important; }
-          }
-        `}</style>
-
       </div>
     </div>
   );
