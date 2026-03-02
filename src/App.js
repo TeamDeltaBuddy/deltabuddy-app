@@ -1190,7 +1190,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     }
   }, []);
   // ── Subscription state ───────────────────────────────────────────────────
-  const [subStatus,     setSubStatus]     = useState('loading'); // loading | trial | active | expired | cancelled
+  const [subStatus,     setSubStatus]     = useState('trial'); // trial | active | expired (start as trial, Firebase will correct)
   const [trialDaysLeft, setTrialDaysLeft] = useState(90);
   const [showPaywall,   setShowPaywall]   = useState(false);
   const [showPricing,   setShowPricing]   = useState(false);
@@ -1201,7 +1201,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
 
   // Check subscription status whenever user logs in
   useEffect(() => {
-    if (!currentUser) { setSubStatus('loading'); return; }
+    if (!currentUser) { setSubStatus('trial'); return; }
     const checkSub = async () => {
       try {
         const snap = await getDoc(doc(db, 'users', currentUser.uid));
@@ -3576,22 +3576,6 @@ Respond ONLY with valid JSON:
             <button onClick={()=>setShowAuthModal(true)}
               style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'10px',padding:'0.85rem 2rem',fontWeight:800,fontSize:'1rem',cursor:'pointer'}}>
               Sign In Free →
-            </button>
-          </div>
-        ) : subStatus === 'expired' ? (
-          /* Trial expired — show paywall */
-          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',padding:'2rem'}}>
-            <div style={{fontSize:'3.5rem',marginBottom:'1rem'}}>⏰</div>
-            <h2 style={{marginBottom:'0.5rem'}}>Your free trial has ended</h2>
-            <p style={{color:'var(--text-dim)',marginBottom:'0.5rem',maxWidth:'380px'}}>You've had 3 months free. To continue accessing markets, scanner, AI reports and all features — subscribe for just ₹299/quarter.</p>
-            <p style={{color:'var(--text-muted)',fontSize:'0.82rem',marginBottom:'1.5rem'}}>That's ₹3.30/day · cancel anytime</p>
-            <button onClick={startSubscription} disabled={subLoading}
-              style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'10px',padding:'0.85rem 2rem',fontWeight:800,fontSize:'1rem',cursor:'pointer',marginBottom:'0.75rem'}}>
-              {subLoading ? '⏳ Loading...' : '🚀 Subscribe — ₹299/quarter'}
-            </button>
-            <button onClick={()=>setShowPricing(true)}
-              style={{background:'none',border:'1px solid var(--border)',color:'var(--text-dim)',borderRadius:'8px',padding:'0.6rem 1.5rem',fontSize:'0.88rem',cursor:'pointer'}}>
-              See what's included
             </button>
           </div>
         ) : activeTab === 'single' ? (
