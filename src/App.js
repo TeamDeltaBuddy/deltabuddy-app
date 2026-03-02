@@ -2357,26 +2357,27 @@ Respond ONLY with valid JSON:
 
           {/* Right controls — always visible */}
           <div className="navbar-right">
-            {/* Trial / Pro badge */}
-            {currentUser && subStatus === 'trial' && (
-              <button onClick={()=>setShowPricing(true)}
-                style={{background:'rgba(0,255,136,0.1)',border:'1px solid rgba(0,255,136,0.3)',color:'var(--accent)',borderRadius:'20px',padding:'0.2rem 0.65rem',fontSize:'0.75rem',fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
-                ⏳ {trialDaysLeft}d free
-              </button>
-            )}
-            {currentUser && subStatus === 'expired' && (
-              <button onClick={()=>setShowPricing(true)}
-                style={{background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.4)',color:'var(--red)',borderRadius:'20px',padding:'0.2rem 0.65rem',fontSize:'0.75rem',fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
-                🔒 Upgrade
-              </button>
-            )}
-            {currentUser && subStatus === 'active' && (
-              <span title="DeltaBuddy Pro"
-                style={{background:'rgba(0,255,136,0.1)',border:'1px solid rgba(0,255,136,0.3)',color:'var(--accent)',borderRadius:'20px',padding:'0.2rem 0.65rem',fontSize:'0.75rem',fontWeight:700,whiteSpace:'nowrap'}}>
-                ✦ PRO
-              </span>
-            )}
+            {!authLoading && (currentUser ? (
               <>
+                {/* Trial / Pro badge */}
+                {subStatus === 'trial' && (
+                  <button onClick={()=>setShowPricing(true)}
+                    style={{background:'rgba(0,255,136,0.1)',border:'1px solid rgba(0,255,136,0.3)',color:'var(--accent)',borderRadius:'20px',padding:'0.2rem 0.65rem',fontSize:'0.75rem',fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+                    ⏳ {trialDaysLeft}d free
+                  </button>
+                )}
+                {subStatus === 'expired' && (
+                  <button onClick={()=>setShowPricing(true)}
+                    style={{background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.4)',color:'var(--red)',borderRadius:'20px',padding:'0.2rem 0.65rem',fontSize:'0.75rem',fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+                    🔒 Upgrade
+                  </button>
+                )}
+                {subStatus === 'active' && (
+                  <span title="DeltaBuddy Pro"
+                    style={{background:'rgba(0,255,136,0.1)',border:'1px solid rgba(0,255,136,0.3)',color:'var(--accent)',borderRadius:'20px',padding:'0.2rem 0.65rem',fontSize:'0.75rem',fontWeight:700,whiteSpace:'nowrap'}}>
+                    ✦ PRO
+                  </span>
+                )}
                 <button onClick={()=>setShowTgSetup(true)}
                   title={tgChatId?'Telegram connected — click to update':'Connect Telegram for alerts'}
                   style={{background:'none',border:'none',cursor:'pointer',padding:'4px',fontSize:'1.2rem',lineHeight:1,opacity:tgChatId?1:0.6}}>
