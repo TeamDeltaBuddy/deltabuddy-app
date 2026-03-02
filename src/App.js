@@ -5804,7 +5804,7 @@ Respond ONLY with valid JSON:
               </button>
             </div>
 
-            {!angelConnected && (
+            {portfolioError?.includes('not logged in') && (
               <div style={{background:'rgba(251,191,36,0.1)',border:'1px solid rgba(251,191,36,0.4)',borderRadius:'12px',padding:'1.25rem',marginBottom:'1.5rem',display:'flex',gap:'1rem',alignItems:'flex-start'}}>
                 <span style={{fontSize:'1.5rem'}}>⚠️</span>
                 <div>
