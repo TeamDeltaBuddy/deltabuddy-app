@@ -61,16 +61,17 @@ a{color:var(--accent);text-decoration:none}
 .main-content{flex:1;padding:1.5rem 2rem;width:100%}
 
 /* NAVBAR */
-.navbar{position:sticky;top:0;z-index:1000;background:rgba(7,13,26,0.96);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);height:64px;display:flex;align-items:center;padding:0 2rem;width:100%;box-sizing:border-box}
-.navbar .container{display:flex;align-items:center;gap:0.5rem;padding:0;width:100%}
+.navbar{position:sticky;top:0;z-index:1000;background:rgba(7,13,26,0.96);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);height:64px;display:flex;align-items:center;padding:0 1rem;width:100%;box-sizing:border-box}
+.navbar .container{display:flex;align-items:center;gap:0.35rem;padding:0;width:100%;overflow:hidden}
 .logo{display:flex;align-items:center;gap:0.4rem;cursor:pointer;user-select:none;flex-shrink:0}
 .logo .delta{font-size:1.6rem;color:var(--accent);font-weight:900;line-height:1}
 .logo span:last-child{font-size:1.4rem;font-weight:800;color:var(--text-main);letter-spacing:-0.01em}
-.nav-links{display:flex;align-items:center;gap:0.1rem;flex:1}
-.nav-links span{font-size:1rem;font-weight:500;color:var(--text-dim);padding:0.5rem 0.95rem;border-radius:var(--radius-sm);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:color 0.15s,background 0.15s}
+.nav-links{display:flex;align-items:center;gap:0;flex:1;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;min-width:0}
+.nav-links::-webkit-scrollbar{display:none}
+.nav-links span{font-size:0.82rem;font-weight:500;color:var(--text-dim);padding:0.45rem 0.6rem;border-radius:var(--radius-sm);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:color 0.15s,background 0.15s;flex-shrink:0}
 .nav-links span:hover{color:var(--text-main);background:var(--bg-hover)}
 .nav-links span.active{color:var(--accent);font-weight:700;border-bottom-color:var(--accent)}
-.navbar-right{display:flex;align-items:center;gap:0.4rem;flex-shrink:0;margin-left:auto}
+.navbar-right{display:flex;align-items:center;gap:0.35rem;flex-shrink:0;margin-left:0.5rem}
 .help-link{color:#25D366;font-size:0.78rem;font-weight:600;text-decoration:none;padding:0.25rem 0.4rem;border-radius:6px;border:1px solid rgba(37,211,102,0.3);white-space:nowrap}
 .hamburger-btn{display:none;background:none;border:none;color:var(--text-main);font-size:1.5rem;cursor:pointer;padding:0.25rem 0.5rem;line-height:1}
 
