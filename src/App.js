@@ -1100,7 +1100,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   ]);
   const [oiChartData, setOiChartData] = useState([]);
   const [activeHomeTab, setActiveHomeTab] = useState('news');
-  const [optionChainData, setOptionChainData] = useState(null);
+  const [optionChainData, setOptionChainData] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [scannerIV, setScannerIV] = useState(20);
   const [scannerExpiry, setScannerExpiry] = useState('');
