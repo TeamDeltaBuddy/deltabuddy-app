@@ -1,6 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
+// ── Error Boundary — catches crashes and shows error on screen ────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { console.error('App crash:', error, info); }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{background:'#0a0a0a',color:'#f87171',minHeight:'100vh',padding:'2rem',fontFamily:'monospace'}}>
+          <div style={{fontSize:'1.5rem',fontWeight:700,marginBottom:'1rem'}}>⚠️ DeltaBuddy crashed — error details:</div>
+          <div style={{background:'#1a0000',border:'1px solid #f87171',borderRadius:'8px',padding:'1.5rem',fontSize:'0.9rem',lineHeight:1.7,whiteSpace:'pre-wrap',wordBreak:'break-all'}}>
+            {this.state.error.toString()}
+            {'\n\n'}
+            {this.state.error.stack}
+          </div>
+          <div style={{marginTop:'1rem',color:'#fbbf24',fontSize:'0.85rem'}}>Please screenshot this and share with support.</div>
+          <button onClick={()=>window.location.reload()} style={{marginTop:'1rem',background:'#f87171',color:'#000',border:'none',borderRadius:'6px',padding:'0.5rem 1.5rem',cursor:'pointer',fontWeight:700}}>Reload</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ── Firebase ──────────────────────────────────────────────────────────────────
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from 'firebase/auth';
@@ -1989,8 +2013,11 @@ Respond ONLY with valid JSON:
   // Auto-refresh news and prices - LIVE MODE
   useEffect(() => {
     // Register PWA service worker
+    // Unregister service worker to clear stale cache causing black screen
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(reg => reg.unregister());
+      });
     }
     // Re-subscribe to backend alert engine on every load
     const chatId = localStorage.getItem('db_tg_chatid');
@@ -2445,9 +2472,9 @@ Respond ONLY with valid JSON:
                   {tgChatId ? '🔔' : '🔕'}
                 </button>
                 <div style={{cursor:'pointer'}} onClick={handleSignOut} title="Click to sign out">
-                  {currentUser.photoURL
+                  {currentUser?.photoURL
                     ? <img src={currentUser.photoURL} alt="" style={{width:'30px',height:'30px',borderRadius:'50%',border:'2px solid var(--accent)',display:'block',objectFit:'cover'}}/>
-                    : <div style={{width:'30px',height:'30px',borderRadius:'50%',background:'var(--accent)',color:'#000',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:'0.85rem'}}>{(currentUser.displayName||currentUser.email||'U')[0].toUpperCase()}</div>
+                    : <div style={{width:'30px',height:'30px',borderRadius:'50%',background:'var(--accent)',color:'#000',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:'0.85rem'}}>{(currentUser?.displayName||currentUser?.email||'U')[0].toUpperCase()}</div>
                   }
                 </div>
               </>
@@ -6246,4 +6273,5 @@ Respond ONLY with valid JSON:
   );
 }
 
-export default App;
+const AppWithBoundary = () => <ErrorBoundary><App /></ErrorBoundary>;
+export default AppWithBoundary;
