@@ -25,6 +25,67 @@ const googleProvider = new GoogleAuthProvider();
 const BACKEND_URL   = process.env.REACT_APP_BACKEND_URL || 'https://deltabuddy-backend.onrender.com';
 const ADMIN_EMAIL   = 'mirza.hassanuzzaman@gmail.com';
 
+// ── Legal pages data ──────────────────────────────────────────────────────────
+const LEGAL_EMAIL = 'legal@deltabuddy.com';
+const LEGAL_DATE  = '1 June 2025';
+const LEGAL_PAGES = {
+  terms: {
+    title: '📋 Terms & Conditions',
+    content: [
+      { h:'1. Acceptance of Terms', p:`By accessing or using DeltaBuddy you agree to these Terms. Effective: ${LEGAL_DATE}.` },
+      { h:'2. Description of Service', p:'DeltaBuddy is an AI-powered financial information platform providing options analysis, market data, strategy simulation, paper trading, Telegram alerts, backtesting, and trade journaling for Indian equity and derivatives markets (NSE/BSE).' },
+      { h:'3. Not Financial Advice', p:'DeltaBuddy is an educational tool ONLY. Nothing on this Platform constitutes financial advice, investment advice, or trading recommendations. All data, AI outputs, scanner alerts, and strategy suggestions are for educational purposes only. You are solely responsible for your trading decisions. Always consult a SEBI-registered Investment Advisor before investing.' },
+      { h:'4. Eligibility', p:'You must be at least 18 years old and legally permitted to trade in Indian financial markets to use DeltaBuddy.' },
+      { h:'5. Subscription & Payments', p:'Free Trial: 90 days free with full access. No payment required during trial.\n\nPaid Subscription: ₹299 per quarter, billed automatically via Razorpay after the trial ends.\n\nAuto-Renewal: Subscriptions renew every quarter unless cancelled at least 24 hours before renewal. You will receive email notification 7 days before each renewal.\n\nWe do not store your card or bank details.' },
+      { h:'6. Algo Trading & Automated Features (Upcoming)', p:'DeltaBuddy currently provides manual trading intelligence tools. Future versions may include automated signal generation, API-based order routing, and algorithmic strategy execution. When such features are introduced they will be subject to additional terms and SEBI compliance requirements. Users will be notified at least 30 days before any automated order-placement features are activated. The Platform is not liable for losses from automated trading decisions.' },
+      { h:'7. Data Accuracy', p:'Market data is sourced from NSE, Yahoo Finance, and Angel One. DeltaBuddy makes no warranty as to accuracy, completeness, or timeliness. Data may be delayed or unavailable. Do not rely solely on Platform data for real-time trading decisions.' },
+      { h:'8. Paper Trading', p:'The Paper Trading feature uses virtual money (₹5,00,000 default) for simulation only. Results do not reflect real-world execution costs, slippage, brokerage, or taxes. Paper trading performance is not indicative of real trading results.' },
+      { h:'9. Telegram Alerts', p:'Alerts are provided on a best-effort basis and may be delayed or inaccurate. The Platform is not liable for trading decisions made based on alerts. Alert content is for informational purposes only.' },
+      { h:'10. Prohibited Uses', p:'You may not use DeltaBuddy for market manipulation, reverse-engineering, excessive automated scraping, impersonation, or any activity that violates Indian law.' },
+      { h:'11. Intellectual Property', p:'All content, software, AI configurations, designs, and trademarks are the property of DeltaBuddy or its licensors. You may not copy, reproduce, or commercially distribute any part of the Platform without prior written consent.' },
+      { h:'12. Limitation of Liability', p:'To the maximum extent permitted by law, DeltaBuddy and its founders shall not be liable for trading losses, loss of profits, data loss, or service interruptions. Our maximum aggregate liability is limited to amounts paid in the 3 months preceding any claim.' },
+      { h:'13. Governing Law', p:'These Terms are governed by the laws of India. Any disputes shall be subject to the exclusive jurisdiction of courts in Mumbai, Maharashtra.' },
+      { h:'14. Contact', p:`Email: ${LEGAL_EMAIL}` },
+    ]
+  },
+  privacy: {
+    title: '🔐 Privacy Policy',
+    content: [
+      { h:'1. Introduction', p:`DeltaBuddy is committed to protecting your privacy. Effective: ${LEGAL_DATE}. Compliant with India's Information Technology Act 2000.` },
+      { h:'2. Data We Collect', p:'Account: Email, display name, profile photo (via Google Sign-In).\n\nTrading Data: Strategies, journal entries, paper trades, backtests — stored in Firebase under your user ID.\n\nTechnical: IP address, browser type, pages visited, session duration.\n\nPreferences: Groq API key (encrypted), Telegram Chat ID (encrypted), notification settings.\n\nPayment: We do NOT store card numbers, UPI handles, or bank details. Only transaction IDs from Razorpay.' },
+      { h:'3. How We Use Your Data', p:'To provide and improve the Platform. To send Telegram alerts you subscribed to. To process payments and send billing notifications. To analyze aggregate usage (anonymized). We do NOT sell your data. We do NOT use your trading journal data for advertising.' },
+      { h:'4. Third-Party Services', p:'Firebase (Google): Authentication and database. Razorpay: Payment processing. Groq AI / Google Gemini: AI processing of news text only — never personal data. Angel One: Market data if connected. Yahoo Finance / NSE: Public market data.' },
+      { h:'5. Data Storage & Security', p:'Data stored in Google Firebase Asia-South1 (Mumbai). HTTPS/TLS encryption in transit. AES-256 at rest. Firebase Security Rules restrict access to authenticated users only.' },
+      { h:'6. Your Rights', p:'You may access, correct, or delete your personal data at any time. To export your trade journal or delete your account, email us at ' + LEGAL_EMAIL },
+      { h:'7. Cookies', p:'We use only essential session cookies for authentication. No advertising or tracking cookies.' },
+      { h:'8. Contact', p:`Privacy concerns: ${LEGAL_EMAIL}` },
+    ]
+  },
+  refund: {
+    title: '💳 Refund & Cancellation Policy',
+    content: [
+      { h:'1. Free Trial', p:'All new users get 90 days free with full access. No payment needed during trial. Cancel anytime at zero cost.' },
+      { h:'2. When Charges Begin', p:'Charges of ₹299/quarter begin only after your free trial ends. You will receive email reminders 14 days, 7 days, and 1 day before the first charge.' },
+      { h:'3. Cancellation', p:'Cancel anytime via Account Settings or by emailing ' + LEGAL_EMAIL + '. Cancellation is processed within 24 hours. You retain full access until the end of your paid quarter.' },
+      { h:'4. Refund Policy', p:'7-Day Guarantee: Full refund if requested within 7 days of any charge — no questions asked.\n\nAfter 7 Days: No pro-rated refunds. You retain access until quarter end.\n\nService Outage: If DeltaBuddy is down for more than 72 continuous hours in a billing period, you may request a pro-rated credit for the next cycle.' },
+      { h:'5. Refund Process', p:'Approved refunds are processed within 2 business days. Funds return to the original payment method within 5-7 business days.' },
+      { h:'6. Price Changes', p:'We will notify you at least 30 days before any price increase. Changes take effect from the next renewal after the notice period.' },
+      { h:'7. Contact', p:`Email: ${LEGAL_EMAIL} with your registered email and transaction ID. Response within 2 business days.` },
+    ]
+  },
+  legal: {
+    title: '⚠️ Legal Disclaimer',
+    content: [
+      { h:'Investment Risk Warning', p:'OPTIONS TRADING INVOLVES HIGH RISK and is not suitable for all investors. You can lose the entire amount invested. Never trade with money you cannot afford to lose.' },
+      { h:'No SEBI Registration', p:'DeltaBuddy is NOT a SEBI-registered Investment Adviser, Research Analyst, or Stockbroker. Our tools are for educational and research purposes only and do not constitute personalized investment advice.' },
+      { h:'Data Accuracy', p:'Market data may be delayed, inaccurate, or incomplete. Always verify from your broker or NSE/BSE directly before executing trades.' },
+      { h:'AI Output Disclaimer', p:'AI-generated insights may contain errors or hallucinations. They are not trading recommendations. Never act solely on AI outputs without independent verification.' },
+      { h:'Backtesting Disclaimer', p:'Backtesting is hypothetical and does not account for real execution costs, slippage, or market impact. PAST PERFORMANCE IS NOT INDICATIVE OF FUTURE RESULTS.' },
+      { h:'Regulatory Compliance', p:'Users are solely responsible for complying with SEBI regulations, Income Tax obligations, and all other applicable Indian laws governing their trading activities.' },
+    ]
+  },
+};
+
 // ── TradingView lightweight-charts loader ─────────────────────────────────────
 let lwcPromise = null;
 const loadLWC = () => {
@@ -2587,109 +2648,38 @@ Respond ONLY with valid JSON:
         )}
 
         {/* ── LEGAL PAGES MODAL ── */}
-        {showLegal && (() => {
-          const EFFECTIVE_DATE = '1 June 2025';
-          const COMPANY = 'DeltaBuddy';
-          const EMAIL   = 'legal@deltabuddy.com';
-          const pages = {
-            terms: {
-              title: '📋 Terms & Conditions',
-              content: [
-                { h: '1. Acceptance of Terms', p: `By accessing or using DeltaBuddy ("Platform", "Service", "we", "us"), you agree to be bound by these Terms & Conditions. If you do not agree, do not use the Platform. These terms are effective from ${EFFECTIVE_DATE}.` },
-                { h: '2. Description of Service', p: 'DeltaBuddy is an AI-powered financial information and trading intelligence platform providing options analysis, market data, strategy simulation, paper trading, Telegram alerts, backtesting, and trade journaling tools for Indian equity and derivatives markets (NSE/BSE).' },
-                { h: '3. Not Financial Advice', p: 'DeltaBuddy is an educational and informational tool ONLY. Nothing on this Platform constitutes financial advice, investment advice, trading recommendations, or solicitation to buy or sell any security. All data, AI outputs, scanner alerts, and strategy suggestions are for educational and research purposes only. You are solely responsible for your trading decisions. Always consult a SEBI-registered Investment Advisor before investing.' },
-                { h: '4. Eligibility', p: 'You must be at least 18 years old and legally permitted to trade in Indian financial markets to use DeltaBuddy. By using the Platform you represent and warrant that you meet these requirements.' },
-                { h: '5. Subscription & Payments', p: `Free Trial: New users receive a 90-day free trial with full access to all features. No payment information is required during the trial.\n\nPaid Subscription: After the trial, continued access requires a subscription at ₹299 per quarter (3 months), billed automatically via Razorpay.\n\nAuto-Renewal: Subscriptions renew automatically every quarter unless cancelled at least 24 hours before the renewal date.\n\nPayment Processing: All payments are processed securely by Razorpay. We do not store your card or bank account details.` },
-                { h: '6. Algo Trading & Automated Features', p: 'DeltaBuddy currently provides manual trading intelligence tools. Future versions may include automated signal generation, API-based order routing, and algorithmic strategy execution. When such features are introduced, they will be subject to additional terms, regulatory compliance requirements, and SEBI guidelines on algorithmic trading. Users will be notified before any automated order-placement features are activated. The Platform is not liable for any losses arising from automated or semi-automated trading decisions made using our signals or outputs.' },
-                { h: '7. Data Accuracy', p: 'Market data is sourced from third-party providers (NSE, Yahoo Finance, Angel One). DeltaBuddy makes no warranty as to the accuracy, completeness, or timeliness of such data. Data may be delayed, inaccurate, or unavailable. Do not rely on Platform data for real-time trading decisions without independent verification.' },
-                { h: '8. Paper Trading', p: 'The Paper Trading feature uses virtual money (₹5,00,000 default balance) for simulation purposes. Paper trading results do not reflect real market execution, slippage, brokerage, taxes, or impact costs. Paper trading performance is not indicative of real trading results.' },
-                { h: '9. Telegram Alerts', p: 'AI-powered Telegram alerts are provided on a best-effort basis. Alerts may be delayed, inaccurate, or missed. The Platform is not liable for trading decisions made based on Telegram alerts. Alert content is for informational purposes only and does not constitute a buy/sell recommendation.' },
-                { h: '10. Prohibited Uses', p: 'You may not: (a) use the Platform for market manipulation or insider trading; (b) attempt to reverse-engineer, scrape, or commercially redistribute our data or AI outputs; (c) use automated bots to access the Platform in excess of normal usage; (d) impersonate another user or misrepresent your identity; (e) use the Platform in any manner prohibited by applicable Indian law.' },
-                { h: '11. Intellectual Property', p: 'All content, software, AI models, designs, and trademarks on DeltaBuddy are the property of DeltaBuddy or its licensors. You may not copy, reproduce, or distribute any part of the Platform without prior written consent.' },
-                { h: '12. Limitation of Liability', p: 'To the maximum extent permitted by law, DeltaBuddy and its founders, employees, and partners shall not be liable for any direct, indirect, incidental, special, or consequential damages arising from your use of the Platform, including any trading losses, loss of profits, or data loss. Our maximum aggregate liability is limited to the amount paid by you in the 3 months preceding the claim.' },
-                { h: '13. Indemnification', p: 'You agree to indemnify and hold harmless DeltaBuddy from any claims, losses, damages, or expenses (including legal fees) arising from your use of the Platform, violation of these Terms, or violation of any law.' },
-                { h: '14. Governing Law & Jurisdiction', p: 'These Terms are governed by the laws of India. Any disputes shall be subject to the exclusive jurisdiction of courts in Mumbai, Maharashtra, India.' },
-                { h: '15. Changes to Terms', p: 'We reserve the right to modify these Terms at any time. Continued use of the Platform after changes constitutes acceptance. We will notify users of material changes via email or Platform notification.' },
-                { h: '16. Contact', p: `For questions about these Terms, contact us at ${EMAIL}` },
-              ]
-            },
-            privacy: {
-              title: '🔐 Privacy Policy',
-              content: [
-                { h: '1. Introduction', p: `DeltaBuddy ("we", "us") is committed to protecting your privacy. This Policy explains what data we collect, how we use it, and your rights. Effective: ${EFFECTIVE_DATE}. Compliant with India's Information Technology Act 2000 and IT (Amendment) Act 2008.` },
-                { h: '2. Data We Collect', p: 'Account Data: Email address, display name, profile photo (via Google Sign-In).\n\nUsage Data: Pages visited, features used, session duration, browser/device type, IP address.\n\nTrading Data: Strategies you save, journal entries, paper trades, backtests — stored in Firebase Firestore under your user ID.\n\nPreferences: API keys (Groq), Telegram Chat ID, notification preferences — stored encrypted in Firebase.\n\nPayment Data: We do NOT store card or bank details. Payments are handled entirely by Razorpay under their privacy policy.' },
-                { h: '3. How We Use Your Data', p: 'To provide and improve the Platform.\nTo send you Telegram alerts you have subscribed to.\nTo process subscription payments.\nTo send transactional emails (account, billing).\nTo analyze aggregate usage to improve features.\nWe do NOT sell your personal data to third parties.\nWe do NOT use your trading journal data for advertising.' },
-                { h: '4. Third-Party Services', p: 'Firebase (Google): Authentication and database — governed by Google Privacy Policy.\nRazorpay: Payment processing — governed by Razorpay Privacy Policy.\nGroq AI / Google Gemini: AI processing of news headlines — we send only article text, never personal data.\nAngel One: Market data (if TOTP connected) — governed by Angel One Privacy Policy.\nYahoo Finance / NSE: Public market data — no personal data shared.' },
-                { h: '5. Algo Trading Data (Future)', p: 'When algorithmic trading features are introduced, we may collect order parameters, strategy configurations, and execution logs. This data will be used solely to provide the service and will never be shared with third parties or used for proprietary trading.' },
-                { h: '6. Data Storage & Security', p: 'Your data is stored in Google Firebase (servers in Asia-South1 region). We use industry-standard encryption in transit (HTTPS/TLS) and at rest. API keys are stored with Firebase security rules and not exposed in API responses.' },
-                { h: '7. Data Retention', p: 'Active accounts: Data retained for the duration of your account.\nDeleted accounts: Personal data deleted within 30 days of account deletion request.\nAggregated/anonymized usage data may be retained indefinitely for product improvement.' },
-                { h: '8. Your Rights', p: 'You have the right to: (a) access all personal data we hold about you; (b) correct inaccurate data; (c) request deletion of your account and data; (d) export your trade journal data; (e) opt out of non-essential communications. To exercise these rights, email us at ' + EMAIL },
-                { h: '9. Cookies', p: 'DeltaBuddy uses only essential session cookies for authentication. We do not use advertising or tracking cookies. No third-party ad networks are used.' },
-                { h: '10. Children\'s Privacy', p: 'DeltaBuddy is not intended for users under 18. We do not knowingly collect data from minors.' },
-                { h: '11. Changes', p: 'We may update this Policy. We will notify you of material changes via email or in-app notification.' },
-                { h: '12. Contact', p: `Privacy concerns: ${EMAIL}` },
-              ]
-            },
-            refund: {
-              title: '💳 Refund & Cancellation Policy',
-              content: [
-                { h: '1. Free Trial', p: 'All new users receive a 90-day free trial with full access. No payment is required during the trial. You can cancel at any time during the trial at no cost.' },
-                { h: '2. Subscription Charges', p: 'Subscription charges (₹299/quarter) begin only after the free trial period ends. You will be notified 7 days before your first charge via email.' },
-                { h: '3. Cancellation', p: 'You may cancel your subscription at any time from your account settings or by contacting us at ' + EMAIL + '. Cancellation takes effect at the end of the current billing period. You retain full access until the end of the paid quarter.' },
-                { h: '4. Refund Policy', p: 'Refunds within 7 days: If you are charged and request a refund within 7 days of the charge date, we will issue a full refund — no questions asked.\n\nAfter 7 days: We do not offer pro-rated refunds for partial quarters. You retain access until the end of the billing period.\n\nTechnical issues: If DeltaBuddy experiences a platform outage exceeding 72 continuous hours in a billing period, you may request a pro-rated credit.' },
-                { h: '5. Refund Process', p: 'Approved refunds are processed within 5-7 business days to the original payment method. Razorpay processing times may apply.' },
-                { h: '6. Price Changes', p: 'We will notify you at least 30 days before any price changes. Price changes take effect on your next renewal after the notice period.' },
-                { h: '7. Contact for Refunds', p: `Email ${EMAIL} with your registered email and transaction ID. We respond within 2 business days.` },
-              ]
-            },
-            legal: {
-              title: '⚠️ Legal Disclaimer',
-              content: [
-                { h: 'Investment Risk Warning', p: 'Options trading involves a high level of risk and is not suitable for all investors. You can lose more than your initial investment. The leverage in options trading can work against you as well as for you.' },
-                { h: 'No SEBI Registration', p: 'DeltaBuddy is not a SEBI-registered Investment Advisor, Research Analyst, or Stockbroker. We do not provide personalized investment advice. Our tools, alerts, and AI outputs are for educational and research purposes only.' },
-                { h: 'Data Accuracy Disclaimer', p: 'Market data is sourced from public APIs and may be delayed, inaccurate, or incomplete. Do not use DeltaBuddy data as the sole basis for trading decisions. Always verify data from your broker or NSE/BSE directly before executing trades.' },
-                { h: 'AI Output Disclaimer', p: 'AI-generated insights, alerts, and analysis are produced by third-party AI models (Groq, Google Gemini). These outputs may contain errors, hallucinations, or outdated information. AI outputs are not trading recommendations.' },
-                { h: 'Past Performance', p: 'Backtesting results and historical performance displayed on DeltaBuddy are simulated and do not account for real-world execution costs, slippage, taxes, or market impact. Past performance of any strategy is not indicative of future results.' },
-                { h: 'Regulatory Compliance', p: 'Users are responsible for ensuring their trading activities comply with all applicable Indian laws and regulations, including SEBI guidelines, FEMA, and Income Tax regulations. DeltaBuddy is not responsible for any regulatory or legal consequences arising from your trading activities.' },
-              ]
-            },
-          };
-          const page = pages[showLegal];
-          return (
-            <div className="modal-overlay" onClick={()=>setShowLegal(null)} style={{alignItems:'flex-start',padding:'2rem 1rem',overflowY:'auto'}}>
-              <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'680px',width:'100%',maxHeight:'90vh',overflowY:'auto',padding:'2rem'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.5rem',position:'sticky',top:0,background:'var(--bg-card)',paddingBottom:'1rem',borderBottom:'1px solid var(--border)'}}>
-                  <h2 style={{margin:0,fontSize:'1.2rem'}}>{page.title}</h2>
-                  <button onClick={()=>setShowLegal(null)} style={{background:'none',border:'none',color:'var(--text-dim)',fontSize:'1.5rem',cursor:'pointer'}}>✕</button>
-                </div>
-                <div style={{fontSize:'0.8rem',color:'var(--text-muted)',marginBottom:'1.5rem'}}>Effective Date: {EFFECTIVE_DATE} · Last updated: {EFFECTIVE_DATE}</div>
-                {/* Other pages links */}
-                <div style={{display:'flex',gap:'0.75rem',flexWrap:'wrap',marginBottom:'1.5rem'}}>
-                  {[['privacy','Privacy'],['terms','T&C'],['refund','Refund'],['legal','Disclaimer']].map(([k,l])=>(
-                    <span key={k} onClick={()=>setShowLegal(k)}
-                      style={{fontSize:'0.78rem',padding:'0.25rem 0.65rem',borderRadius:'20px',cursor:'pointer',
-                        background:showLegal===k?'var(--accent)':'var(--bg-surface)',
-                        color:showLegal===k?'#000':'var(--text-dim)',
-                        border:'1px solid '+(showLegal===k?'var(--accent)':'var(--border)'),
-                        fontWeight:showLegal===k?700:400}}>
-                      {l}
-                    </span>
-                  ))}
-                </div>
-                {page.content.map(({h, p}, i) => (
-                  <div key={i} style={{marginBottom:'1.25rem'}}>
-                    <div style={{fontWeight:700,fontSize:'0.95rem',color:'var(--text-main)',marginBottom:'0.4rem'}}>{h}</div>
-                    <div style={{fontSize:'0.87rem',color:'var(--text-dim)',lineHeight:1.75,whiteSpace:'pre-line'}}>{p}</div>
-                  </div>
+        {showLegal && LEGAL_PAGES[showLegal] && (
+          <div className="modal-overlay" onClick={()=>setShowLegal(null)} style={{alignItems:'flex-start',padding:'2rem 1rem',overflowY:'auto'}}>
+            <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'680px',width:'100%',maxHeight:'90vh',overflowY:'auto',padding:'2rem'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.5rem',position:'sticky',top:0,background:'var(--bg-card)',paddingBottom:'1rem',borderBottom:'1px solid var(--border)'}}>
+                <h2 style={{margin:0,fontSize:'1.2rem'}}>{LEGAL_PAGES[showLegal].title}</h2>
+                <button onClick={()=>setShowLegal(null)} style={{background:'none',border:'none',color:'var(--text-dim)',fontSize:'1.5rem',cursor:'pointer'}}>✕</button>
+              </div>
+              <div style={{fontSize:'0.8rem',color:'var(--text-muted)',marginBottom:'1.5rem'}}>Effective Date: {LEGAL_DATE}</div>
+              <div style={{display:'flex',gap:'0.75rem',flexWrap:'wrap',marginBottom:'1.5rem'}}>
+                {[['privacy','Privacy'],['terms','T&C'],['refund','Refund'],['legal','Disclaimer']].map(([k,l])=>(
+                  <span key={k} onClick={()=>setShowLegal(k)}
+                    style={{fontSize:'0.78rem',padding:'0.25rem 0.65rem',borderRadius:'20px',cursor:'pointer',
+                      background:showLegal===k?'var(--accent)':'var(--bg-surface)',
+                      color:showLegal===k?'#000':'var(--text-dim)',
+                      border:'1px solid '+(showLegal===k?'var(--accent)':'var(--border)'),
+                      fontWeight:showLegal===k?700:400}}>
+                    {l}
+                  </span>
                 ))}
-                <div style={{marginTop:'2rem',paddingTop:'1rem',borderTop:'1px solid var(--border)',fontSize:'0.78rem',color:'var(--text-muted)'}}>
-                  Questions? Contact us at <strong>{EMAIL}</strong> · © 2025 {COMPANY}
+              </div>
+              {LEGAL_PAGES[showLegal].content.map(({h,p},i)=>(
+                <div key={i} style={{marginBottom:'1.25rem'}}>
+                  <div style={{fontWeight:700,fontSize:'0.95rem',color:'var(--text-main)',marginBottom:'0.4rem'}}>{h}</div>
+                  <div style={{fontSize:'0.87rem',color:'var(--text-dim)',lineHeight:1.75,whiteSpace:'pre-line'}}>{p}</div>
                 </div>
+              ))}
+              <div style={{marginTop:'2rem',paddingTop:'1rem',borderTop:'1px solid var(--border)',fontSize:'0.78rem',color:'var(--text-muted)'}}>
+                Questions? Contact us at <strong>{LEGAL_EMAIL}</strong> · © 2025 DeltaBuddy
               </div>
             </div>
-          );
-        })()}
-
+          </div>
+        )}
         {showTgSetup && (
           <div className="modal-overlay" onClick={()=>setShowTgSetup(false)}>
             <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'440px',width:'95%'}}>
