@@ -1107,6 +1107,37 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [expiryData, setExpiryData]       = useState(null);
   const [expiryLoading, setExpiryLoading] = useState(false);
   const [expirySymbol, setExpirySymbol]   = useState('NIFTY');
+  const [showMoreMenu, setShowMoreMenu]   = useState(false);
+  const [watchlist, setWatchlist]         = useState(() => { try { return JSON.parse(localStorage.getItem('db_watchlist')||'[]'); } catch(e) { return []; }});
+  const [watchlistPrices, setWatchlistPrices] = useState({});
+  const [showAddWatch, setShowAddWatch]   = useState(false);
+  const [watchInput, setWatchInput]       = useState('');
+
+  // Persist watchlist to localStorage
+  useEffect(() => { localStorage.setItem('db_watchlist', JSON.stringify(watchlist)); }, [watchlist]);
+
+  const fetchWatchlistPrices = async () => {
+    if (!watchlist.length) return;
+    const prices = {};
+    await Promise.all(watchlist.map(async (sym) => {
+      try {
+        const r = await fetch(`${BACKEND_URL}/api/stock-price?symbol=${encodeURIComponent(sym)}`);
+        const d = await r.json();
+        if (d.price) prices[sym] = { price: d.price, change: d.change||0, pct: d.changePercent||0 };
+      } catch(e) {}
+    }));
+    setWatchlistPrices(p => ({...p, ...prices}));
+  };
+
+  const addToWatchlist = (sym) => {
+    const s = sym.trim().toUpperCase();
+    if (!s || watchlist.includes(s)) return;
+    setWatchlist(w => [...w, s]);
+    setWatchInput('');
+    setShowAddWatch(false);
+  };
+
+  const removeFromWatchlist = (sym) => setWatchlist(w => w.filter(s => s !== sym));
 
   const fetchExpiryData = async (sym) => {
     setExpiryLoading(true);
@@ -1737,6 +1768,7 @@ Respond ONLY with valid JSON:
     generateLiveOptionChain(selectedUnderlying);
     fetchBusinessNews();
     generateCandlestickData(selectedChartSymbol, chartTimeframe);
+    fetchWatchlistPrices();
     
     if (isLiveMode) {
       // Ticker: Yahoo Finance every 15 seconds
@@ -1751,11 +1783,15 @@ Respond ONLY with valid JSON:
       // News: NewsAPI + AI every 5 minutes (top 10 only)
       const newsInterval = setInterval(() => { fetchIntelligentNews(); fetchBusinessNews(); }, 300000);
 
+      // Watchlist: every 30 seconds
+      const watchInterval = setInterval(fetchWatchlistPrices, 30000);
+
       return () => {
         clearInterval(globalInterval);
         clearInterval(indiaInterval);
         clearInterval(chainInterval);
         clearInterval(newsInterval);
+        clearInterval(watchInterval);
       };
     }
   }, [isLiveMode, selectedUnderlying, selectedChartSymbol, chartTimeframe]);
@@ -2129,19 +2165,40 @@ Respond ONLY with valid JSON:
           <div className="nav-links">
             {[
               ['markets',      '📊 Markets'],
-              ['intelligence', '🧠 Intelligence'],
+              ['intelligence', '🧠 Intel'],
               ['strategy',     '🎯 Strategy'],
-              ['backtest',     '📈 Backtest'],
-              ['single',       '🧮 Calculator'],
               ['scanner',      '🔍 Scanner'],
-              ['journal',      '📓 Journal'],
-              ['paper',        '📝 Paper Trade'],
-              ['expiry',       '⏰ Expiry'],
+              ['paper',        '📝 Paper'],
             ].map(([tab,label])=>(
               <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}>
                 {label}
               </span>
             ))}
+            {/* More dropdown */}
+            <div style={{position:'relative'}}>
+              <span
+                className={['backtest','single','journal','expiry'].includes(activeTab)?'active':''}
+                onClick={()=>setShowMoreMenu(m=>!m)}
+                style={{cursor:'pointer',userSelect:'none'}}>
+                More ▾
+              </span>
+              {showMoreMenu && (
+                <div style={{position:'absolute',top:'110%',left:0,background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',minWidth:'160px',zIndex:2000,boxShadow:'0 8px 24px rgba(0,0,0,0.4)',padding:'0.4rem 0'}}>
+                  {[
+                    ['backtest', '📈 Backtest'],
+                    ['single',   '🧮 Calculator'],
+                    ['journal',  '📓 Journal'],
+                    ['expiry',   '⏰ Expiry Day'],
+                  ].map(([tab,label])=>(
+                    <div key={tab}
+                      onClick={()=>{setActiveTab(tab);setShowMoreMenu(false);setShowMobileMenu(false);}}
+                      style={{padding:'0.6rem 1rem',cursor:'pointer',fontSize:'0.85rem',fontWeight:activeTab===tab?700:400,color:activeTab===tab?'var(--accent)':'var(--text-main)',background:activeTab===tab?'rgba(0,255,136,0.07)':'transparent'}}>
+                      {label}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Right controls — always visible */}
@@ -2186,6 +2243,9 @@ Respond ONLY with valid JSON:
           </div>
         </div>
       </nav>
+
+      {/* Close More dropdown when clicking outside */}
+      {showMoreMenu && <div style={{position:'fixed',inset:0,zIndex:1999}} onClick={()=>setShowMoreMenu(false)}/>}
 
       {/* ── MOBILE MENU — rendered outside navbar to avoid clipping ── */}
       {showMobileMenu && (
@@ -2508,6 +2568,80 @@ Respond ONLY with valid JSON:
                 </button>
               </div>
             )}
+            {/* ── WATCHLIST ── */}
+            {(watchlist.length > 0 || currentUser) && (
+              <div style={{margin:'1rem 1.5rem 0'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.6rem'}}>
+                  <span style={{fontWeight:700,fontSize:'0.9rem',color:'var(--text-main)'}}>⭐ Watchlist</span>
+                  <button onClick={()=>setShowAddWatch(true)}
+                    style={{background:'none',border:'1px solid var(--border)',color:'var(--accent)',borderRadius:'6px',padding:'0.2rem 0.6rem',fontSize:'0.78rem',cursor:'pointer',fontWeight:600}}>
+                    + Add
+                  </button>
+                </div>
+                {watchlist.length === 0 ? (
+                  <div style={{color:'var(--text-muted)',fontSize:'0.82rem',padding:'0.5rem 0'}}>
+                    No symbols yet — click + Add to track stocks & indices
+                  </div>
+                ) : (
+                  <div style={{display:'flex',flexWrap:'wrap',gap:'0.5rem'}}>
+                    {watchlist.map(sym => {
+                      const p = watchlistPrices[sym];
+                      const isUp = p?.pct >= 0;
+                      return (
+                        <div key={sym} style={{background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'10px',padding:'0.5rem 0.75rem',display:'flex',alignItems:'center',gap:'0.75rem',minWidth:'130px'}}>
+                          <div>
+                            <div style={{fontSize:'0.8rem',fontWeight:700,color:'var(--text-main)'}}>{sym}</div>
+                            {p ? (
+                              <div style={{fontSize:'0.85rem',fontWeight:700,color:isUp?'#4ade80':'#f87171'}}>
+                                {p.price.toLocaleString('en-IN')}
+                                <span style={{fontSize:'0.72rem',marginLeft:'0.3rem'}}>{isUp?'▲':'▼'}{Math.abs(p.pct).toFixed(2)}%</span>
+                              </div>
+                            ) : (
+                              <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>Loading...</div>
+                            )}
+                          </div>
+                          <span onClick={()=>removeFromWatchlist(sym)}
+                            style={{marginLeft:'auto',cursor:'pointer',color:'var(--text-muted)',fontSize:'0.9rem',lineHeight:1}}>✕</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Add to watchlist modal */}
+            {showAddWatch && (
+              <div className="modal-overlay" onClick={()=>setShowAddWatch(false)}>
+                <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'360px',width:'95%'}}>
+                  <h3 style={{marginTop:0}}>⭐ Add to Watchlist</h3>
+                  <p style={{color:'var(--text-dim)',fontSize:'0.85rem'}}>Enter NSE symbol e.g. NIFTY, BANKNIFTY, RELIANCE, HDFCBANK</p>
+                  <input value={watchInput} onChange={e=>setWatchInput(e.target.value.toUpperCase())}
+                    onKeyDown={e=>e.key==='Enter'&&addToWatchlist(watchInput)}
+                    placeholder="e.g. NIFTY" autoFocus
+                    style={{width:'100%',padding:'0.6rem',borderRadius:'8px',border:'1px solid var(--border)',background:'var(--bg-surface)',color:'var(--text-main)',fontSize:'1rem',boxSizing:'border-box',marginBottom:'0.75rem'}}/>
+                  <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap',marginBottom:'0.75rem'}}>
+                    {['NIFTY','BANKNIFTY','FINNIFTY','RELIANCE','HDFCBANK','INFY','TCS','SBIN'].map(s=>(
+                      <span key={s} onClick={()=>addToWatchlist(s)}
+                        style={{fontSize:'0.75rem',padding:'0.2rem 0.6rem',borderRadius:'20px',border:'1px solid var(--border)',cursor:'pointer',color:'var(--accent)',background:'rgba(0,255,136,0.06)'}}>
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                  <div style={{display:'flex',gap:'0.5rem'}}>
+                    <button onClick={()=>addToWatchlist(watchInput)}
+                      style={{flex:1,background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem',fontWeight:700,cursor:'pointer'}}>
+                      Add
+                    </button>
+                    <button onClick={()=>setShowAddWatch(false)}
+                      style={{flex:1,background:'var(--bg-surface)',color:'var(--text-dim)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.6rem',cursor:'pointer'}}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* GLOBAL INDICES TICKER */}
             <div className="global-ticker-bar">
               <div className="ticker-header">
