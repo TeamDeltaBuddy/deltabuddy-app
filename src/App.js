@@ -1104,6 +1104,19 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [alerts, setAlerts] = useState([]);
   const [scannerIV, setScannerIV] = useState(20);
   const [scannerExpiry, setScannerExpiry] = useState('');
+  const [expiryData, setExpiryData]       = useState(null);
+  const [expiryLoading, setExpiryLoading] = useState(false);
+  const [expirySymbol, setExpirySymbol]   = useState('NIFTY');
+
+  const fetchExpiryData = async (sym) => {
+    setExpiryLoading(true);
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/expiry-tools?symbol=${sym || expirySymbol}`);
+      const data = await r.json();
+      if (!data.error) setExpiryData(data);
+    } catch(e) { console.error('Expiry fetch error:', e); }
+    finally { setExpiryLoading(false); }
+  };
 
   const executePaperOrder = async () => {
     const { symbol, type, qty, price, orderType } = paperOrder;
@@ -2123,6 +2136,7 @@ Respond ONLY with valid JSON:
               ['scanner',      '🔍 Scanner'],
               ['journal',      '📓 Journal'],
               ['paper',        '📝 Paper Trade'],
+              ['expiry',       '⏰ Expiry'],
             ].map(([tab,label])=>(
               <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}>
                 {label}
@@ -2191,6 +2205,7 @@ Respond ONLY with valid JSON:
             ['scanner',      '🔍 Scanner'],
             ['journal',      '📓 Journal'],
             ['paper',        '📝 Paper Trade'],
+            ['expiry',       '⏰ Expiry Day'],
           ].map(([tab,label])=>(
             <div key={tab}
               onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}
@@ -5337,9 +5352,139 @@ Respond ONLY with valid JSON:
               </div>
             )}
           </div>
-        ) : null}
+        ) : activeTab === 'expiry' ? (
+          <div>
+            {/* Header */}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem'}}>
+              <div>
+                <h2 style={{margin:0,fontSize:'1.35rem'}}>⏰ Expiry Day Tools</h2>
+                <p style={{color:'var(--text-dim)',fontSize:'0.82rem',margin:'0.2rem 0 0'}}>Max Pain · PCR · OI Analysis · Key Levels</p>
+              </div>
+              <div style={{display:'flex',gap:'0.5rem',alignItems:'center',flexWrap:'wrap'}}>
+                {['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY'].map(sym => (
+                  <button key={sym} onClick={() => { setExpirySymbol(sym); fetchExpiryData(sym); }}
+                    style={{padding:'0.35rem 0.75rem',borderRadius:'20px',border:'1px solid var(--border)',cursor:'pointer',fontSize:'0.8rem',fontWeight:expirySymbol===sym?700:400,background:expirySymbol===sym?'var(--accent)':'var(--bg-surface)',color:expirySymbol===sym?'#000':'var(--text-dim)'}}>
+                    {sym}
+                  </button>
+                ))}
+                <button onClick={() => fetchExpiryData(expirySymbol)} disabled={expiryLoading}
+                  style={{padding:'0.35rem 1rem',borderRadius:'8px',border:'none',cursor:'pointer',fontSize:'0.82rem',fontWeight:700,background:'var(--accent)',color:'#000'}}>
+                  {expiryLoading ? '⏳' : '🔄 Refresh'}
+                </button>
+              </div>
+            </div>
 
-        <div className="disclaimer">
+            {/* Load prompt */}
+            {!expiryData && !expiryLoading && (
+              <div style={{textAlign:'center',padding:'4rem 2rem',color:'var(--text-dim)'}}>
+                <div style={{fontSize:'3rem',marginBottom:'1rem'}}>⏰</div>
+                <p style={{marginBottom:'1rem'}}>Click Refresh to load live expiry data from NSE</p>
+                <button onClick={() => fetchExpiryData(expirySymbol)}
+                  style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.75rem 2rem',fontWeight:700,cursor:'pointer'}}>
+                  Load Expiry Data
+                </button>
+              </div>
+            )}
+
+            {expiryLoading && (
+              <div style={{textAlign:'center',padding:'4rem',color:'var(--text-dim)'}}>
+                <div style={{fontSize:'2rem',marginBottom:'0.5rem'}}>⏳</div>
+                <p>Fetching live data from NSE...</p>
+              </div>
+            )}
+
+            {expiryData && !expiryLoading && (
+              <>
+                {/* Thursday banner */}
+                {new Date().getDay() === 4 && (
+                  <div style={{background:'linear-gradient(135deg,rgba(249,115,22,0.15),rgba(0,255,136,0.08))',border:'1px solid rgba(249,115,22,0.4)',borderRadius:'12px',padding:'0.85rem 1.25rem',marginBottom:'1.25rem',display:'flex',alignItems:'center',gap:'0.75rem'}}>
+                    <span style={{fontSize:'1.5rem'}}>🔥</span>
+                    <div>
+                      <div style={{fontWeight:700,color:'#f97316'}}>Today is Expiry Day!</div>
+                      <div style={{fontSize:'0.82rem',color:'var(--text-dim)'}}>Weekly options expire today — monitor max pain and PCR closely</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Key metrics grid */}
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:'0.75rem',marginBottom:'1.25rem'}}>
+                  {[
+                    {label:'Spot Price',   value: expiryData.spot?.toLocaleString('en-IN'), color:'var(--text-main)'},
+                    {label:'Max Pain',     value: expiryData.maxPain?.toLocaleString('en-IN'), sub: `${Math.abs(((expiryData.maxPain-expiryData.spot)/expiryData.spot)*100).toFixed(1)}% away`, color:'#f59e0b'},
+                    {label:'PCR (OI)',     value: expiryData.pcrOI, sub: expiryData.pcrBias, color: expiryData.pcrBias==='Bullish'?'#4ade80':expiryData.pcrBias==='Bearish'?'#f87171':'var(--text-dim)'},
+                    {label:'PCR (Volume)', value: expiryData.pcrVol, color:'var(--text-main)'},
+                    {label:'ATM Straddle', value: `₹${expiryData.straddlePremium?.toFixed(0)}`, color:'#a78bfa'},
+                    {label:'Expected Move',value: `±${expiryData.expectedMove}`, color:'#38bdf8'},
+                    {label:'ATM IV',       value: `${expiryData.atmIV}%`, color:'#fb923c'},
+                    {label:'Expiry',       value: expiryData.expiry, color:'var(--text-dim)'},
+                  ].map(({label,value,sub,color}) => (
+                    <div key={label} className="panel" style={{padding:'0.85rem',textAlign:'center'}}>
+                      <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginBottom:'0.3rem'}}>{label}</div>
+                      <div style={{fontSize:'1.2rem',fontWeight:700,color}}>{value}</div>
+                      {sub && <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.2rem'}}>{sub}</div>}
+                    </div>
+                  ))}
+                </div>
+
+                {/* OI Chart */}
+                <div className="panel" style={{marginBottom:'1.25rem'}}>
+                  <h3 style={{marginTop:0,marginBottom:'1rem',fontSize:'1rem'}}>📊 Open Interest — CE vs PE</h3>
+                  <div style={{overflowX:'auto'}}>
+                    <div style={{minWidth:'500px'}}>
+                      {(expiryData.oiChart || []).map(row => {
+                        const maxOI = Math.max(...(expiryData.oiChart||[]).map(r => Math.max(r.ceOI, r.peOI)), 1);
+                        const ceW = (row.ceOI / maxOI * 100).toFixed(1);
+                        const peW = (row.peOI / maxOI * 100).toFixed(1);
+                        const isATM = Math.abs(row.strike - expiryData.spot) < 50;
+                        return (
+                          <div key={row.strike} style={{display:'grid',gridTemplateColumns:'80px 1fr 80px 1fr 80px',alignItems:'center',gap:'0.5rem',marginBottom:'0.4rem',padding:'0.25rem 0.5rem',background:isATM?'rgba(0,255,136,0.05)':'transparent',borderRadius:'6px',border:isATM?'1px solid rgba(0,255,136,0.2)':'1px solid transparent'}}>
+                            <div style={{fontSize:'0.75rem',color:'#60a5fa',textAlign:'right'}}>{(row.ceOI/100000).toFixed(1)}L</div>
+                            <div style={{background:'rgba(96,165,250,0.15)',borderRadius:'4px',height:'18px',position:'relative'}}>
+                              <div style={{position:'absolute',right:0,top:0,bottom:0,width:`${ceW}%`,background:'#3b82f6',borderRadius:'4px'}}/>
+                            </div>
+                            <div style={{textAlign:'center',fontSize:'0.78rem',fontWeight:isATM?700:500,color:isATM?'var(--accent)':'var(--text-main)'}}>{row.strike}{isATM?' ◄':''}</div>
+                            <div style={{background:'rgba(244,114,182,0.15)',borderRadius:'4px',height:'18px',position:'relative'}}>
+                              <div style={{position:'absolute',left:0,top:0,bottom:0,width:`${peW}%`,background:'#ec4899',borderRadius:'4px'}}/>
+                            </div>
+                            <div style={{fontSize:'0.75rem',color:'#f472b6'}}>{(row.peOI/100000).toFixed(1)}L</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:'1.5rem',marginTop:'0.75rem',justifyContent:'center'}}>
+                    <span style={{fontSize:'0.78rem',color:'#60a5fa'}}>🔵 CE OI (Resistance)</span>
+                    <span style={{fontSize:'0.78rem',color:'#f472b6'}}>🩷 PE OI (Support)</span>
+                  </div>
+                </div>
+
+                {/* Resistance & Support */}
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem',marginBottom:'1.25rem'}}>
+                  <div className="panel">
+                    <h3 style={{marginTop:0,fontSize:'0.95rem',color:'#f87171'}}>🔴 Key Resistance (CE OI)</h3>
+                    {(expiryData.resistance||[]).map((r,i) => (
+                      <div key={r.strike} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.5rem 0',borderBottom:i<2?'1px solid var(--border)':'none'}}>
+                        <span style={{fontWeight:700}}>{r.strike}</span>
+                        <span style={{fontSize:'0.78rem',color:'var(--text-dim)'}}>{(r.ceOI/100000).toFixed(1)}L OI</span>
+                        <span style={{fontSize:'0.78rem',color:'#f87171'}}>₹{r.ceLTP}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="panel">
+                    <h3 style={{marginTop:0,fontSize:'0.95rem',color:'#4ade80'}}>🟢 Key Support (PE OI)</h3>
+                    {(expiryData.support||[]).map((r,i) => (
+                      <div key={r.strike} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.5rem 0',borderBottom:i<2?'1px solid var(--border)':'none'}}>
+                        <span style={{fontWeight:700}}>{r.strike}</span>
+                        <span style={{fontSize:'0.78rem',color:'var(--text-dim)'}}>{(r.peOI/100000).toFixed(1)}L OI</span>
+                        <span style={{fontSize:'0.78rem',color:'#4ade80'}}>₹{r.peLTP}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        ) : null}
           <strong>⚠️ Disclaimer:</strong> DeltaBuddy is for educational purposes only. Options trading involves substantial risk. Always consult a SEBI-registered advisor before trading.
         </div>
 
