@@ -2175,17 +2175,16 @@ Respond ONLY with valid JSON:
               </span>
             ))}
             {/* More dropdown */}
-            <div style={{position:'relative'}}>
-              <span
-                className={['backtest','single','journal','expiry'].includes(activeTab)?'active':''}
-                onClick={()=>setShowMoreMenu(m=>!m)}
-                style={{cursor:'pointer',userSelect:'none'}}>
+            <div style={{position:'relative',zIndex:3000}}>
+              <button
+                onClick={(e)=>{e.stopPropagation();setShowMoreMenu(m=>!m);}}
+                style={{cursor:'pointer',background:'none',border:'none',borderBottom:['backtest','single','journal','expiry'].includes(activeTab)?'2px solid var(--accent)':'2px solid transparent',color:['backtest','single','journal','expiry'].includes(activeTab)?'var(--accent)':'var(--text-dim)',fontSize:'0.82rem',fontWeight:['backtest','single','journal','expiry'].includes(activeTab)?700:500,padding:'0.45rem 0.6rem',borderRadius:'var(--radius-sm)',userSelect:'none'}}>
                 More ▾
-              </span>
+              </button>
               {showMoreMenu && (
                 <>
-                  <div style={{position:'fixed',inset:0,zIndex:1999}} onClick={()=>setShowMoreMenu(false)}/>
-                  <div onClick={e=>e.stopPropagation()} style={{position:'absolute',top:'110%',left:0,background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',minWidth:'160px',zIndex:2000,boxShadow:'0 8px 24px rgba(0,0,0,0.4)',padding:'0.4rem 0'}}>
+                  <div style={{position:'fixed',inset:0,zIndex:2999}} onClick={()=>setShowMoreMenu(false)}/>
+                  <div style={{position:'absolute',top:'110%',left:0,background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',minWidth:'160px',zIndex:3001,boxShadow:'0 8px 24px rgba(0,0,0,0.5)',padding:'0.4rem 0'}}>
                     {[
                       ['backtest', '📈 Backtest'],
                       ['single',   '🧮 Calculator'],
@@ -2193,8 +2192,8 @@ Respond ONLY with valid JSON:
                       ['expiry',   '⏰ Expiry Day'],
                     ].map(([tab,label])=>(
                       <div key={tab}
-                        onClick={()=>{setActiveTab(tab);setShowMoreMenu(false);}}
-                        style={{padding:'0.6rem 1rem',cursor:'pointer',fontSize:'0.85rem',fontWeight:activeTab===tab?700:400,color:activeTab===tab?'var(--accent)':'var(--text-main)',background:activeTab===tab?'rgba(0,255,136,0.07)':'transparent'}}>
+                        onClick={(e)=>{e.stopPropagation();setActiveTab(tab);setShowMoreMenu(false);}}
+                        style={{padding:'0.65rem 1rem',cursor:'pointer',fontSize:'0.85rem',fontWeight:activeTab===tab?700:400,color:activeTab===tab?'var(--accent)':'var(--text-main)',background:activeTab===tab?'rgba(0,255,136,0.07)':'transparent'}}>
                         {label}
                       </div>
                     ))}
@@ -2569,7 +2568,7 @@ Respond ONLY with valid JSON:
               </div>
             )}
             {/* ── WATCHLIST ── */}
-            {(watchlist.length > 0 || currentUser) && (
+            {(watchlist.length > 0 || true) && (
               <div style={{margin:'1rem 1.5rem 0'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.6rem'}}>
                   <span style={{fontWeight:700,fontSize:'0.9rem',color:'var(--text-main)'}}>⭐ Watchlist</span>
