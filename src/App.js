@@ -2183,20 +2183,23 @@ Respond ONLY with valid JSON:
                 More ▾
               </span>
               {showMoreMenu && (
-                <div style={{position:'absolute',top:'110%',left:0,background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',minWidth:'160px',zIndex:2000,boxShadow:'0 8px 24px rgba(0,0,0,0.4)',padding:'0.4rem 0'}}>
-                  {[
-                    ['backtest', '📈 Backtest'],
-                    ['single',   '🧮 Calculator'],
-                    ['journal',  '📓 Journal'],
-                    ['expiry',   '⏰ Expiry Day'],
-                  ].map(([tab,label])=>(
-                    <div key={tab}
-                      onClick={()=>{setActiveTab(tab);setShowMoreMenu(false);setShowMobileMenu(false);}}
-                      style={{padding:'0.6rem 1rem',cursor:'pointer',fontSize:'0.85rem',fontWeight:activeTab===tab?700:400,color:activeTab===tab?'var(--accent)':'var(--text-main)',background:activeTab===tab?'rgba(0,255,136,0.07)':'transparent'}}>
-                      {label}
-                    </div>
-                  ))}
-                </div>
+                <>
+                  <div style={{position:'fixed',inset:0,zIndex:1999}} onClick={()=>setShowMoreMenu(false)}/>
+                  <div onClick={e=>e.stopPropagation()} style={{position:'absolute',top:'110%',left:0,background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',minWidth:'160px',zIndex:2000,boxShadow:'0 8px 24px rgba(0,0,0,0.4)',padding:'0.4rem 0'}}>
+                    {[
+                      ['backtest', '📈 Backtest'],
+                      ['single',   '🧮 Calculator'],
+                      ['journal',  '📓 Journal'],
+                      ['expiry',   '⏰ Expiry Day'],
+                    ].map(([tab,label])=>(
+                      <div key={tab}
+                        onClick={()=>{setActiveTab(tab);setShowMoreMenu(false);}}
+                        style={{padding:'0.6rem 1rem',cursor:'pointer',fontSize:'0.85rem',fontWeight:activeTab===tab?700:400,color:activeTab===tab?'var(--accent)':'var(--text-main)',background:activeTab===tab?'rgba(0,255,136,0.07)':'transparent'}}>
+                        {label}
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -2243,9 +2246,6 @@ Respond ONLY with valid JSON:
           </div>
         </div>
       </nav>
-
-      {/* Close More dropdown when clicking outside */}
-      {showMoreMenu && <div style={{position:'fixed',inset:0,zIndex:1999}} onClick={()=>setShowMoreMenu(false)}/>}
 
       {/* ── MOBILE MENU — rendered outside navbar to avoid clipping ── */}
       {showMobileMenu && (
