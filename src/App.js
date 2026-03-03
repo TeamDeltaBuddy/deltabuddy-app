@@ -5485,6 +5485,8 @@ Respond ONLY with valid JSON:
             )}
           </div>
         ) : null}
+
+        <div className="disclaimer">
           <strong>⚠️ Disclaimer:</strong> DeltaBuddy is for educational purposes only. Options trading involves substantial risk. Always consult a SEBI-registered advisor before trading.
         </div>
 
