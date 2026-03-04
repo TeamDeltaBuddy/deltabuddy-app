@@ -1108,6 +1108,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [expiryLoading, setExpiryLoading] = useState(false);
   const [expirySymbol, setExpirySymbol]   = useState('NIFTY');
   const [showMoreMenu, setShowMoreMenu]   = useState(false);
+  const [showLegal, setShowLegal]         = useState(null); // null | 'terms' | 'privacy' | 'refund' | 'disclaimer'
   const [watchlist, setWatchlist]         = useState(() => { try { return JSON.parse(localStorage.getItem('db_watchlist')||'[]'); } catch(e) { return []; }});
   const [watchlistPrices, setWatchlistPrices] = useState({});
   const [showAddWatch, setShowAddWatch]   = useState(false);
@@ -2164,7 +2165,6 @@ Respond ONLY with valid JSON:
           {/* Nav links — desktop only, scrollable */}
           <div className="nav-links">
             {[
-              ['home',         '🏠 Home'],
               ['markets',      '📊 Markets'],
               ['intelligence', '🧠 Intel'],
               ['strategy',     '🎯 Strategy'],
@@ -2180,7 +2180,6 @@ Respond ONLY with valid JSON:
               </span>
             ))}
           </div>
-        </div>
       </nav>
 
       {/* ── MOBILE MENU — rendered outside navbar to avoid clipping ── */}
@@ -5556,9 +5555,121 @@ Respond ONLY with valid JSON:
           </div>
         ) : null}
 
-        <div className="disclaimer">
-          <strong>⚠️ Disclaimer:</strong> DeltaBuddy is for educational purposes only. Options trading involves substantial risk. Always consult a SEBI-registered advisor before trading.
+        {/* ── FOOTER ── */}
+        <div style={{borderTop:'1px solid var(--border)',marginTop:'2rem',padding:'1.5rem',textAlign:'center'}}>
+          <div style={{fontSize:'0.78rem',color:'var(--text-muted)',marginBottom:'0.75rem'}}>
+            <strong>⚠️ Disclaimer:</strong> DeltaBuddy is for educational purposes only. Options trading involves substantial risk. Always consult a SEBI-registered advisor before trading.
+          </div>
+          <div style={{display:'flex',justifyContent:'center',gap:'1.5rem',flexWrap:'wrap',fontSize:'0.78rem'}}>
+            {[['terms','Terms & Conditions'],['privacy','Privacy Policy'],['refund','Refund Policy'],['disclaimer','Legal Disclaimer']].map(([key,label])=>(
+              <span key={key} onClick={()=>setShowLegal(key)}
+                style={{color:'var(--accent)',cursor:'pointer',textDecoration:'underline',textUnderlineOffset:'3px'}}>
+                {label}
+              </span>
+            ))}
+          </div>
+          <div style={{marginTop:'0.75rem',fontSize:'0.72rem',color:'var(--text-muted)'}}>
+            © 2025 DeltaBuddy · <a href="mailto:legal@deltabuddy.com" style={{color:'var(--text-muted)'}}>legal@deltabuddy.com</a>
+          </div>
         </div>
+
+        {/* ── LEGAL MODAL ── */}
+        {showLegal && (
+          <div className="modal-overlay" onClick={()=>setShowLegal(null)} style={{alignItems:'flex-start',paddingTop:'2rem',overflowY:'auto'}}>
+            <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'680px',width:'95%',maxHeight:'85vh',overflowY:'auto',padding:'2rem'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',position:'sticky',top:0,background:'var(--bg-card)',paddingBottom:'1rem',borderBottom:'1px solid var(--border)'}}>
+                <h2 style={{margin:0,fontSize:'1.1rem'}}>
+                  {showLegal==='terms'&&'📋 Terms & Conditions'}
+                  {showLegal==='privacy'&&'🔐 Privacy Policy'}
+                  {showLegal==='refund'&&'💳 Refund & Cancellation'}
+                  {showLegal==='disclaimer'&&'⚠️ Legal Disclaimer'}
+                </h2>
+                <button onClick={()=>setShowLegal(null)} style={{background:'none',border:'none',color:'var(--text-dim)',fontSize:'1.5rem',cursor:'pointer',lineHeight:1}}>✕</button>
+              </div>
+              {/* Page switcher */}
+              <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap',marginBottom:'1.5rem'}}>
+                {[['terms','T&C'],['privacy','Privacy'],['refund','Refund'],['disclaimer','Disclaimer']].map(([k,l])=>(
+                  <span key={k} onClick={()=>setShowLegal(k)}
+                    style={{fontSize:'0.75rem',padding:'0.2rem 0.65rem',borderRadius:'20px',cursor:'pointer',
+                      background:showLegal===k?'var(--accent)':'var(--bg-surface)',
+                      color:showLegal===k?'#000':'var(--text-dim)',
+                      border:'1px solid '+(showLegal===k?'var(--accent)':'var(--border)'),
+                      fontWeight:showLegal===k?700:400}}>
+                    {l}
+                  </span>
+                ))}
+              </div>
+              <div style={{fontSize:'0.8rem',color:'var(--text-muted)',marginBottom:'1.5rem'}}>Effective: 1 June 2025</div>
+
+              {showLegal==='terms' && [
+                ['1. Acceptance','By using DeltaBuddy you agree to these Terms. If you do not agree, do not use the platform.'],
+                ['2. Service Description','DeltaBuddy is an AI-powered financial information platform for Indian equity and derivatives markets (NSE/BSE). It provides options analysis, market data, strategy simulation, paper trading, Telegram alerts, backtesting, and trade journaling.'],
+                ['3. Not Financial Advice','DeltaBuddy is an educational tool ONLY. Nothing constitutes financial advice, investment advice, or trading recommendations. All AI outputs, scanner alerts, and strategy suggestions are for educational purposes only. You are solely responsible for your trading decisions. Always consult a SEBI-registered Investment Advisor before investing.'],
+                ['4. Eligibility','You must be at least 18 years old and legally permitted to trade in Indian financial markets.'],
+                ['5. Paper Trading','The Paper Trading feature uses virtual money (₹5,00,000 default) for simulation only. Results do not reflect real execution costs, slippage, or taxes. Paper trading performance is not indicative of real results.'],
+                ['6. Telegram Alerts','Alerts are provided on a best-effort basis and may be delayed or inaccurate. They are not buy/sell recommendations.'],
+                ['7. Prohibited Uses','You may not use DeltaBuddy for market manipulation, reverse-engineering, excessive scraping, or any activity prohibited by Indian law.'],
+                ['8. Intellectual Property','All content, software, AI configurations, and designs are the property of DeltaBuddy or its licensors.'],
+                ['9. Limitation of Liability','DeltaBuddy shall not be liable for trading losses, loss of profits, or data loss. Our maximum liability is limited to amounts paid in the 3 months preceding any claim.'],
+                ['10. Governing Law','These Terms are governed by the laws of India. Disputes shall be subject to courts in Mumbai, Maharashtra.'],
+                ['11. Contact','legal@deltabuddy.com'],
+              ].map(([h,p])=>(
+                <div key={h} style={{marginBottom:'1.25rem'}}>
+                  <div style={{fontWeight:700,fontSize:'0.9rem',color:'var(--text-main)',marginBottom:'0.35rem'}}>{h}</div>
+                  <div style={{fontSize:'0.85rem',color:'var(--text-dim)',lineHeight:1.7}}>{p}</div>
+                </div>
+              ))}
+
+              {showLegal==='privacy' && [
+                ['1. Data We Collect','Account: Email, display name, profile photo (via Google Sign-In). Trading Data: Strategies, journal entries, paper trades stored in Firebase. Technical: IP address, browser type, session duration. Preferences: Groq API key, Telegram Chat ID, notification settings. Payment: We do NOT store card or bank details — only Razorpay transaction IDs.'],
+                ['2. How We Use Your Data','To provide and improve the platform. To send Telegram alerts you subscribed to. To process payments. We do NOT sell your data or use your trading journal for advertising.'],
+                ['3. Third-Party Services','Firebase (Google): Authentication and database. Razorpay: Payment processing. Groq AI / Google Gemini: AI processing of news text only. Yahoo Finance / NSE: Public market data.'],
+                ['4. Data Security','Data stored in Google Firebase (Mumbai region). HTTPS/TLS encryption in transit. Firebase Security Rules restrict access to authenticated users only.'],
+                ['5. Your Rights','You may access, correct, or delete your personal data at any time by emailing legal@deltabuddy.com.'],
+                ['6. Cookies','We use only essential session cookies for authentication. No advertising or tracking cookies.'],
+                ['7. Contact','legal@deltabuddy.com'],
+              ].map(([h,p])=>(
+                <div key={h} style={{marginBottom:'1.25rem'}}>
+                  <div style={{fontWeight:700,fontSize:'0.9rem',color:'var(--text-main)',marginBottom:'0.35rem'}}>{h}</div>
+                  <div style={{fontSize:'0.85rem',color:'var(--text-dim)',lineHeight:1.7}}>{p}</div>
+                </div>
+              ))}
+
+              {showLegal==='refund' && [
+                ['1. Free Trial','All new users get 90 days free with full access. No payment required during trial. Cancel anytime at zero cost.'],
+                ['2. Paid Subscription','After the trial, continued access requires ₹299/quarter, billed via Razorpay. You will receive email reminders 7 days before the first charge.'],
+                ['3. Cancellation','Cancel anytime via Account Settings or by emailing legal@deltabuddy.com. You retain access until the end of the current billing period.'],
+                ['4. Refund Policy','Within 7 days of any charge: Full refund, no questions asked. After 7 days: No pro-rated refunds — you retain access until quarter end. Service outage >72 hours: Pro-rated credit for next cycle.'],
+                ['5. Refund Process','Approved refunds processed within 5–7 business days to the original payment method.'],
+                ['6. Price Changes','We will notify you at least 30 days before any price increase.'],
+                ['7. Contact','Email legal@deltabuddy.com with your registered email and transaction ID. Response within 2 business days.'],
+              ].map(([h,p])=>(
+                <div key={h} style={{marginBottom:'1.25rem'}}>
+                  <div style={{fontWeight:700,fontSize:'0.9rem',color:'var(--text-main)',marginBottom:'0.35rem'}}>{h}</div>
+                  <div style={{fontSize:'0.85rem',color:'var(--text-dim)',lineHeight:1.7}}>{p}</div>
+                </div>
+              ))}
+
+              {showLegal==='disclaimer' && [
+                ['Investment Risk Warning','OPTIONS TRADING INVOLVES HIGH RISK and is not suitable for all investors. You can lose the entire amount invested. Never trade with money you cannot afford to lose.'],
+                ['No SEBI Registration','DeltaBuddy is NOT a SEBI-registered Investment Adviser, Research Analyst, or Stockbroker. Our tools are for educational and research purposes only.'],
+                ['Data Accuracy','Market data may be delayed, inaccurate, or incomplete. Always verify from your broker or NSE/BSE directly before executing trades.'],
+                ['AI Output Disclaimer','AI-generated insights may contain errors or hallucinations. They are not trading recommendations. Never act solely on AI outputs without independent verification.'],
+                ['Backtesting Disclaimer','Backtesting is hypothetical and does not account for real execution costs, slippage, or market impact. PAST PERFORMANCE IS NOT INDICATIVE OF FUTURE RESULTS.'],
+                ['Regulatory Compliance','Users are solely responsible for complying with SEBI regulations, Income Tax obligations, and all applicable Indian laws.'],
+              ].map(([h,p])=>(
+                <div key={h} style={{marginBottom:'1.25rem'}}>
+                  <div style={{fontWeight:700,fontSize:'0.9rem',color:'var(--text-main)',marginBottom:'0.35rem'}}>{h}</div>
+                  <div style={{fontSize:'0.85rem',color:'var(--text-dim)',lineHeight:1.7}}>{p}</div>
+                </div>
+              ))}
+
+              <div style={{marginTop:'1.5rem',paddingTop:'1rem',borderTop:'1px solid var(--border)',fontSize:'0.75rem',color:'var(--text-muted)',textAlign:'center'}}>
+                Questions? <a href="mailto:legal@deltabuddy.com" style={{color:'var(--accent)'}}>legal@deltabuddy.com</a> · © 2025 DeltaBuddy
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── FLOATING WHATSAPP SUPPORT BUTTON ── */}
         <a
