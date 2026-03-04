@@ -1107,8 +1107,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [expiryData, setExpiryData]       = useState(null);
   const [expiryLoading, setExpiryLoading] = useState(false);
   const [expirySymbol, setExpirySymbol]   = useState('NIFTY');
-  const [showMoreMenu, setShowMoreMenu]   = useState(false);
-  const [showLegal, setShowLegal]         = useState(null); // null | 'terms' | 'privacy' | 'refund' | 'disclaimer'
+  const [showLegal, setShowLegal]         = useState(null);
   const [watchlist, setWatchlist]         = useState(() => { try { return JSON.parse(localStorage.getItem('db_watchlist')||'[]'); } catch(e) { return []; }});
   const [watchlistPrices, setWatchlistPrices] = useState({});
   const [showAddWatch, setShowAddWatch]   = useState(false);
@@ -2180,6 +2179,7 @@ Respond ONLY with valid JSON:
               </span>
             ))}
           </div>
+        </div>
       </nav>
 
       {/* ── MOBILE MENU — rendered outside navbar to avoid clipping ── */}
