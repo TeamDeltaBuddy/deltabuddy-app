@@ -2161,87 +2161,24 @@ Respond ONLY with valid JSON:
             <span>DeltaBuddy</span>
           </div>
 
-          {/* Nav links — desktop only */}
+          {/* Nav links — desktop only, scrollable */}
           <div className="nav-links">
             {[
+              ['home',         '🏠 Home'],
               ['markets',      '📊 Markets'],
               ['intelligence', '🧠 Intel'],
               ['strategy',     '🎯 Strategy'],
               ['scanner',      '🔍 Scanner'],
+              ['backtest',     '📈 Backtest'],
+              ['single',       '🧮 Calc'],
+              ['journal',      '📓 Journal'],
               ['paper',        '📝 Paper'],
+              ['expiry',       '⏰ Expiry'],
             ].map(([tab,label])=>(
               <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}>
                 {label}
               </span>
             ))}
-            {/* More dropdown */}
-            <div style={{position:'relative',zIndex:3000}}>
-              <button
-                onClick={(e)=>{e.stopPropagation();setShowMoreMenu(m=>!m);}}
-                style={{cursor:'pointer',background:'none',border:'none',borderBottom:['backtest','single','journal','expiry'].includes(activeTab)?'2px solid var(--accent)':'2px solid transparent',color:['backtest','single','journal','expiry'].includes(activeTab)?'var(--accent)':'var(--text-dim)',fontSize:'0.82rem',fontWeight:['backtest','single','journal','expiry'].includes(activeTab)?700:500,padding:'0.45rem 0.6rem',borderRadius:'var(--radius-sm)',userSelect:'none'}}>
-                More ▾
-              </button>
-              {showMoreMenu && (
-                <>
-                  <div style={{position:'fixed',inset:0,zIndex:2999}} onClick={()=>setShowMoreMenu(false)}/>
-                  <div style={{position:'absolute',top:'110%',left:0,background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',minWidth:'160px',zIndex:3001,boxShadow:'0 8px 24px rgba(0,0,0,0.5)',padding:'0.4rem 0'}}>
-                    {[
-                      ['backtest', '📈 Backtest'],
-                      ['single',   '🧮 Calculator'],
-                      ['journal',  '📓 Journal'],
-                      ['expiry',   '⏰ Expiry Day'],
-                    ].map(([tab,label])=>(
-                      <div key={tab}
-                        onClick={(e)=>{e.stopPropagation();setActiveTab(tab);setShowMoreMenu(false);}}
-                        style={{padding:'0.65rem 1rem',cursor:'pointer',fontSize:'0.85rem',fontWeight:activeTab===tab?700:400,color:activeTab===tab?'var(--accent)':'var(--text-main)',background:activeTab===tab?'rgba(0,255,136,0.07)':'transparent'}}>
-                        {label}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Right controls — always visible */}
-          <div className="navbar-right">
-            {!authLoading && (currentUser ? (
-              <>
-                {/* Trial / Pro badge */}
-                <button onClick={()=>setShowTgSetup(true)}
-                  title={tgChatId?'Telegram connected — click to update':'Connect Telegram for alerts'}
-                  style={{background:'none',border:'none',cursor:'pointer',padding:'4px',fontSize:'1.2rem',lineHeight:1,opacity:tgChatId?1:0.6}}>
-                  {tgChatId ? '🔔' : '🔕'}
-                </button>
-                <div style={{cursor:'pointer'}} onClick={handleSignOut} title="Click to sign out">
-                  {currentUser?.photoURL
-                    ? <img src={currentUser?.photoURL} alt="" style={{width:'30px',height:'30px',borderRadius:'50%',border:'2px solid var(--accent)',display:'block',objectFit:'cover'}}/>
-                    : <div style={{width:'30px',height:'30px',borderRadius:'50%',background:'var(--accent)',color:'#000',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:'0.85rem'}}>{(currentUser?.displayName||currentUser?.email||'U')[0].toUpperCase()}</div>
-                  }
-                </div>
-              </>
-            ) : (
-              <button onClick={()=>setShowAuthModal(true)}
-                style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.35rem 0.85rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem',whiteSpace:'nowrap'}}>
-                Sign In
-              </button>
-            ))}
-            <a href="https://wa.me/917506218502?text=Hi%20DeltaBuddy%20Team%2C%20I%20need%20help%20with..."
-              target="_blank" rel="noreferrer" className="help-link">
-              💬 <span className="help-text">Help</span>
-            </a>
-            {isAdmin && (
-              <span title="Admin Settings" onClick={()=>setShowSettings(s=>!s)}
-                style={{cursor:'pointer',fontSize:'1.1rem',padding:'0.25rem 0.5rem',borderRadius:'6px',background:showSettings?'var(--accent)':'transparent',lineHeight:1}}>
-                ⚙️
-              </span>
-            )}
-            {/* Hamburger — mobile only */}
-            <button onClick={()=>setShowMobileMenu(m=>!m)}
-              className="hamburger-btn" aria-label="Toggle menu"
-              style={{fontSize:'1.4rem'}}>
-              {showMobileMenu ? '✕' : '☰'}
-            </button>
           </div>
         </div>
       </nav>

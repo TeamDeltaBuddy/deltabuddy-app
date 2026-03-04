@@ -68,7 +68,7 @@ a{color:var(--accent);text-decoration:none}
 .logo span:last-child{font-size:1.4rem;font-weight:800;color:var(--text-main);letter-spacing:-0.01em}
 .nav-links{display:flex;align-items:center;gap:0;flex:1;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;min-width:0}
 .nav-links::-webkit-scrollbar{display:none}
-.nav-links span{font-size:0.82rem;font-weight:500;color:var(--text-dim);padding:0.45rem 0.6rem;border-radius:var(--radius-sm);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:color 0.15s,background 0.15s;flex-shrink:0}
+.nav-links span{font-size:0.76rem;font-weight:500;color:var(--text-dim);padding:0.4rem 0.5rem;border-radius:var(--radius-sm);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:color 0.15s,background 0.15s;flex-shrink:0}
 .nav-links span:hover{color:var(--text-main);background:var(--bg-hover)}
 .nav-links span.active{color:var(--accent);font-weight:700;border-bottom-color:var(--accent)}
 .navbar-right{display:flex;align-items:center;gap:0.35rem;flex-shrink:0;margin-left:0.5rem}
