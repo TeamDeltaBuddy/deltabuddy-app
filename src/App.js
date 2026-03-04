@@ -2179,6 +2179,39 @@ Respond ONLY with valid JSON:
               </span>
             ))}
           </div>
+
+          {/* Right controls */}
+          <div className="navbar-right">
+            {!authLoading && (currentUser ? (
+              <>
+                <button onClick={()=>setShowTgSetup(true)}
+                  title={tgChatId?'Telegram connected — click to update':'Connect Telegram for alerts'}
+                  style={{background:'none',border:'none',cursor:'pointer',padding:'4px',fontSize:'1.2rem',lineHeight:1,opacity:tgChatId?1:0.6}}>
+                  {tgChatId ? '🔔' : '🔕'}
+                </button>
+                <div style={{cursor:'pointer'}} onClick={handleSignOut} title="Click to sign out">
+                  {currentUser?.photoURL
+                    ? <img src={currentUser?.photoURL} alt="" style={{width:'30px',height:'30px',borderRadius:'50%',border:'2px solid var(--accent)',display:'block',objectFit:'cover'}}/>
+                    : <div style={{width:'30px',height:'30px',borderRadius:'50%',background:'var(--accent)',color:'#000',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:'0.85rem'}}>{(currentUser?.displayName||currentUser?.email||'U')[0].toUpperCase()}</div>
+                  }
+                </div>
+              </>
+            ) : (
+              <button onClick={()=>setShowAuthModal(true)}
+                style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.35rem 0.85rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem',whiteSpace:'nowrap'}}>
+                Sign In
+              </button>
+            ))}
+            <a href="https://wa.me/917506218502?text=Hi%20DeltaBuddy%20Team%2C%20I%20need%20help%20with..."
+              target="_blank" rel="noreferrer"
+              style={{color:'#25D366',fontSize:'1.2rem',lineHeight:1,textDecoration:'none'}} title="WhatsApp Support">
+              💬
+            </a>
+            <button className="hamburger" onClick={()=>setShowMobileMenu(m=>!m)}
+              style={{background:'none',border:'none',cursor:'pointer',padding:'4px',fontSize:'1.4rem',lineHeight:1,color:'var(--text-main)'}}>
+              {showMobileMenu ? '✕' : '☰'}
+            </button>
+          </div>
         </div>
       </nav>
 
