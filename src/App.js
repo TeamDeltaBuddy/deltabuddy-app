@@ -1104,7 +1104,10 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [alerts, setAlerts] = useState([]);
   const [scannerIV, setScannerIV] = useState(20);
   const [scannerExpiry, setScannerExpiry] = useState('');
-  const [expiryData, setExpiryData]       = useState(null);
+  const [expiryData, setExpiryData]         = useState(null);
+  const [portfolio, setPortfolio]           = useState(null);
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
+  const [portfolioError, setPortfolioError] = useState('');
   const [expiryLoading, setExpiryLoading] = useState(false);
   const [expirySymbol, setExpirySymbol]   = useState('NIFTY');
   const [showLegal, setShowLegal]         = useState(null);
@@ -1138,6 +1141,18 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   };
 
   const removeFromWatchlist = (sym) => setWatchlist(w => w.filter(s => s !== sym));
+
+  const fetchPortfolio = async () => {
+    setPortfolioLoading(true);
+    setPortfolioError('');
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/dhan/portfolio`);
+      const data = await r.json();
+      if (data.error) setPortfolioError(data.error);
+      else setPortfolio(data);
+    } catch(e) { setPortfolioError('Could not connect to backend'); }
+    finally { setPortfolioLoading(false); }
+  };
 
   const fetchExpiryData = async (sym) => {
     setExpiryLoading(true);
@@ -2172,6 +2187,7 @@ Respond ONLY with valid JSON:
               ['single',       '🧮 Calc'],
               ['journal',      '📓 Journal'],
               ['paper',        '📝 Paper'],
+              ['portfolio',    '💼 Portfolio'],
               ['expiry',       '⏰ Expiry'],
             ].map(([tab,label])=>(
               <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}>
@@ -2233,6 +2249,7 @@ Respond ONLY with valid JSON:
             ['scanner',      '🔍 Scanner'],
             ['journal',      '📓 Journal'],
             ['paper',        '📝 Paper Trade'],
+            ['portfolio',    '💼 Portfolio'],
             ['expiry',       '⏰ Expiry Day'],
           ].map(([tab,label])=>(
             <div key={tab}
@@ -5454,6 +5471,138 @@ Respond ONLY with valid JSON:
               </div>
             )}
           </div>
+        ) : activeTab === 'portfolio' ? (
+          <div>
+            {/* Header */}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem'}}>
+              <div>
+                <h2 style={{margin:0,fontSize:'1.35rem'}}>💼 Portfolio</h2>
+                <p style={{color:'var(--text-dim)',fontSize:'0.82rem',margin:'0.2rem 0 0'}}>Live positions, holdings & funds via Dhan</p>
+              </div>
+              <button onClick={fetchPortfolio} disabled={portfolioLoading}
+                style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.5rem 1.2rem',fontWeight:700,cursor:'pointer',fontSize:'0.88rem'}}>
+                {portfolioLoading ? '⏳ Loading...' : '🔄 Refresh'}
+              </button>
+            </div>
+
+            {portfolioError && (
+              <div style={{background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.3)',borderRadius:'10px',padding:'1rem',marginBottom:'1rem',color:'#f87171',fontSize:'0.88rem'}}>
+                ❌ {portfolioError}
+              </div>
+            )}
+
+            {!portfolio && !portfolioLoading && !portfolioError && (
+              <div style={{textAlign:'center',padding:'4rem 2rem',color:'var(--text-dim)'}}>
+                <div style={{fontSize:'3rem',marginBottom:'1rem'}}>💼</div>
+                <p style={{marginBottom:'1rem'}}>Click Refresh to load your Dhan portfolio</p>
+                <button onClick={fetchPortfolio}
+                  style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.75rem 2rem',fontWeight:700,cursor:'pointer'}}>
+                  Load Portfolio
+                </button>
+              </div>
+            )}
+
+            {portfolio && (
+              <>
+                {/* Funds */}
+                {portfolio.funds && (
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:'0.75rem',marginBottom:'1.25rem'}}>
+                    {[
+                      {label:'Available Balance', value:`₹${(portfolio.funds.availabelBalance||portfolio.funds.availableBalance||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`, color:'#4ade80'},
+                      {label:'Used Margin',        value:`₹${(portfolio.funds.utilizedAmount||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`,   color:'#f87171'},
+                      {label:'Total Balance',      value:`₹${(portfolio.funds.sodLimit||portfolio.funds.totalBalance||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`, color:'var(--text-main)'},
+                      {label:'Withdrawable',       value:`₹${(portfolio.funds.withdrawableBalance||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`, color:'#38bdf8'},
+                    ].map(({label,value,color})=>(
+                      <div key={label} className="panel" style={{textAlign:'center',padding:'0.85rem'}}>
+                        <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginBottom:'0.3rem'}}>{label}</div>
+                        <div style={{fontSize:'1.15rem',fontWeight:700,color}}>{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Positions */}
+                {portfolio.positions && portfolio.positions.length > 0 && (
+                  <div className="panel" style={{marginBottom:'1.25rem',overflowX:'auto'}}>
+                    <h3 style={{marginTop:0,marginBottom:'1rem'}}>📊 Open Positions</h3>
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.85rem'}}>
+                      <thead>
+                        <tr style={{background:'var(--bg-surface)'}}>
+                          {['Symbol','Qty','Buy Avg','LTP','P&L','Product'].map(h=>(
+                            <th key={h} style={{padding:'0.5rem 0.75rem',textAlign:'left',color:'var(--text-muted)',fontSize:'0.72rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {portfolio.positions.map((pos,i)=>{
+                          const qty  = pos.netQty||pos.quantity||0;
+                          const avg  = pos.costPrice||pos.buyAvg||0;
+                          const ltp  = pos.ltp||pos.lastTradedPrice||0;
+                          const pnl  = pos.unrealizedProfit||((ltp-avg)*qty)||0;
+                          return (
+                            <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700,fontSize:'0.82rem'}}>{pos.tradingSymbol||pos.symbol}</td>
+                              <td style={{padding:'0.6rem 0.75rem',color:qty>=0?'#4ade80':'#f87171',fontWeight:700}}>{qty>0?'+':''}{qty}</td>
+                              <td style={{padding:'0.6rem 0.75rem'}}>₹{(+avg).toFixed(2)}</td>
+                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700}}>₹{(+ltp).toFixed(2)}</td>
+                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700,color:pnl>=0?'#4ade80':'#f87171'}}>{pnl>=0?'+':''}₹{(+pnl).toFixed(0)}</td>
+                              <td style={{padding:'0.6rem 0.75rem',color:'var(--text-muted)',fontSize:'0.78rem'}}>{pos.productType||pos.product||'—'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Holdings */}
+                {portfolio.holdings && portfolio.holdings.length > 0 && (
+                  <div className="panel" style={{marginBottom:'1.25rem',overflowX:'auto'}}>
+                    <h3 style={{marginTop:0,marginBottom:'1rem'}}>📈 Holdings</h3>
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.85rem'}}>
+                      <thead>
+                        <tr style={{background:'var(--bg-surface)'}}>
+                          {['Symbol','Qty','Avg Cost','LTP','Value','P&L','Return'].map(h=>(
+                            <th key={h} style={{padding:'0.5rem 0.75rem',textAlign:'left',color:'var(--text-muted)',fontSize:'0.72rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {portfolio.holdings.map((h,i)=>{
+                          const qty  = h.totalQty||h.quantity||0;
+                          const avg  = h.avgCostPrice||h.averageCost||0;
+                          const ltp  = h.ltp||h.lastTradedPrice||0;
+                          const pnl  = (ltp-avg)*qty;
+                          const ret  = avg ? ((ltp-avg)/avg*100) : 0;
+                          return (
+                            <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700,fontSize:'0.82rem'}}>{h.tradingSymbol||h.symbol}</td>
+                              <td style={{padding:'0.6rem 0.75rem'}}>{qty}</td>
+                              <td style={{padding:'0.6rem 0.75rem'}}>₹{(+avg).toFixed(2)}</td>
+                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700}}>₹{(+ltp).toFixed(2)}</td>
+                              <td style={{padding:'0.6rem 0.75rem'}}>₹{(ltp*qty).toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
+                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700,color:pnl>=0?'#4ade80':'#f87171'}}>{pnl>=0?'+':''}₹{pnl.toFixed(0)}</td>
+                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700,color:ret>=0?'#4ade80':'#f87171'}}>{ret>=0?'+':''}{ret.toFixed(2)}%</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Empty state */}
+                {portfolio.positions?.length===0 && portfolio.holdings?.length===0 && (
+                  <div style={{textAlign:'center',padding:'3rem',color:'var(--text-muted)'}}>
+                    <div style={{fontSize:'3rem',marginBottom:'1rem'}}>💼</div>
+                    <div style={{fontWeight:700,color:'var(--text-main)',marginBottom:'0.5rem'}}>No open positions or holdings</div>
+                    <div style={{fontSize:'0.88rem'}}>Your Dhan account is empty or market is closed.</div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
         ) : activeTab === 'expiry' ? (
           <div>
             {/* Header */}
