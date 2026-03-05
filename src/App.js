@@ -5965,7 +5965,7 @@ Respond ONLY with valid JSON:
                   <div style={{fontSize:'0.82rem',color:'var(--text-dim)',marginBottom:'1rem',lineHeight:1.7}}>
                     Connect using your Angel One JWT token. Steps:<br/>
                     1. Login to Angel One SmartAPI dashboard<br/>
-                    2. Generate a session — copy your JWT token<br/>
+                    2. Generate a session - copy your JWT token<br/>
                     3. Paste your API key and JWT token below
                   </div>
                   <div style={{display:'flex',flexDirection:'column',gap:'0.5rem',maxWidth:'480px'}}>
@@ -6031,7 +6031,7 @@ Respond ONLY with valid JSON:
                           <button onClick={()=>analyzeScreenshot(screenshotFile)} disabled={screenshotAnalyzing}
                             style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',border:'none',borderRadius:'8px',padding:'0.65rem 1.5rem',fontWeight:700,cursor:'pointer',fontSize:'0.9rem',display:'flex',alignItems:'center',gap:'0.5rem'}}>
                             {screenshotAnalyzing ? (
-                              <><span style={{animation:'spin 1s linear infinite',display:'inline-block'}}>⟳</span> Analyzing...</>
+                              Analyzing...
                             ) : '🤖 Analyze with AI'}
                           </button>
                         </div>
@@ -6068,7 +6068,7 @@ Respond ONLY with valid JSON:
                               </div>
                               <button onClick={()=>importScreenshotPositions(screenshotResult)}
                                 style={{background:'#4ade80',color:'#000',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
-                                Import All →
+                                Import All
                               </button>
                             </div>
                             <div style={{overflowX:'auto'}}>
@@ -6091,9 +6091,9 @@ Respond ONLY with valid JSON:
                                       </td>
                                       <td style={{padding:'0.5rem 0.6rem'}}>{pos.qty}</td>
                                       <td style={{padding:'0.5rem 0.6rem'}}>Rs {Number(pos.avgPrice).toFixed(2)}</td>
-                                      <td style={{padding:'0.5rem 0.6rem'}}>{pos.ltp ? 'Rs '+Number(pos.ltp).toFixed(2) : '—'}</td>
+                                      <td style={{padding:'0.5rem 0.6rem'}}>{pos.ltp ? 'Rs '+Number(pos.ltp).toFixed(2) : '-'}</td>
                                       <td style={{padding:'0.5rem 0.6rem',fontWeight:700,color:Number(pos.pnl)>=0?'#4ade80':'#f87171'}}>
-                                        {pos.pnl ? (Number(pos.pnl)>=0?'+':'')+'Rs '+Number(pos.pnl).toFixed(0) : '—'}
+                                        {pos.pnl ? (Number(pos.pnl)>=0?'+':'')+'Rs '+Number(pos.pnl).toFixed(0) : '-'}
                                       </td>
                                       <td style={{padding:'0.5rem 0.6rem',color:'var(--text-muted)',fontSize:'0.75rem'}}>{pos.product}</td>
                                     </tr>
