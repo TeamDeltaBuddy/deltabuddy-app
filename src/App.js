@@ -3301,7 +3301,7 @@ Respond ONLY with valid JSON:
                 {icon:'👤', title:'You Own Your Data', desc:'Your journal, trades, and settings are private to you. We cannot read them.'},
                 {icon:'🚫', title:'We Never Sell Data', desc:'No ads. No data brokers. No third-party sharing. Your trading data stays yours.'},
                 {icon:'🔑', title:'No Broker Passwords Stored', desc:'We store only your API token — never your broker login, password, or MPIN.'},
-                {icon:'⚡', title:'Google Sign-In', desc:'Login via Google means no password to steal. Your account is secured by Google\'s 2FA.'},
+                {icon:'⚡', title:'Google Sign-In', desc:'Login via Google means no password to steal. Your account is secured by Google 2FA.'},
               ].map(({icon,title,desc})=>(
                 <div key={title} style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1rem',display:'flex',gap:'0.75rem',alignItems:'flex-start'}}>
                   <span style={{fontSize:'1.4rem',flexShrink:0}}>{icon}</span>
