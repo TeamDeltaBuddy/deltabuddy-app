@@ -1490,8 +1490,8 @@ Respond ONLY with valid JSON:
             nseJson.records.data.forEach(row => {
               const s = row.strikePrice;
               if (!map[s]) map[s] = {strike:s, atmDistance:Math.abs(s-spot)};
-              if (row.CE) map[s].ce = {premium:(row.CE.lastPrice||0).toFixed(2),iv:(row.CE.impliedVolatility||0).toFixed(1),oi:row.CE.openInterest||0,volume:row.CE.totalTradedVolume||0,bid:(row.CE.bidprice||0).toFixed(2),ask:(row.CE.askPrice||0).toFixed(2),ltp:(row.CE.lastPrice||0).toFixed(2),change:(row.CE.pChange||0).toFixed(2),delta:0,gamma:0,theta:0,vega:0};
-              if (row.PE) map[s].pe = {premium:(row.PE.lastPrice||0).toFixed(2),iv:(row.PE.impliedVolatility||0).toFixed(1),oi:row.PE.openInterest||0,volume:row.PE.totalTradedVolume||0,bid:(row.PE.bidprice||0).toFixed(2),ask:(row.PE.askPrice||0).toFixed(2),ltp:(row.PE.lastPrice||0).toFixed(2),change:(row.PE.pChange||0).toFixed(2),delta:0,gamma:0,theta:0,vega:0};
+              if (row.CE) map[s].ce = {ltp:(row.CE.lastPrice||0).toFixed(2),iv:(row.CE.impliedVolatility||0).toFixed(1),oi:row.CE.openInterest||0,oiChg:row.CE.changeinOpenInterest||0,volume:row.CE.totalTradedVolume||0,bid:(row.CE.bidprice||0).toFixed(2),ask:(row.CE.askPrice||0).toFixed(2),change:(row.CE.change||0).toFixed(2),pChange:(row.CE.pChange||0).toFixed(2)};
+              if (row.PE) map[s].pe = {ltp:(row.PE.lastPrice||0).toFixed(2),iv:(row.PE.impliedVolatility||0).toFixed(1),oi:row.PE.openInterest||0,oiChg:row.PE.changeinOpenInterest||0,volume:row.PE.totalTradedVolume||0,bid:(row.PE.bidprice||0).toFixed(2),ask:(row.PE.askPrice||0).toFixed(2),change:(row.PE.change||0).toFixed(2),pChange:(row.PE.pChange||0).toFixed(2)};
             });
             const chain = Object.values(map).filter(r=>r.ce&&r.pe).sort((a,b)=>a.strike-b.strike);
             if (chain.length > 0) {
@@ -4141,55 +4141,94 @@ Respond ONLY with valid JSON:
                   <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>Loading option chain...</div>
                 ) : (
                   <div style={{overflowX:'auto'}}>
-                    <div style={{display:'grid',gridTemplateColumns:'1fr 80px 1fr',gap:0,marginBottom:'4px'}}>
-                      <div style={{background:'rgba(74,222,128,0.08)',borderRadius:'6px 0 0 0',padding:'4px 8px',fontSize:'0.75rem',fontWeight:700,color:'#4ade80'}}>CALLS</div>
-                      <div/>
-                      <div style={{background:'rgba(248,113,113,0.08)',borderRadius:'0 6px 0 0',padding:'4px 8px',fontSize:'0.75rem',fontWeight:700,color:'#f87171',textAlign:'right'}}>PUTS</div>
+                    {/* Column headers */}
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.72rem',minWidth:'900px'}}>
+                      <thead>
+                        <tr style={{background:'rgba(74,222,128,0.06)'}}>
+                          {/* CE side - 7 cols */}
+                          <th style={{padding:'6px 6px',color:'#4ade80',textAlign:'right',fontWeight:700,borderBottom:'2px solid rgba(74,222,128,0.3)'}}>OI</th>
+                          <th style={{padding:'6px 6px',color:'#4ade80',textAlign:'right',fontWeight:700,borderBottom:'2px solid rgba(74,222,128,0.3)'}}>Chg OI</th>
+                          <th style={{padding:'6px 6px',color:'#4ade80',textAlign:'right',fontWeight:700,borderBottom:'2px solid rgba(74,222,128,0.3)'}}>Vol</th>
+                          <th style={{padding:'6px 6px',color:'#4ade80',textAlign:'right',fontWeight:700,borderBottom:'2px solid rgba(74,222,128,0.3)'}}>IV%</th>
+                          <th style={{padding:'6px 6px',color:'#4ade80',textAlign:'right',fontWeight:700,borderBottom:'2px solid rgba(74,222,128,0.3)'}}>LTP</th>
+                          <th style={{padding:'6px 6px',color:'#4ade80',textAlign:'right',fontWeight:700,borderBottom:'2px solid rgba(74,222,128,0.3)'}}>Chg</th>
+                          <th style={{padding:'6px 6px',color:'#4ade80',textAlign:'right',fontWeight:700,borderBottom:'2px solid rgba(74,222,128,0.3)'}}>Bid</th>
+                          {/* Strike */}
+                          <th style={{padding:'6px 8px',color:'#f97316',textAlign:'center',fontWeight:700,borderBottom:'2px solid rgba(249,115,22,0.5)',background:'rgba(249,115,22,0.06)',whiteSpace:'nowrap'}}>STRIKE</th>
+                          {/* PE side - 7 cols */}
+                          <th style={{padding:'6px 6px',color:'#f87171',textAlign:'left',fontWeight:700,borderBottom:'2px solid rgba(248,113,113,0.3)'}}>Ask</th>
+                          <th style={{padding:'6px 6px',color:'#f87171',textAlign:'left',fontWeight:700,borderBottom:'2px solid rgba(248,113,113,0.3)'}}>LTP</th>
+                          <th style={{padding:'6px 6px',color:'#f87171',textAlign:'left',fontWeight:700,borderBottom:'2px solid rgba(248,113,113,0.3)'}}>Chg</th>
+                          <th style={{padding:'6px 6px',color:'#f87171',textAlign:'left',fontWeight:700,borderBottom:'2px solid rgba(248,113,113,0.3)'}}>IV%</th>
+                          <th style={{padding:'6px 6px',color:'#f87171',textAlign:'left',fontWeight:700,borderBottom:'2px solid rgba(248,113,113,0.3)'}}>Vol</th>
+                          <th style={{padding:'6px 6px',color:'#f87171',textAlign:'left',fontWeight:700,borderBottom:'2px solid rgba(248,113,113,0.3)'}}>Chg OI</th>
+                          <th style={{padding:'6px 6px',color:'#f87171',textAlign:'left',fontWeight:700,borderBottom:'2px solid rgba(248,113,113,0.3)'}}>OI</th>
+                        </tr>
+                        <tr style={{background:'rgba(255,255,255,0.02)'}}>
+                          <td colSpan={7} style={{padding:'2px 6px',fontSize:'0.68rem',color:'#4ade80',textAlign:'center'}}>← CALLS</td>
+                          <td style={{padding:'2px 8px',background:'rgba(249,115,22,0.06)'}}/>
+                          <td colSpan={7} style={{padding:'2px 6px',fontSize:'0.68rem',color:'#f87171',textAlign:'center'}}>PUTS →</td>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {liveOptionChain.map((row,idx)=>{
+                          const spot  = selectedUnderlying==='NIFTY'?marketData.nifty.value:selectedUnderlying==='BANKNIFTY'?marketData.bankNifty.value:marketData.nifty.value;
+                          const isATM = Math.abs(row.strike-spot)<(selectedUnderlying==='NIFTY'?26:51);
+                          const itmCE = row.strike < spot;
+                          const itmPE = row.strike > spot;
+                          const maxOI = Math.max(...liveOptionChain.map(r=>Math.max(r.ce?.oi||0,r.pe?.oi||0)));
+                          const ceOI  = row.ce?.oi||0;
+                          const peOI  = row.pe?.oi||0;
+                          const ceChg = parseFloat(row.ce?.change||0);
+                          const peChg = parseFloat(row.pe?.change||0);
+                          const ceOIChg = row.ce?.oiChg||0;
+                          const peOIChg = row.pe?.oiChg||0;
+                          const fmt = (n) => n>=100000?(n/100000).toFixed(1)+'L':n>=1000?(n/1000).toFixed(0)+'K':n;
+                          const ceBg = itmCE ? 'rgba(74,222,128,0.05)' : 'transparent';
+                          const peBg = itmPE ? 'rgba(248,113,113,0.05)' : 'transparent';
+                          const rowBg = isATM ? 'rgba(249,115,22,0.08)' : 'transparent';
+                          return (
+                            <tr key={idx} style={{borderBottom:'1px solid rgba(255,255,255,0.03)',background:rowBg}}>
+                              {/* CE OI with bar */}
+                              <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,position:'relative'}}>
+                                <div style={{position:'absolute',right:0,top:0,bottom:0,width:`${maxOI>0?(ceOI/maxOI*100).toFixed(0)}%`,background:'rgba(74,222,128,0.08)',pointerEvents:'none'}}/>
+                                <span style={{position:'relative',fontWeight:ceOI>500000?700:400,color:ceOI>500000?'#4ade80':'#94a3b8'}}>{fmt(ceOI)}</span>
+                              </td>
+                              <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:ceOIChg>0?'#4ade80':ceOIChg<0?'#f87171':'#64748b',fontSize:'0.7rem'}}>{ceOIChg>0?'+':''}{fmt(ceOIChg)}</td>
+                              <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:'#64748b',fontSize:'0.7rem'}}>{fmt(row.ce?.volume||0)}</td>
+                              <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:'#fbbf24'}}>{row.ce?.iv}</td>
+                              <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,fontWeight:700,color:'#4ade80',fontSize:'0.82rem'}}>₹{row.ce?.ltp}</td>
+                              <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:ceChg>=0?'#4ade80':'#f87171',fontSize:'0.72rem'}}>{ceChg>=0?'+':''}{row.ce?.pChange}%</td>
+                              <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:'#64748b',fontSize:'0.72rem'}}>{row.ce?.bid}</td>
+                              {/* Strike */}
+                              <td style={{padding:'5px 8px',textAlign:'center',background:'rgba(249,115,22,0.06)',borderLeft:'1px solid rgba(249,115,22,0.2)',borderRight:'1px solid rgba(249,115,22,0.2)'}}>
+                                {isATM
+                                  ? <span style={{background:'#f97316',color:'white',borderRadius:'99px',padding:'2px 7px',fontWeight:800,fontSize:'0.78rem',whiteSpace:'nowrap'}}>{row.strike?.toLocaleString()} ★</span>
+                                  : <span style={{fontWeight:600,color:'var(--text-dim)',fontSize:'0.8rem'}}>{row.strike?.toLocaleString()}</span>
+                                }
+                              </td>
+                              {/* PE side */}
+                              <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'#64748b',fontSize:'0.72rem'}}>{row.pe?.ask}</td>
+                              <td style={{padding:'5px 6px',textAlign:'left',background:peBg,fontWeight:700,color:'#f87171',fontSize:'0.82rem'}}>₹{row.pe?.ltp}</td>
+                              <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:peChg>=0?'#4ade80':'#f87171',fontSize:'0.72rem'}}>{peChg>=0?'+':''}{row.pe?.pChange}%</td>
+                              <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'#fbbf24'}}>{row.pe?.iv}</td>
+                              <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'#64748b',fontSize:'0.7rem'}}>{fmt(row.pe?.volume||0)}</td>
+                              <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:peOIChg>0?'#4ade80':peOIChg<0?'#f87171':'#64748b',fontSize:'0.7rem'}}>{peOIChg>0?'+':''}{fmt(peOIChg)}</td>
+                              <td style={{padding:'5px 6px',textAlign:'left',background:peBg,position:'relative'}}>
+                                <div style={{position:'absolute',left:0,top:0,bottom:0,width:`${maxOI>0?(peOI/maxOI*100).toFixed(0)}%`,background:'rgba(248,113,113,0.08)',pointerEvents:'none'}}/>
+                                <span style={{position:'relative',fontWeight:peOI>500000?700:400,color:peOI>500000?'#f87171':'#94a3b8'}}>{fmt(peOI)}</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {/* Legend */}
+                    <div style={{display:'flex',gap:'1.5rem',padding:'0.6rem 0.5rem',fontSize:'0.7rem',color:'var(--text-muted)',flexWrap:'wrap',borderTop:'1px solid var(--border)',marginTop:'4px'}}>
+                      <span>🟩 ITM Call &nbsp; 🟥 ITM Put &nbsp; 🟠 ATM ★</span>
+                      <span>OI bars show relative size &nbsp;·&nbsp; Bold OI = high open interest</span>
+                      <span>Chg OI = change in OI from prev close</span>
                     </div>
-                    {liveOptionChain.map((row,idx)=>{
-                      const spot = selectedUnderlying==='NIFTY'?marketData.nifty.value:marketData.bankNifty.value;
-                      const isATM = Math.abs(row.strike-spot)<(selectedUnderlying==='NIFTY'?26:51);
-                      const itmCE = row.strike<spot;
-                      const itmPE = row.strike>spot;
-                      const ceOI  = row.ce?.oi||0;
-                      const peOI  = row.pe?.oi||0;
-                      const maxOI = Math.max(...liveOptionChain.map(r=>Math.max(r.ce?.oi||0,r.pe?.oi||0)));
-                      const ceChg = parseFloat(row.ce?.change||0);
-                      const peChg = parseFloat(row.pe?.change||0);
-                      return (
-                        <div key={idx} style={{display:'grid',gridTemplateColumns:'1fr 80px 1fr',borderBottom:'1px solid rgba(255,255,255,0.04)',minHeight:'44px'}}>
-                          <div style={{background:itmCE?'rgba(74,222,128,0.07)':'transparent',display:'flex',alignItems:'stretch',position:'relative',overflow:'hidden'}}>
-                            <div style={{position:'absolute',right:0,top:0,bottom:0,width:`${maxOI>0?(ceOI/maxOI)*60:0}%`,background:'rgba(74,222,128,0.08)',pointerEvents:'none'}}/>
-                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.3rem 0.6rem',width:'100%',zIndex:1}}>
-                              <div>
-                                <div style={{fontSize:'0.8rem',fontWeight:600,color:'#94a3b8'}}>{ceOI>=100000?(ceOI/100000).toFixed(2)+' L':(ceOI/1000).toFixed(0)+'K'}</div>
-                                <div style={{fontSize:'0.7rem',color:ceChg>=0?'#4ade80':'#f87171'}}>{ceChg>=0?'+':''}{ceChg}%</div>
-                              </div>
-                              <div style={{textAlign:'right'}}>
-                                <div style={{fontSize:'0.88rem',fontWeight:700,color:'#4ade80'}}>₹{row.ce?.ltp}</div>
-                                <div style={{fontSize:'0.7rem',color:'#64748b'}}>{row.ce?.iv}% IV</div>
-                              </div>
-                            </div>
-                          </div>
-                          <div style={{display:'flex',alignItems:'center',justifyContent:'center',background:'var(--bg-dark)',borderLeft:'1px solid var(--border)',borderRight:'1px solid var(--border)'}}>
-                            {isATM?<span style={{background:'#f97316',color:'white',borderRadius:'99px',padding:'2px 8px',fontWeight:700,fontSize:'0.82rem'}}>{row.strike?.toLocaleString()}</span>:<span style={{fontSize:'0.82rem',fontWeight:600,color:'var(--text-dim)'}}>{row.strike?.toLocaleString()}</span>}
-                          </div>
-                          <div style={{background:itmPE?'rgba(248,113,113,0.07)':'transparent',display:'flex',alignItems:'stretch',position:'relative',overflow:'hidden'}}>
-                            <div style={{position:'absolute',left:0,top:0,bottom:0,width:`${maxOI>0?(peOI/maxOI)*60:0}%`,background:'rgba(248,113,113,0.08)',pointerEvents:'none'}}/>
-                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.3rem 0.6rem',width:'100%',zIndex:1}}>
-                              <div>
-                                <div style={{fontSize:'0.88rem',fontWeight:700,color:'#f87171'}}>₹{row.pe?.ltp}</div>
-                                <div style={{fontSize:'0.7rem',color:'#64748b'}}>{row.pe?.iv}% IV</div>
-                              </div>
-                              <div style={{textAlign:'right'}}>
-                                <div style={{fontSize:'0.8rem',fontWeight:600,color:'#94a3b8'}}>{peOI>=100000?(peOI/100000).toFixed(2)+' L':(peOI/1000).toFixed(0)+'K'}</div>
-                                <div style={{fontSize:'0.7rem',color:peChg>=0?'#4ade80':'#f87171'}}>{peChg>=0?'+':''}{peChg}%</div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
                   </div>
                 )}
               </div>
