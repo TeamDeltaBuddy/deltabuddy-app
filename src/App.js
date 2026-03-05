@@ -4187,11 +4187,13 @@ Respond ONLY with valid JSON:
                           const ceBg = itmCE ? 'rgba(74,222,128,0.05)' : 'transparent';
                           const peBg = itmPE ? 'rgba(248,113,113,0.05)' : 'transparent';
                           const rowBg = isATM ? 'rgba(249,115,22,0.08)' : 'transparent';
+                          const ceBarW = maxOI > 0 ? ((ceOI/maxOI)*100).toFixed(0) : 0;
+                          const peBarW = maxOI > 0 ? ((peOI/maxOI)*100).toFixed(0) : 0;
                           return (
                             <tr key={idx} style={{borderBottom:'1px solid rgba(255,255,255,0.03)',background:rowBg}}>
                               {/* CE OI with bar */}
                               <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,position:'relative'}}>
-                                <div style={{position:'absolute',right:0,top:0,bottom:0,width:`${maxOI>0?(ceOI/maxOI*100).toFixed(0)}%`,background:'rgba(74,222,128,0.08)',pointerEvents:'none'}}/>
+                                <div style={{position:'absolute',right:0,top:0,bottom:0,width:`${ceBarW}%`,background:'rgba(74,222,128,0.08)',pointerEvents:'none'}}/>
                                 <span style={{position:'relative',fontWeight:ceOI>500000?700:400,color:ceOI>500000?'#4ade80':'#94a3b8'}}>{fmt(ceOI)}</span>
                               </td>
                               <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:ceOIChg>0?'#4ade80':ceOIChg<0?'#f87171':'#64748b',fontSize:'0.7rem'}}>{ceOIChg>0?'+':''}{fmt(ceOIChg)}</td>
@@ -4215,7 +4217,7 @@ Respond ONLY with valid JSON:
                               <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'#64748b',fontSize:'0.7rem'}}>{fmt(row.pe?.volume||0)}</td>
                               <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:peOIChg>0?'#4ade80':peOIChg<0?'#f87171':'#64748b',fontSize:'0.7rem'}}>{peOIChg>0?'+':''}{fmt(peOIChg)}</td>
                               <td style={{padding:'5px 6px',textAlign:'left',background:peBg,position:'relative'}}>
-                                <div style={{position:'absolute',left:0,top:0,bottom:0,width:`${maxOI>0?(peOI/maxOI*100).toFixed(0)}%`,background:'rgba(248,113,113,0.08)',pointerEvents:'none'}}/>
+                                <div style={{position:'absolute',left:0,top:0,bottom:0,width:`${peBarW}%`,background:'rgba(248,113,113,0.08)',pointerEvents:'none'}}/>
                                 <span style={{position:'relative',fontWeight:peOI>500000?700:400,color:peOI>500000?'#f87171':'#94a3b8'}}>{fmt(peOI)}</span>
                               </td>
                             </tr>
