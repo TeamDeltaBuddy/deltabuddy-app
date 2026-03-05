@@ -1118,6 +1118,20 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [portfolio, setPortfolio]           = useState(null);
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [portfolioError, setPortfolioError] = useState('');
+  const [selectedBroker, setSelectedBroker] = useState('dhan');
+  const [manualPositions, setManualPositions] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('db_manual_positions') || '[]'); } catch { return []; }
+  });
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [manualForm, setManualForm]         = useState({ symbol:'', qty:'', avgPrice:'', type:'BUY', product:'INTRADAY' });
+  const [zerodhaToken, setZerodhaToken]     = useState(localStorage.getItem('db_zerodha_token') || '');
+  const [angelJwt, setAngelJwt]             = useState(localStorage.getItem('db_angel_jwt') || '');
+  const [angelApiKey, setAngelApiKey]       = useState(localStorage.getItem('db_angel_apikey') || '');
+  const [screenshotFile, setScreenshotFile] = useState(null);
+  const [screenshotPreview, setScreenshotPreview] = useState(null);
+  const [screenshotAnalyzing, setScreenshotAnalyzing] = useState(false);
+  const [screenshotResult, setScreenshotResult] = useState(null);
+  const [screenshotError, setScreenshotError] = useState('');
   const [expiryLoading, setExpiryLoading] = useState(false);
   const [expirySymbol, setExpirySymbol]   = useState('NIFTY');
   const [showLegal, setShowLegal]         = useState(null);
@@ -1159,16 +1173,126 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
 
   const removeFromWatchlist = (sym) => setWatchlist(w => w.filter(s => s !== sym));
 
-  const fetchPortfolio = async () => {
+  const fetchPortfolio = async (broker) => {
+    const b = broker || selectedBroker;
+    if (b === 'manual') return; // manual positions handled separately
     setPortfolioLoading(true);
     setPortfolioError('');
     try {
-      const r = await fetch(`${BACKEND_URL}/api/dhan/portfolio`);
+      let url = `${BACKEND_URL}/api/dhan/portfolio`;
+      let headers = {};
+      if (b === 'zerodha') {
+        if (!zerodhaToken) { setPortfolioError('Enter your Zerodha access token first'); setPortfolioLoading(false); return; }
+        url = `${BACKEND_URL}/api/zerodha/portfolio?access_token=${zerodhaToken}`;
+      } else if (b === 'angel') {
+        if (!angelJwt) { setPortfolioError('Enter your Angel One JWT token first'); setPortfolioLoading(false); return; }
+        url = `${BACKEND_URL}/api/angel/portfolio?jwt=${angelJwt}&apikey=${angelApiKey}`;
+      }
+      const r = await fetch(url, { headers });
       const data = await r.json();
       if (data.error) setPortfolioError(data.error);
       else setPortfolio(data);
     } catch(e) { setPortfolioError('Could not connect to backend'); }
     finally { setPortfolioLoading(false); }
+  };
+
+  // Manual position helpers
+  const addManualPosition = () => {
+    if (!manualForm.symbol || !manualForm.qty || !manualForm.avgPrice) return;
+    const pos = { ...manualForm, id: Date.now(), qty: Number(manualForm.qty), avgPrice: Number(manualForm.avgPrice) };
+    const updated = [...manualPositions, pos];
+    setManualPositions(updated);
+    localStorage.setItem('db_manual_positions', JSON.stringify(updated));
+    setManualForm({ symbol:'', qty:'', avgPrice:'', type:'BUY', product:'INTRADAY' });
+    setShowManualForm(false);
+  };
+
+  const removeManualPosition = (id) => {
+    const updated = manualPositions.filter(p => p.id !== id);
+    setManualPositions(updated);
+    localStorage.setItem('db_manual_positions', JSON.stringify(updated));
+  };
+
+  const analyzeScreenshot = async (file) => {
+    if (!file) return;
+    setScreenshotAnalyzing(true);
+    setScreenshotError('');
+    setScreenshotResult(null);
+    try {
+      // Convert file to base64
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const mediaType = file.type || 'image/jpeg';
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: { type: 'base64', media_type: mediaType, data: base64 }
+              },
+              {
+                type: 'text',
+                text: `This is a screenshot from an Indian stock broker app showing trading positions or holdings.
+Extract ALL positions/holdings you can see and return ONLY a JSON array, no other text.
+Each item must have these exact fields:
+- symbol: the stock/option symbol (string)
+- qty: quantity as a number (positive for buy/long, negative for sell/short)
+- avgPrice: average buy price as a number
+- ltp: last traded price if visible, else 0
+- pnl: P&L value if visible, else 0
+- type: "BUY" or "SELL"
+- product: "INTRADAY", "DELIVERY", "FUTURES", or "OPTIONS" based on what you see
+
+Example output format:
+[{"symbol":"NIFTY25MAR24500CE","qty":75,"avgPrice":150.50,"ltp":180.00,"pnl":2212.50,"type":"BUY","product":"OPTIONS"}]
+
+If you cannot find any positions, return an empty array: []
+Return ONLY the JSON array, nothing else.`
+              }
+            ]
+          }]
+        })
+      });
+
+      const data = await response.json();
+      const text = data.content?.[0]?.text || '[]';
+      const clean = text.replace(/```json|```/g, '').trim();
+      const positions = JSON.parse(clean);
+
+      if (!Array.isArray(positions)) throw new Error('Invalid response from AI');
+      setScreenshotResult(positions);
+    } catch(e) {
+      setScreenshotError('Could not analyze screenshot: ' + e.message);
+    } finally {
+      setScreenshotAnalyzing(false);
+    }
+  };
+
+  const importScreenshotPositions = (positions) => {
+    const newPositions = positions.map(p => ({
+      ...p,
+      id: Date.now() + Math.random(),
+      qty: Number(p.qty),
+      avgPrice: Number(p.avgPrice),
+    }));
+    const updated = [...manualPositions, ...newPositions];
+    setManualPositions(updated);
+    localStorage.setItem('db_manual_positions', JSON.stringify(updated));
+    setScreenshotResult(null);
+    setScreenshotPreview(null);
+    setScreenshotFile(null);
   };
 
   // ── ADMIN FUNCTIONS ────────────────────────────────────────────────────────
@@ -5673,238 +5797,412 @@ Respond ONLY with valid JSON:
         ) : activeTab === 'portfolio' ? (
           <div>
             {/* Header */}
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:'0.75rem'}}>
               <div>
-                <h2 style={{margin:0,fontSize:'1.35rem'}}>💼 Portfolio</h2>
-                <p style={{color:'var(--text-dim)',fontSize:'0.82rem',margin:'0.2rem 0 0'}}>Live positions, holdings & funds via Dhan</p>
+                <h2 style={{margin:0,fontSize:'1.35rem'}}>Portfolio</h2>
+                <p style={{color:'var(--text-dim)',fontSize:'0.82rem',margin:'0.2rem 0 0'}}>Live positions, holdings and funds</p>
               </div>
-              <button onClick={fetchPortfolio} disabled={portfolioLoading}
-                style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.5rem 1.2rem',fontWeight:700,cursor:'pointer',fontSize:'0.88rem'}}>
-                {portfolioLoading ? '⏳ Loading...' : '🔄 Refresh'}
-              </button>
+              {selectedBroker !== 'manual' && (
+                <button onClick={()=>fetchPortfolio()} disabled={portfolioLoading}
+                  style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.5rem 1.2rem',fontWeight:700,cursor:'pointer',fontSize:'0.88rem'}}>
+                  {portfolioLoading ? 'Loading...' : 'Refresh'}
+                </button>
+              )}
+            </div>
+
+            {/* Broker selector */}
+            <div style={{display:'flex',gap:'0.5rem',marginBottom:'1.25rem',flexWrap:'wrap'}}>
+              {[
+                {id:'dhan',    label:'Dhan',       icon:'💼', ready:true},
+                {id:'zerodha', label:'Zerodha',     icon:'🟢', ready:true},
+                {id:'angel',   label:'Angel One',   icon:'👼', ready:true},
+                {id:'manual',  label:'Manual Entry', icon:'✏️', ready:true},
+                {id:'upstox',  label:'Upstox',      icon:'🔵', ready:false},
+                {id:'5paisa',  label:'5paisa',       icon:'🟡', ready:false},
+              ].map(({id,label,icon,ready})=>(
+                <button key={id}
+                  onClick={()=>{ if(ready){ setSelectedBroker(id); setPortfolio(null); setPortfolioError(''); } }}
+                  style={{
+                    padding:'0.4rem 0.85rem',borderRadius:'20px',fontSize:'0.8rem',fontWeight:700,cursor:ready?'pointer':'default',
+                    background: selectedBroker===id ? 'var(--accent)' : 'var(--bg-surface)',
+                    color: selectedBroker===id ? '#000' : ready ? 'var(--text-dim)' : 'var(--text-muted)',
+                    border: selectedBroker===id ? '2px solid var(--accent)' : '1px solid var(--border)',
+                    opacity: ready ? 1 : 0.5,
+                  }}>
+                  {icon} {label}{!ready ? ' (soon)' : ''}
+                </button>
+              ))}
             </div>
 
             {portfolioError && (
               <div style={{background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.3)',borderRadius:'10px',padding:'1rem',marginBottom:'1rem',color:'#f87171',fontSize:'0.88rem'}}>
-                ❌ {portfolioError}
+                {portfolioError}
               </div>
             )}
 
-            {!portfolio && !portfolioLoading && !portfolioError && (
-              <div style={{textAlign:'center',padding:'4rem 2rem',color:'var(--text-dim)'}}>
-                <div style={{fontSize:'3rem',marginBottom:'1rem'}}>💼</div>
-                <p style={{marginBottom:'1rem'}}>Click Refresh to load your Dhan portfolio</p>
-                <button onClick={fetchPortfolio}
-                  style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.75rem 2rem',fontWeight:700,cursor:'pointer'}}>
-                  Load Portfolio
-                </button>
-              </div>
-            )}
-
-            {portfolio && (
+            {/* DHAN */}
+            {selectedBroker === 'dhan' && (
               <>
-                {/* Funds */}
-                {portfolio.funds && (
+                {!portfolio && !portfolioLoading && !portfolioError && (
+                  <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>
+                    <div style={{fontSize:'3rem',marginBottom:'1rem'}}>💼</div>
+                    <p style={{marginBottom:'1rem'}}>Click Refresh to load your Dhan portfolio</p>
+                    <button onClick={()=>fetchPortfolio('dhan')} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.75rem 2rem',fontWeight:700,cursor:'pointer'}}>Load Portfolio</button>
+                  </div>
+                )}
+                {portfolio && portfolio.funds && (
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:'0.75rem',marginBottom:'1.25rem'}}>
                     {[
-                      {label:'Available Balance', value:`₹${(portfolio.funds.availabelBalance||portfolio.funds.availableBalance||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`, color:'#4ade80'},
-                      {label:'Used Margin',        value:`₹${(portfolio.funds.utilizedAmount||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`,   color:'#f87171'},
-                      {label:'Total Balance',      value:`₹${(portfolio.funds.sodLimit||portfolio.funds.totalBalance||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`, color:'var(--text-main)'},
-                      {label:'Withdrawable',       value:`₹${(portfolio.funds.withdrawableBalance||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`, color:'#38bdf8'},
+                      {label:'Available',   value:'Rs '+(portfolio.funds.availabelBalance||portfolio.funds.availableBalance||0).toLocaleString('en-IN',{maximumFractionDigits:0}), color:'#4ade80'},
+                      {label:'Used Margin', value:'Rs '+(portfolio.funds.utilizedAmount||0).toLocaleString('en-IN',{maximumFractionDigits:0}), color:'#f87171'},
+                      {label:'Total',       value:'Rs '+(portfolio.funds.sodLimit||0).toLocaleString('en-IN',{maximumFractionDigits:0}), color:'var(--text-main)'},
+                      {label:'Withdrawable',value:'Rs '+(portfolio.funds.withdrawableBalance||0).toLocaleString('en-IN',{maximumFractionDigits:0}), color:'#38bdf8'},
                     ].map(({label,value,color})=>(
                       <div key={label} className="panel" style={{textAlign:'center',padding:'0.85rem'}}>
                         <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginBottom:'0.3rem'}}>{label}</div>
-                        <div style={{fontSize:'1.15rem',fontWeight:700,color}}>{value}</div>
+                        <div style={{fontSize:'1.1rem',fontWeight:700,color}}>{value}</div>
                       </div>
                     ))}
                   </div>
                 )}
-
-                {/* Positions */}
-                {portfolio.positions && portfolio.positions.length > 0 && (
+                {portfolio && portfolio.positions && portfolio.positions.length > 0 && (
                   <div className="panel" style={{marginBottom:'1.25rem',overflowX:'auto'}}>
-                    <h3 style={{marginTop:0,marginBottom:'1rem'}}>📊 Open Positions</h3>
-                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.85rem'}}>
-                      <thead>
-                        <tr style={{background:'var(--bg-surface)'}}>
-                          {['Symbol','Qty','Buy Avg','LTP','P&L','Product'].map(h=>(
-                            <th key={h} style={{padding:'0.5rem 0.75rem',textAlign:'left',color:'var(--text-muted)',fontSize:'0.72rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
+                    <h3 style={{marginTop:0,marginBottom:'1rem'}}>Open Positions</h3>
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.83rem'}}>
+                      <thead><tr style={{background:'var(--bg-surface)'}}>
+                        {['Symbol','Qty','Avg','LTP','P&L','Product'].map(h=>(
+                          <th key={h} style={{padding:'0.5rem 0.75rem',textAlign:'left',color:'var(--text-muted)',fontSize:'0.72rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
+                        ))}
+                      </tr></thead>
                       <tbody>
                         {portfolio.positions.map((pos,i)=>{
-                          const qty  = pos.netQty||pos.quantity||0;
-                          const avg  = pos.costPrice||pos.buyAvg||0;
-                          const ltp  = pos.ltp||pos.lastTradedPrice||0;
-                          const pnl  = pos.unrealizedProfit||((ltp-avg)*qty)||0;
-                          return (
-                            <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
-                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700,fontSize:'0.82rem'}}>{pos.tradingSymbol||pos.symbol}</td>
-                              <td style={{padding:'0.6rem 0.75rem',color:qty>=0?'#4ade80':'#f87171',fontWeight:700}}>{qty>0?'+':''}{qty}</td>
-                              <td style={{padding:'0.6rem 0.75rem'}}>₹{(+avg).toFixed(2)}</td>
-                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700}}>₹{(+ltp).toFixed(2)}</td>
-                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700,color:pnl>=0?'#4ade80':'#f87171'}}>{pnl>=0?'+':''}₹{(+pnl).toFixed(0)}</td>
-                              <td style={{padding:'0.6rem 0.75rem',color:'var(--text-muted)',fontSize:'0.78rem'}}>{pos.productType||pos.product||'—'}</td>
-                            </tr>
-                          );
+                          const qty=pos.netQty||pos.quantity||0, avg=pos.costPrice||pos.buyAvg||0, ltp=pos.ltp||0;
+                          const pnl=(ltp-avg)*qty;
+                          return (<tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                            <td style={{padding:'0.6rem 0.75rem',fontWeight:700}}>{pos.tradingSymbol||pos.symbol}</td>
+                            <td style={{padding:'0.6rem 0.75rem',color:qty>=0?'#4ade80':'#f87171',fontWeight:700}}>{qty>0?'+':''}{qty}</td>
+                            <td style={{padding:'0.6rem 0.75rem'}}>Rs {(+avg).toFixed(2)}</td>
+                            <td style={{padding:'0.6rem 0.75rem',fontWeight:700}}>Rs {(+ltp).toFixed(2)}</td>
+                            <td style={{padding:'0.6rem 0.75rem',fontWeight:700,color:pnl>=0?'#4ade80':'#f87171'}}>{pnl>=0?'+':''}Rs {pnl.toFixed(0)}</td>
+                            <td style={{padding:'0.6rem 0.75rem',color:'var(--text-muted)',fontSize:'0.78rem'}}>{pos.productType||'—'}</td>
+                          </tr>);
                         })}
                       </tbody>
                     </table>
                   </div>
                 )}
-
-                {/* Holdings */}
-                {portfolio.holdings && portfolio.holdings.length > 0 && (
-                  <div className="panel" style={{marginBottom:'1.25rem',overflowX:'auto'}}>
-                    <h3 style={{marginTop:0,marginBottom:'1rem'}}>📈 Holdings</h3>
-                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.85rem'}}>
-                      <thead>
-                        <tr style={{background:'var(--bg-surface)'}}>
-                          {['Symbol','Qty','Avg Cost','LTP','Value','P&L','Return'].map(h=>(
-                            <th key={h} style={{padding:'0.5rem 0.75rem',textAlign:'left',color:'var(--text-muted)',fontSize:'0.72rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
+                {portfolio && portfolio.holdings && portfolio.holdings.length > 0 && (
+                  <div className="panel" style={{overflowX:'auto'}}>
+                    <h3 style={{marginTop:0,marginBottom:'1rem'}}>Holdings</h3>
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.83rem'}}>
+                      <thead><tr style={{background:'var(--bg-surface)'}}>
+                        {['Symbol','Qty','Avg Cost','LTP','Value','P&L','Return'].map(h=>(
+                          <th key={h} style={{padding:'0.5rem 0.75rem',textAlign:'left',color:'var(--text-muted)',fontSize:'0.72rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
+                        ))}
+                      </tr></thead>
                       <tbody>
                         {portfolio.holdings.map((h,i)=>{
-                          const qty  = h.totalQty||h.quantity||0;
-                          const avg  = h.avgCostPrice||h.averageCost||0;
-                          const ltp  = h.ltp||h.lastTradedPrice||0;
-                          const pnl  = (ltp-avg)*qty;
-                          const ret  = avg ? ((ltp-avg)/avg*100) : 0;
-                          return (
-                            <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
-                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700,fontSize:'0.82rem'}}>{h.tradingSymbol||h.symbol}</td>
-                              <td style={{padding:'0.6rem 0.75rem'}}>{qty}</td>
-                              <td style={{padding:'0.6rem 0.75rem'}}>₹{(+avg).toFixed(2)}</td>
-                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700}}>₹{(+ltp).toFixed(2)}</td>
-                              <td style={{padding:'0.6rem 0.75rem'}}>₹{(ltp*qty).toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
-                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700,color:pnl>=0?'#4ade80':'#f87171'}}>{pnl>=0?'+':''}₹{pnl.toFixed(0)}</td>
-                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700,color:ret>=0?'#4ade80':'#f87171'}}>{ret>=0?'+':''}{ret.toFixed(2)}%</td>
-                            </tr>
-                          );
+                          const qty=h.totalQty||h.quantity||0, avg=h.avgCostPrice||0, ltp=h.ltp||0;
+                          const pnl=(ltp-avg)*qty, ret=avg?((ltp-avg)/avg*100):0;
+                          return (<tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                            <td style={{padding:'0.6rem 0.75rem',fontWeight:700}}>{h.tradingSymbol||h.symbol}</td>
+                            <td style={{padding:'0.6rem 0.75rem'}}>{qty}</td>
+                            <td style={{padding:'0.6rem 0.75rem'}}>Rs {(+avg).toFixed(2)}</td>
+                            <td style={{padding:'0.6rem 0.75rem',fontWeight:700}}>Rs {(+ltp).toFixed(2)}</td>
+                            <td style={{padding:'0.6rem 0.75rem'}}>Rs {(ltp*qty).toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
+                            <td style={{padding:'0.6rem 0.75rem',fontWeight:700,color:pnl>=0?'#4ade80':'#f87171'}}>{pnl>=0?'+':''}Rs {pnl.toFixed(0)}</td>
+                            <td style={{padding:'0.6rem 0.75rem',fontWeight:700,color:ret>=0?'#4ade80':'#f87171'}}>{ret>=0?'+':''}{ret.toFixed(2)}%</td>
+                          </tr>);
                         })}
                       </tbody>
                     </table>
                   </div>
                 )}
-
-                {/* Empty state */}
-                {portfolio.positions?.length===0 && portfolio.holdings?.length===0 && (
+                {portfolio && portfolio.positions?.length===0 && portfolio.holdings?.length===0 && (
                   <div style={{textAlign:'center',padding:'3rem',color:'var(--text-muted)'}}>
-                    <div style={{fontSize:'3rem',marginBottom:'1rem'}}>💼</div>
-                    <div style={{fontWeight:700,color:'var(--text-main)',marginBottom:'0.5rem'}}>No open positions or holdings</div>
-                    <div style={{fontSize:'0.88rem'}}>Your Dhan account is empty or market is closed.</div>
+                    <div style={{fontSize:'2.5rem',marginBottom:'0.75rem'}}>💼</div>
+                    <div style={{fontWeight:700,color:'var(--text-main)'}}>No open positions or holdings</div>
                   </div>
                 )}
               </>
             )}
-          </div>
 
-        ) : activeTab === 'admin' && isAdmin ? (
-          <div>
-            <div style={{marginBottom:'1.5rem'}}>
-              <h2 style={{margin:'0 0 0.3rem'}}>Admin Panel</h2>
-              <p style={{color:'var(--text-dim)',fontSize:'0.82rem',margin:0}}>Manage users and subscriptions</p>
-            </div>
-
-            {adminMsg && (
-              <div style={{background:'rgba(0,255,136,0.1)',border:'1px solid rgba(0,255,136,0.3)',borderRadius:'8px',padding:'0.75rem 1rem',marginBottom:'1rem',fontSize:'0.85rem',color:'var(--accent)',display:'flex',justifyContent:'space-between'}}>
-                <span>{adminMsg}</span>
-                <button onClick={()=>setAdminMsg('')} style={{background:'none',border:'none',color:'var(--text-dim)',cursor:'pointer'}}>X</button>
+            {/* ZERODHA */}
+            {selectedBroker === 'zerodha' && (
+              <div>
+                <div className="panel" style={{marginBottom:'1.25rem'}}>
+                  <h3 style={{marginTop:0,marginBottom:'1rem',color:'#4ade80'}}>Zerodha Kite Connect</h3>
+                  <div style={{fontSize:'0.82rem',color:'var(--text-dim)',marginBottom:'1rem',lineHeight:1.7}}>
+                    Zerodha requires a daily access token. Steps to connect:<br/>
+                    1. Contact us to get your API key configured (one-time)<br/>
+                    2. Login to Kite, copy your access token from browser URL<br/>
+                    3. Paste it below
+                  </div>
+                  <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap'}}>
+                    <input value={zerodhaToken} onChange={e=>{setZerodhaToken(e.target.value); localStorage.setItem('db_zerodha_token',e.target.value);}}
+                      placeholder="Paste Zerodha access token..."
+                      type="password"
+                      style={{flex:1,minWidth:'200px',background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.6rem 1rem',color:'var(--text-main)',fontSize:'0.85rem'}}/>
+                    <button onClick={()=>fetchPortfolio('zerodha')} disabled={!zerodhaToken||portfolioLoading}
+                      style={{background:'#4ade80',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1.2rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem'}}>
+                      {portfolioLoading ? 'Loading...' : 'Load Portfolio'}
+                    </button>
+                  </div>
+                </div>
+                {portfolio && portfolio.broker === 'zerodha' && (
+                  <div style={{textAlign:'center',padding:'2rem',color:'var(--accent)'}}>
+                    Zerodha portfolio loaded — positions and holdings shown above
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Stats row */}
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'0.75rem',marginBottom:'1.5rem'}}>
-              {[
-                {label:'Total Users',  val: adminUsers.length,                                        color:'var(--text-main)'},
-                {label:'Pro Users',    val: adminUsers.filter(u=>u.subStatus==='pro').length,          color:'#f97316'},
-                {label:'On Trial',     val: adminUsers.filter(u=>u.subStatus!=='pro' && u.subStatus!=='expired').length, color:'var(--accent)'},
-                {label:'Expired',      val: adminUsers.filter(u=>u.subStatus==='expired').length,      color:'#f87171'},
-              ].map(({label,val,color})=>(
-                <div key={label} className="panel" style={{textAlign:'center',padding:'0.85rem'}}>
-                  <div style={{fontSize:'1.6rem',fontWeight:900,color}}>{val}</div>
-                  <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'2px'}}>{label}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* User management */}
-            <div className="panel">
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:'0.75rem'}}>
-                <h3 style={{margin:0}}>All Users</h3>
-                <div style={{display:'flex',gap:'0.5rem'}}>
-                  <input value={adminSearch} onChange={e=>setAdminSearch(e.target.value)}
-                    placeholder="Search email..."
-                    style={{background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.4rem 0.75rem',color:'var(--text-main)',fontSize:'0.82rem',width:'180px'}}/>
-                  <button onClick={fetchAllUsers} disabled={adminLoading}
-                    style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
-                    {adminLoading ? 'Loading...' : 'Load Users'}
-                  </button>
+            {/* ANGEL ONE */}
+            {selectedBroker === 'angel' && (
+              <div>
+                <div className="panel" style={{marginBottom:'1.25rem'}}>
+                  <h3 style={{marginTop:0,marginBottom:'1rem',color:'#f97316'}}>Angel One SmartAPI</h3>
+                  <div style={{fontSize:'0.82rem',color:'var(--text-dim)',marginBottom:'1rem',lineHeight:1.7}}>
+                    Connect using your Angel One JWT token. Steps:<br/>
+                    1. Login to Angel One SmartAPI dashboard<br/>
+                    2. Generate a session — copy your JWT token<br/>
+                    3. Paste your API key and JWT token below
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:'0.5rem',maxWidth:'480px'}}>
+                    <input value={angelApiKey} onChange={e=>{setAngelApiKey(e.target.value); localStorage.setItem('db_angel_apikey',e.target.value);}}
+                      placeholder="Angel One API Key"
+                      style={{background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.6rem 1rem',color:'var(--text-main)',fontSize:'0.85rem'}}/>
+                    <input value={angelJwt} onChange={e=>{setAngelJwt(e.target.value); localStorage.setItem('db_angel_jwt',e.target.value);}}
+                      placeholder="Angel One JWT Token"
+                      type="password"
+                      style={{background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.6rem 1rem',color:'var(--text-main)',fontSize:'0.85rem'}}/>
+                    <button onClick={()=>fetchPortfolio('angel')} disabled={!angelJwt||portfolioLoading}
+                      style={{background:'#f97316',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1.2rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem',width:'fit-content'}}>
+                      {portfolioLoading ? 'Loading...' : 'Load Portfolio'}
+                    </button>
+                  </div>
                 </div>
               </div>
+            )}
 
-              {adminUsers.length === 0 ? (
-                <div style={{textAlign:'center',padding:'3rem',color:'var(--text-muted)'}}>
-                  <div style={{fontSize:'2.5rem',marginBottom:'0.75rem'}}>👥</div>
-                  <div>Click Load Users to see all registered users</div>
+            {/* MANUAL POSITIONS */}
+            {selectedBroker === 'manual' && (
+              <div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
+                  <div style={{fontSize:'0.85rem',color:'var(--text-dim)'}}>Track positions from any broker manually. P&L calculated using live NSE prices.</div>
+                  <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap'}}>
+                    <label style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',border:'none',borderRadius:'8px',padding:'0.5rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:'0.4rem'}}>
+                      📸 Upload Screenshot
+                      <input type="file" accept="image/*" style={{display:'none'}}
+                        onChange={e => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          setScreenshotFile(file);
+                          setScreenshotResult(null);
+                          setScreenshotError('');
+                          const url = URL.createObjectURL(file);
+                          setScreenshotPreview(url);
+                        }}/>
+                    </label>
+                  <button onClick={()=>setShowManualForm(f=>!f)}
+                    style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.5rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem',whiteSpace:'nowrap'}}>
+                    + Add Position
+                  </button>
                 </div>
-              ) : (
-                <div style={{overflowX:'auto'}}>
-                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.82rem'}}>
-                    <thead>
-                      <tr style={{background:'var(--bg-surface)'}}>
-                        {['Email','Name','Joined','Status','Actions'].map(h=>(
+
+                {/* Screenshot Analysis Panel */}
+                {(screenshotPreview || screenshotAnalyzing || screenshotResult || screenshotError) && (
+                  <div className="panel" style={{marginBottom:'1.25rem',border:'1px solid rgba(99,102,241,0.4)',background:'rgba(99,102,241,0.05)'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
+                      <h3 style={{margin:0,color:'#818cf8'}}>📸 Screenshot Analysis</h3>
+                      <button onClick={()=>{setScreenshotPreview(null);setScreenshotFile(null);setScreenshotResult(null);setScreenshotError('');}}
+                        style={{background:'none',border:'none',color:'var(--text-dim)',cursor:'pointer',fontSize:'1.2rem'}}>✕</button>
+                    </div>
+
+                    {screenshotPreview && !screenshotResult && (
+                      <div style={{display:'flex',gap:'1rem',alignItems:'flex-start',flexWrap:'wrap'}}>
+                        <img src={screenshotPreview} alt="screenshot"
+                          style={{maxWidth:'280px',maxHeight:'200px',borderRadius:'8px',border:'1px solid var(--border)',objectFit:'contain'}}/>
+                        <div style={{flex:1,minWidth:'200px'}}>
+                          <div style={{fontSize:'0.85rem',color:'var(--text-dim)',marginBottom:'1rem',lineHeight:1.6}}>
+                            Screenshot ready. Click Analyze to extract all positions automatically using AI.
+                            Works with Zerodha, Angel One, ICICI Direct, HDFC Securities, Upstox, 5paisa and more.
+                          </div>
+                          <button onClick={()=>analyzeScreenshot(screenshotFile)} disabled={screenshotAnalyzing}
+                            style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',border:'none',borderRadius:'8px',padding:'0.65rem 1.5rem',fontWeight:700,cursor:'pointer',fontSize:'0.9rem',display:'flex',alignItems:'center',gap:'0.5rem'}}>
+                            {screenshotAnalyzing ? (
+                              <><span style={{animation:'spin 1s linear infinite',display:'inline-block'}}>⟳</span> Analyzing...</>
+                            ) : '🤖 Analyze with AI'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {screenshotAnalyzing && (
+                      <div style={{textAlign:'center',padding:'2rem',color:'#818cf8'}}>
+                        <div style={{fontSize:'2rem',marginBottom:'0.75rem',animation:'spin 2s linear infinite',display:'inline-block'}}>🔍</div>
+                        <div style={{fontWeight:700,marginBottom:'0.3rem'}}>AI is reading your screenshot...</div>
+                        <div style={{fontSize:'0.82rem',color:'var(--text-dim)'}}>Extracting positions, quantities, prices</div>
+                      </div>
+                    )}
+
+                    {screenshotError && (
+                      <div style={{background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.3)',borderRadius:'8px',padding:'0.85rem',color:'#f87171',fontSize:'0.85rem'}}>
+                        {screenshotError}
+                      </div>
+                    )}
+
+                    {screenshotResult && (
+                      <div>
+                        {screenshotResult.length === 0 ? (
+                          <div style={{textAlign:'center',padding:'1.5rem',color:'var(--text-dim)'}}>
+                            <div style={{fontSize:'1.5rem',marginBottom:'0.5rem'}}>🤷</div>
+                            <div style={{fontWeight:600,marginBottom:'0.25rem'}}>No positions found</div>
+                            <div style={{fontSize:'0.82rem'}}>Try a clearer screenshot of the positions screen</div>
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem'}}>
+                              <div style={{color:'#4ade80',fontWeight:700,fontSize:'0.88rem'}}>
+                                ✅ Found {screenshotResult.length} position{screenshotResult.length > 1 ? 's' : ''}
+                              </div>
+                              <button onClick={()=>importScreenshotPositions(screenshotResult)}
+                                style={{background:'#4ade80',color:'#000',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
+                                Import All →
+                              </button>
+                            </div>
+                            <div style={{overflowX:'auto'}}>
+                              <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.82rem'}}>
+                                <thead><tr style={{background:'var(--bg-surface)'}}>
+                                  {['Symbol','Type','Qty','Avg Price','LTP','P&L','Product'].map(h=>(
+                                    <th key={h} style={{padding:'0.4rem 0.6rem',textAlign:'left',color:'var(--text-muted)',fontSize:'0.7rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
+                                  ))}
+                                </tr></thead>
+                                <tbody>
+                                  {screenshotResult.map((pos,i)=>(
+                                    <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                                      <td style={{padding:'0.5rem 0.6rem',fontWeight:700,fontSize:'0.82rem'}}>{pos.symbol}</td>
+                                      <td style={{padding:'0.5rem 0.6rem'}}>
+                                        <span style={{padding:'2px 7px',borderRadius:'4px',fontSize:'0.7rem',fontWeight:700,
+                                          background:pos.type==='BUY'?'rgba(74,222,128,0.15)':'rgba(248,113,113,0.15)',
+                                          color:pos.type==='BUY'?'#4ade80':'#f87171'}}>
+                                          {pos.type}
+                                        </span>
+                                      </td>
+                                      <td style={{padding:'0.5rem 0.6rem'}}>{pos.qty}</td>
+                                      <td style={{padding:'0.5rem 0.6rem'}}>Rs {Number(pos.avgPrice).toFixed(2)}</td>
+                                      <td style={{padding:'0.5rem 0.6rem'}}>{pos.ltp ? 'Rs '+Number(pos.ltp).toFixed(2) : '—'}</td>
+                                      <td style={{padding:'0.5rem 0.6rem',fontWeight:700,color:Number(pos.pnl)>=0?'#4ade80':'#f87171'}}>
+                                        {pos.pnl ? (Number(pos.pnl)>=0?'+':'')+'Rs '+Number(pos.pnl).toFixed(0) : '—'}
+                                      </td>
+                                      <td style={{padding:'0.5rem 0.6rem',color:'var(--text-muted)',fontSize:'0.75rem'}}>{pos.product}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {showManualForm && (
+                  <div className="panel" style={{marginBottom:'1.25rem'}}>
+                    <h3 style={{marginTop:0,marginBottom:'1rem'}}>Add Position</h3>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'0.75rem',marginBottom:'1rem'}}>
+                      {[
+                        {key:'symbol',    label:'Symbol',    placeholder:'NIFTY25MAR24500CE'},
+                        {key:'qty',       label:'Quantity',  placeholder:'75', type:'number'},
+                        {key:'avgPrice',  label:'Avg Price', placeholder:'150.50', type:'number'},
+                      ].map(({key,label,placeholder,type='text'})=>(
+                        <div key={key}>
+                          <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginBottom:'0.3rem',fontWeight:700,textTransform:'uppercase'}}>{label}</div>
+                          <input value={manualForm[key]} onChange={e=>setManualForm(f=>({...f,[key]:e.target.value}))}
+                            placeholder={placeholder} type={type}
+                            style={{width:'100%',background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.5rem 0.75rem',color:'var(--text-main)',fontSize:'0.85rem',boxSizing:'border-box'}}/>
+                        </div>
+                      ))}
+                      <div>
+                        <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginBottom:'0.3rem',fontWeight:700,textTransform:'uppercase'}}>Type</div>
+                        <select value={manualForm.type} onChange={e=>setManualForm(f=>({...f,type:e.target.value}))}
+                          style={{width:'100%',background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.5rem 0.75rem',color:'var(--text-main)',fontSize:'0.85rem'}}>
+                          <option value="BUY">BUY (Long)</option>
+                          <option value="SELL">SELL (Short)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginBottom:'0.3rem',fontWeight:700,textTransform:'uppercase'}}>Product</div>
+                        <select value={manualForm.product} onChange={e=>setManualForm(f=>({...f,product:e.target.value}))}
+                          style={{width:'100%',background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.5rem 0.75rem',color:'var(--text-main)',fontSize:'0.85rem'}}>
+                          <option value="INTRADAY">Intraday (MIS)</option>
+                          <option value="DELIVERY">Delivery (CNC)</option>
+                          <option value="FUTURES">Futures (NRML)</option>
+                          <option value="OPTIONS">Options (NRML)</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div style={{display:'flex',gap:'0.5rem'}}>
+                      <button onClick={addManualPosition}
+                        style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1.5rem',fontWeight:700,cursor:'pointer'}}>
+                        Add Position
+                      </button>
+                      <button onClick={()=>setShowManualForm(false)}
+                        style={{background:'var(--bg-surface)',color:'var(--text-dim)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.6rem 1rem',cursor:'pointer'}}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {manualPositions.length === 0 ? (
+                  <div style={{textAlign:'center',padding:'3rem',color:'var(--text-muted)'}}>
+                    <div style={{fontSize:'2.5rem',marginBottom:'0.75rem'}}>✏️</div>
+                    <div style={{fontWeight:700,color:'var(--text-main)',marginBottom:'0.5rem'}}>No positions added</div>
+                    <div style={{fontSize:'0.85rem'}}>Add your positions manually to track P&L across any broker</div>
+                  </div>
+                ) : (
+                  <div className="panel" style={{overflowX:'auto'}}>
+                    <h3 style={{marginTop:0,marginBottom:'1rem'}}>Manual Positions ({manualPositions.length})</h3>
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.83rem'}}>
+                      <thead><tr style={{background:'var(--bg-surface)'}}>
+                        {['Symbol','Type','Qty','Avg Price','Product','Action'].map(h=>(
                           <th key={h} style={{padding:'0.5rem 0.75rem',textAlign:'left',color:'var(--text-muted)',fontSize:'0.72rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
                         ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {adminUsers
-                        .filter(u => !adminSearch || (u.email||'').toLowerCase().includes(adminSearch.toLowerCase()) || (u.name||'').toLowerCase().includes(adminSearch.toLowerCase()))
-                        .map(u => {
-                          const isPro = u.subStatus === 'pro';
-                          const isExp = u.subStatus === 'expired';
-                          const joined = u.createdAt?.toDate?.()?.toLocaleDateString('en-IN') || 'Unknown';
-                          return (
-                            <tr key={u.id} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
-                              <td style={{padding:'0.6rem 0.75rem',color:'var(--text-dim)'}}>{u.email || u.id}</td>
-                              <td style={{padding:'0.6rem 0.75rem',fontWeight:600}}>{u.name || '—'}</td>
-                              <td style={{padding:'0.6rem 0.75rem',color:'var(--text-muted)',fontSize:'0.75rem'}}>{joined}</td>
-                              <td style={{padding:'0.6rem 0.75rem'}}>
-                                <span style={{padding:'2px 10px',borderRadius:'20px',fontSize:'0.72rem',fontWeight:700,
-                                  background: isPro ? 'rgba(249,115,22,0.15)' : isExp ? 'rgba(248,113,113,0.15)' : 'rgba(0,255,136,0.1)',
-                                  color: isPro ? '#f97316' : isExp ? '#f87171' : 'var(--accent)',
-                                  border: `1px solid ${isPro ? 'rgba(249,115,22,0.3)' : isExp ? 'rgba(248,113,113,0.3)' : 'rgba(0,255,136,0.3)'}`
-                                }}>
-                                  {isPro ? 'PRO' : isExp ? 'Expired' : 'Trial'}
-                                </span>
-                              </td>
-                              <td style={{padding:'0.6rem 0.75rem'}}>
-                                {isPro ? (
-                                  <button onClick={()=>setUserPro(u.id, false)}
-                                    style={{background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.3)',color:'#f87171',borderRadius:'6px',padding:'3px 10px',cursor:'pointer',fontSize:'0.75rem',fontWeight:700}}>
-                                    Remove Pro
-                                  </button>
-                                ) : (
-                                  <button onClick={()=>setUserPro(u.id, true)}
-                                    style={{background:'rgba(249,115,22,0.15)',border:'1px solid rgba(249,115,22,0.4)',color:'#f97316',borderRadius:'6px',padding:'3px 10px',cursor:'pointer',fontSize:'0.75rem',fontWeight:700}}>
-                                    Make Pro
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+                      </tr></thead>
+                      <tbody>
+                        {manualPositions.map(pos=>(
+                          <tr key={pos.id} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                            <td style={{padding:'0.6rem 0.75rem',fontWeight:700,fontSize:'0.82rem'}}>{pos.symbol}</td>
+                            <td style={{padding:'0.6rem 0.75rem'}}>
+                              <span style={{padding:'2px 8px',borderRadius:'4px',fontSize:'0.72rem',fontWeight:700,
+                                background:pos.type==='BUY'?'rgba(74,222,128,0.15)':'rgba(248,113,113,0.15)',
+                                color:pos.type==='BUY'?'#4ade80':'#f87171'}}>
+                                {pos.type}
+                              </span>
+                            </td>
+                            <td style={{padding:'0.6rem 0.75rem'}}>{pos.qty}</td>
+                            <td style={{padding:'0.6rem 0.75rem'}}>Rs {(+pos.avgPrice).toFixed(2)}</td>
+                            <td style={{padding:'0.6rem 0.75rem',color:'var(--text-muted)',fontSize:'0.78rem'}}>{pos.product}</td>
+                            <td style={{padding:'0.6rem 0.75rem'}}>
+                              <button onClick={()=>removeManualPosition(pos.id)}
+                                style={{background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.3)',color:'#f87171',borderRadius:'5px',padding:'2px 8px',cursor:'pointer',fontSize:'0.75rem'}}>
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div style={{marginTop:'0.75rem',fontSize:'0.75rem',color:'var(--text-muted)'}}>
+                      Positions saved in your browser. Live P&L coming soon with NSE price feed integration.
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-
         ) : activeTab === 'expiry' ? (
           <div>
             {/* Header */}
