@@ -3275,6 +3275,7 @@ Respond ONLY with valid JSON:
           </>
         ) : !currentUser ? (
           /* Not logged in — prompt sign in */
+          <>
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',padding:'2rem'}}>
             <div style={{fontSize:'3.5rem',marginBottom:'1rem'}}>🔐</div>
             <h2 style={{marginBottom:'0.5rem'}}>Sign in to continue</h2>
@@ -3344,6 +3345,7 @@ Respond ONLY with valid JSON:
               ))}
             </div>
           </div>
+          </>
         ) : activeTab === 'single' ? (
           <>
             <div className="page-header">
