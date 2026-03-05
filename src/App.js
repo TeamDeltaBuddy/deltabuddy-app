@@ -811,6 +811,16 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
             const data = snap.data();
             if (data.groqApiKey)  setGroqApiKey(data.groqApiKey);
             if (data.tgChatId)    setTgChatId(data.tgChatId);
+            const created = data.createdAt?.toDate?.() || new Date();
+            const trialEnd = new Date(created.getTime() + 90 * 24 * 60 * 60 * 1000);
+            const daysLeft = Math.max(0, Math.ceil((trialEnd - new Date()) / (1000*60*60*24)));
+            setTrialDaysLeft(daysLeft);
+            if (data.subStatus === 'pro') { setSubStatus('pro'); setTrialDaysLeft(999); }
+            else if (daysLeft <= 0)       setSubStatus('expired');
+            else                          setSubStatus('trial');
+          } else {
+            await setDoc(doc(db,'users',user.uid), { createdAt: serverTimestamp(), email: user.email }, { merge: true });
+            setTrialDaysLeft(90); setSubStatus('trial');
           }
           // Load trade journal from Firestore
           const tradesSnap = await getDocs(query(collection(db,'users',user.uid,'trades'),orderBy('timestamp','desc')));
@@ -1111,6 +1121,9 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [expiryLoading, setExpiryLoading] = useState(false);
   const [expirySymbol, setExpirySymbol]   = useState('NIFTY');
   const [showLegal, setShowLegal]         = useState(null);
+  const [showPricing, setShowPricing]     = useState(false);
+  const [subStatus, setSubStatus]         = useState('trial');
+  const [trialDaysLeft, setTrialDaysLeft] = useState(90);
   const [watchlist, setWatchlist]         = useState(() => { try { return JSON.parse(localStorage.getItem('db_watchlist')||'[]'); } catch(e) { return []; }});
   const [watchlistPrices, setWatchlistPrices] = useState({});
   const [showAddWatch, setShowAddWatch]   = useState(false);
@@ -2200,6 +2213,21 @@ Respond ONLY with valid JSON:
           <div className="navbar-right">
             {!authLoading && (currentUser ? (
               <>
+                {subStatus === 'pro' ? (
+                  <span style={{fontSize:'0.7rem',fontWeight:700,padding:'2px 8px',borderRadius:'20px',background:'linear-gradient(135deg,#f97316,#fbbf24)',color:'#000',whiteSpace:'nowrap'}}>
+                    PRO
+                  </span>
+                ) : subStatus === 'expired' ? (
+                  <button onClick={()=>setShowPricing(true)}
+                    style={{fontSize:'0.72rem',fontWeight:700,padding:'3px 8px',borderRadius:'20px',background:'rgba(248,113,113,0.15)',border:'1px solid rgba(248,113,113,0.5)',color:'#f87171',cursor:'pointer',whiteSpace:'nowrap'}}>
+                    Expired
+                  </button>
+                ) : (
+                  <button onClick={()=>setShowPricing(true)}
+                    style={{fontSize:'0.72rem',fontWeight:700,padding:'3px 8px',borderRadius:'20px',background:'rgba(0,255,136,0.1)',border:'1px solid rgba(0,255,136,0.3)',color:'var(--accent)',cursor:'pointer',whiteSpace:'nowrap'}}>
+                    {trialDaysLeft}d free
+                  </button>
+                )}
                 <button onClick={()=>setShowTgSetup(true)}
                   title={tgChatId?'Telegram connected — click to update':'Connect Telegram for alerts'}
                   style={{background:'none',border:'none',cursor:'pointer',padding:'4px',fontSize:'1.2rem',lineHeight:1,opacity:tgChatId?1:0.6}}>
@@ -5859,6 +5887,80 @@ Respond ONLY with valid JSON:
         </div>
 
         {/* -- LEGAL MODAL -- */}
+        {/* PRICING MODAL */}
+        {showPricing && (
+          <div className="modal-overlay" onClick={()=>setShowPricing(false)} style={{alignItems:'flex-start',paddingTop:'2rem',overflowY:'auto'}}>
+            <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'760px',width:'95%',padding:'2rem',maxHeight:'90vh',overflowY:'auto'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.5rem'}}>
+                <h2 style={{margin:0,fontSize:'1.3rem'}}>DeltaBuddy Plans</h2>
+                <button onClick={()=>setShowPricing(false)} style={{background:'none',border:'none',color:'var(--text-dim)',fontSize:'1.5rem',cursor:'pointer'}}>X</button>
+              </div>
+              <p style={{color:'var(--text-dim)',fontSize:'0.85rem',marginBottom:'1.5rem',marginTop:0}}>
+                Professional options analytics for Indian traders. No credit card needed to start.
+              </p>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem',marginBottom:'1.5rem'}}>
+                <div style={{border:'1px solid var(--border)',borderRadius:'14px',padding:'1.5rem',background:'var(--bg-surface)'}}>
+                  <div style={{fontSize:'0.75rem',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'0.5rem'}}>Free Trial</div>
+                  <div style={{fontSize:'2.2rem',fontWeight:900,color:'var(--text-main)',marginBottom:'0.2rem'}}>FREE</div>
+                  <div style={{fontSize:'0.82rem',color:'var(--text-dim)',marginBottom:'1.25rem'}}>90 days, no card needed</div>
+                  {subStatus === 'trial' && (
+                    <div style={{background:'rgba(0,255,136,0.1)',border:'1px solid rgba(0,255,136,0.3)',borderRadius:'8px',padding:'0.5rem',textAlign:'center',fontSize:'0.82rem',color:'var(--accent)',fontWeight:700,marginBottom:'1rem'}}>
+                      Active - {trialDaysLeft} days remaining
+                    </div>
+                  )}
+                  <div style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>
+                    {['Full option chain (NSE + BSE)','Market Intelligence (AI news)','Strategy Builder','Paper Trading','Expiry Day tools','Telegram alerts','Trade Journal','No Portfolio sync','No Priority support'].map((f,i) => (
+                      <div key={i} style={{padding:'0.3rem 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>{i < 7 ? '+ ' : '- '}{f}</div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{border:'2px solid var(--accent)',borderRadius:'14px',padding:'1.5rem',background:'linear-gradient(135deg,rgba(0,255,136,0.05),rgba(56,189,248,0.03))',position:'relative'}}>
+                  <div style={{position:'absolute',top:'12px',right:'12px',background:'linear-gradient(135deg,#f97316,#fbbf24)',color:'#000',fontSize:'0.7rem',fontWeight:800,padding:'2px 10px',borderRadius:'20px'}}>BEST VALUE</div>
+                  <div style={{fontSize:'0.75rem',fontWeight:700,color:'var(--accent)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'0.5rem'}}>Pro</div>
+                  <div style={{display:'flex',alignItems:'baseline',gap:'0.4rem',marginBottom:'0.2rem'}}>
+                    <span style={{fontSize:'2.2rem',fontWeight:900,color:'var(--accent)'}}>299</span>
+                    <span style={{fontSize:'0.85rem',color:'var(--text-dim)'}}>/ quarter</span>
+                  </div>
+                  <div style={{fontSize:'0.82rem',color:'var(--text-dim)',marginBottom:'1.25rem'}}>~100/month - billed every 3 months</div>
+                  {subStatus === 'pro' ? (
+                    <div style={{background:'rgba(0,255,136,0.1)',border:'1px solid var(--accent)',borderRadius:'8px',padding:'0.6rem',textAlign:'center',fontSize:'0.85rem',color:'var(--accent)',fontWeight:700,marginBottom:'1rem'}}>
+                      You are on Pro
+                    </div>
+                  ) : (
+                    <button onClick={()=>alert('Payment coming soon! You will be notified by email.')}
+                      style={{width:'100%',background:'var(--accent)',color:'#000',border:'none',borderRadius:'10px',padding:'0.75rem',fontWeight:800,fontSize:'0.95rem',cursor:'pointer',marginBottom:'1rem'}}>
+                      {subStatus==='expired' ? 'Renew Now' : 'Upgrade to Pro'}
+                    </button>
+                  )}
+                  <div style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>
+                    {['Everything in Free Trial','Live Portfolio sync (Dhan)','Real-time WebSocket ticks','All F&O stocks option chain','BSE data included','Advanced scanner filters','Priority WhatsApp support','Early access to new features','Cancel anytime'].map((f,i) => (
+                      <div key={i} style={{padding:'0.3rem 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>+ {f}</div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div style={{background:'var(--bg-surface)',borderRadius:'12px',padding:'1.25rem',marginBottom:'1rem'}}>
+                <div style={{fontWeight:700,fontSize:'0.9rem',marginBottom:'1rem',color:'var(--text-main)'}}>Frequently Asked Questions</div>
+                {[
+                  ['Do I need a credit card for the trial?','No. 90 days completely free, no card required. We will email you before trial ends.'],
+                  ['What happens after my trial ends?','The app continues to work. Your data is safe. Upgrade anytime to restore full access.'],
+                  ['Can I cancel anytime?','Yes. Cancel from Account Settings anytime. You keep access until end of the quarter.'],
+                  ['Is my payment secure?','Payments processed by Razorpay - same gateway used by Zerodha, Groww. We never store your card details.'],
+                  ['What is the refund policy?','Full refund within 7 days of any charge. See our Refund Policy for details.'],
+                ].map(([q,a])=>(
+                  <div key={q} style={{marginBottom:'0.85rem',paddingBottom:'0.85rem',borderBottom:'1px solid var(--border)'}}>
+                    <div style={{fontWeight:700,fontSize:'0.82rem',color:'var(--text-main)',marginBottom:'0.25rem'}}>Q: {q}</div>
+                    <div style={{fontSize:'0.8rem',color:'var(--text-dim)',lineHeight:1.6}}>{a}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{textAlign:'center',fontSize:'0.75rem',color:'var(--text-muted)'}}>
+                Questions? support@deltabuddy.com - WhatsApp: +91 75062 18502
+              </div>
+            </div>
+          </div>
+        )}
+
         {showLegal && (
           <div className="modal-overlay" onClick={()=>setShowLegal(null)} style={{alignItems:'flex-start',paddingTop:'2rem',overflowY:'auto'}}>
             <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'680px',width:'95%',maxHeight:'85vh',overflowY:'auto',padding:'2rem'}}>
