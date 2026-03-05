@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
-// ── Firebase ──────────────────────────────────────────────────────────────────
+// -- Firebase ------------------------------------------------------------------
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, getDocs, deleteDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
@@ -26,7 +26,7 @@ const BACKEND_URL   = process.env.REACT_APP_BACKEND_URL || 'https://deltabuddy-b
 const ADMIN_EMAIL   = 'mirza.hassanuzzaman@gmail.com';
 
 
-// ── TradingView lightweight-charts loader ─────────────────────────────────────
+// -- TradingView lightweight-charts loader ------------------------------------─
 let lwcPromise = null;
 const loadLWC = () => {
   if (lwcPromise) return lwcPromise;
@@ -51,7 +51,7 @@ function TradingViewChart({ data, indicators, candleType, symbol, timeframe }) {
   const showRSI  = indicators.includes('RSI');
   const showMACD = indicators.includes('MACD');
 
-  // ── Helpers ───────────────────────────────────────────────────────────
+  // -- Helpers ----------------------------------------------------------─
   const buildCandles = (raw) => raw
     .filter(d => d.open && d.close && d.high && d.low)
     .map(d => ({
@@ -97,7 +97,7 @@ function TradingViewChart({ data, indicators, candleType, symbol, timeframe }) {
       const candles = buildCandles(data);
       if (!candles.length) return;
 
-      // ── MAIN CHART ────────────────────────────────────────────────────
+      // -- MAIN CHART ----------------------------------------------------
       const mainHeight = showRSI || showMACD ? 340 : 440;
       const chart = LWC.createChart(mainRef.current, {
         width : mainRef.current.clientWidth,
@@ -110,7 +110,7 @@ function TradingViewChart({ data, indicators, candleType, symbol, timeframe }) {
       });
       chartRef.current = chart;
 
-      // ── Main series (candle type) ─────────────────────────────────────
+      // -- Main series (candle type) ------------------------------------─
       let mainSeries;
       switch(candleType) {
         case 'heikinashi': {
@@ -147,12 +147,12 @@ function TradingViewChart({ data, indicators, candleType, symbol, timeframe }) {
           mainSeries.setData(candles);
       }
 
-      // ── Volume ────────────────────────────────────────────────────────
+      // -- Volume --------------------------------------------------------
       const vol = chart.addHistogramSeries({ color:'#26a69a', priceFormat:{type:'volume'}, priceScaleId:'vol' });
       chart.priceScale('vol').applyOptions({ scaleMargins:{top:0.82,bottom:0} });
       vol.setData(candles.map(c=>({ time:c.time, value:c.volume, color:c.close>=c.open?'rgba(74,222,128,0.35)':'rgba(248,113,113,0.35)' })));
 
-      // ── Overlay indicators ────────────────────────────────────────────
+      // -- Overlay indicators --------------------------------------------
       if (indicators.includes('SMA20'))  { const s=chart.addLineSeries({color:'#f59e0b',lineWidth:1.5,title:'SMA 20'});  s.setData(calcSMA(candles,20)); }
       if (indicators.includes('SMA50'))  { const s=chart.addLineSeries({color:'#fb923c',lineWidth:1.5,title:'SMA 50'});  s.setData(calcSMA(candles,50)); }
       if (indicators.includes('SMA200')) { const s=chart.addLineSeries({color:'#f43f5e',lineWidth:2,title:'SMA 200'}); s.setData(calcSMA(candles,200)); }
@@ -184,7 +184,7 @@ function TradingViewChart({ data, indicators, candleType, symbol, timeframe }) {
 
       chart.timeScale().fitContent();
 
-      // ── RSI sub-chart ─────────────────────────────────────────────────
+      // -- RSI sub-chart ------------------------------------------------─
       if (showRSI && rsiRef.current) {
         const rsiChart = createSubChart(rsiRef.current, LWC, 110);
         rsiChartRef.current = rsiChart;
@@ -199,7 +199,7 @@ function TradingViewChart({ data, indicators, candleType, symbol, timeframe }) {
         rsiChart.timeScale().fitContent();
       }
 
-      // ── MACD sub-chart ────────────────────────────────────────────────
+      // -- MACD sub-chart ------------------------------------------------
       if (showMACD && macdRef.current) {
         const macdChart = createSubChart(macdRef.current, LWC, 110);
         macdChartRef.current = macdChart;
@@ -213,7 +213,7 @@ function TradingViewChart({ data, indicators, candleType, symbol, timeframe }) {
         macdChart.timeScale().fitContent();
       }
 
-      // ── Resize observer ───────────────────────────────────────────────
+      // -- Resize observer ----------------------------------------------─
       const ro = new ResizeObserver(() => {
         [{ ref: mainRef, chart: chartRef }, { ref: rsiRef, chart: rsiChartRef }, { ref: macdRef, chart: macdChartRef }]
           .forEach(({ ref, chart: cRef }) => { if(ref.current && cRef.current) cRef.current.applyOptions({ width: ref.current.clientWidth }); });
@@ -476,7 +476,7 @@ function App() {
   const [cooldownEnd,     setCooldownEnd]     = useState(null);
   useEffect(() => { localStorage.setItem('db_tradelog', JSON.stringify(tradeLog)); }, [tradeLog]);
 
-  // ── Auth state ───────────────────────────────────────────────────────────
+  // -- Auth state ----------------------------------------------------------─
   const [currentUser,     setCurrentUser]     = useState(null);
   const [authLoading,     setAuthLoading]     = useState(true);
   const [showAuthModal,   setShowAuthModal]   = useState(false);
@@ -527,7 +527,7 @@ function App() {
   useEffect(() => { localStorage.setItem('db_paper_history',   JSON.stringify(paperHistory)); }, [paperHistory]);
 
 
-  // ── Stock Deep Dive ──────────────────────────────────────────────────────
+  // -- Stock Deep Dive ------------------------------------------------------
   const runDeepDive = async (symbol) => {
     if (!symbol) return;
     setDeepDiveLoading(true);
@@ -600,7 +600,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   };
 
 
-  // ── Backtest Engine ──────────────────────────────────────────────────────
+  // -- Backtest Engine ------------------------------------------------------
   const runBacktest = async () => {
     setBtRunning(true); setBtResult(null);
 
@@ -635,10 +635,10 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
       setBtRunning(false); return;
     }
 
-    // ── Helper: SMA ──
+    // -- Helper: SMA --
     const sma = (arr, p) => arr.map((v,i) => i<p-1 ? null : arr.slice(i-p+1,i+1).reduce((s,x)=>s+x,0)/p);
 
-    // ── Helper: RSI ──
+    // -- Helper: RSI --
     const rsi = (closes, p=14) => closes.map((_,i)=>{
       if(i<p) return null;
       const slice = closes.slice(i-p,i);
@@ -652,7 +652,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
       return al===0?100:100-(100/(1+ag/al));
     });
 
-    // ── Helper: Black-Scholes approx for options P&L ──
+    // -- Helper: Black-Scholes approx for options P&L --
     const bsPrice = (S, K, T, r=0.065, sigma=0.16, type='CE') => {
       if(T<=0) return Math.max(0, type==='CE'?S-K:K-S);
       const d1 = (Math.log(S/K)+(r+0.5*sigma*sigma)*T)/(sigma*Math.sqrt(T));
@@ -670,7 +670,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     let cash   = btCapital;
     let position = null; // { type, entry, entryDate, strike, optionType, daysToExpiry }
 
-    // ── Strategy engines ──
+    // -- Strategy engines --
     const fastSMA = sma(closes, fastMA);
     const slowSMA = sma(closes, slowMA);
     const rsiVals = rsi(closes);
@@ -680,7 +680,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
       const prev = candles[i-1];
       const S    = c.close;
 
-      // ── ENTRY SIGNALS ──
+      // -- ENTRY SIGNALS --
       let signal = null;
       if (btStrategy === 'ma_crossover') {
         const curF=fastSMA[i], curS=slowSMA[i], prvF=fastSMA[i-1], prvS=slowSMA[i-1];
@@ -703,7 +703,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
         if(day===4 && position)  signal='EXIT_STRADDLE';
       }
 
-      // ── EXIT open position ──
+      // -- EXIT open position --
       if (position && signal && signal !== 'SELL_STRADDLE') {
         let pnl = 0;
         if (btStrategy === 'ma_crossover' || btStrategy === 'rsi' || btStrategy === 'breakout') {
@@ -722,7 +722,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
         position = null;
       }
 
-      // ── EXIT straddle ──
+      // -- EXIT straddle --
       if (position && signal === 'EXIT_STRADDLE') {
         const daysLeft = 0;
         const cePx = bsPrice(S, position.strike, daysLeft/365, 0.065, position.ceIV||0.16, 'CE');
@@ -733,7 +733,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
         position = null;
       }
 
-      // ── ENTER new position ──
+      // -- ENTER new position --
       if (!position && signal && signal !== 'EXIT_STRADDLE') {
         if (signal === 'SELL_STRADDLE') {
           const strike = Math.round(S/50)*50;
@@ -758,7 +758,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
       equity.push({ date:c.date, value:Math.round(cash) });
     }
 
-    // ── Close any open position at end ──
+    // -- Close any open position at end --
     if (position) {
       const S = candles[candles.length-1].close;
       const exitPx = bsPrice(S, position.strike, 0, 0.065, 0.16, position.optionType||'CE');
@@ -767,7 +767,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
       trades.push({ date:candles[candles.length-1].date, type:'EXIT(End)', side:position.optionType||'STRADDLE', pnl:Math.round(pnl), capital:Math.round(cash) });
     }
 
-    // ── Stats ──
+    // -- Stats --
     const exitTrades  = trades.filter(t=>t.type.startsWith('EXIT'));
     const profits     = exitTrades.map(t=>t.pnl).filter(p=>p>0);
     const losses2     = exitTrades.map(t=>t.pnl).filter(p=>p<=0);
@@ -792,12 +792,12 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     setBtRunning(false);
   };
 
-  // ── Wake backend on load (Render free tier sleeps) ──────────────────────────
+  // -- Wake backend on load (Render free tier sleeps) --------------------------
   useEffect(() => {
     fetch(`${BACKEND_URL}/api/health`).catch(()=>{});
   }, []);
 
-  // ── Firebase auth listener ────────────────────────────────────────────────
+  // -- Firebase auth listener ------------------------------------------------
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
@@ -822,7 +822,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     return () => unsub();
   }, []);
 
-  // ── Save settings to Firestore when changed ───────────────────────────────
+  // -- Save settings to Firestore when changed ------------------------------─
   useEffect(() => {
     if (!currentUser) return;
     const save = async () => {
@@ -834,7 +834,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     return () => clearTimeout(timer);
   }, [groqApiKey, tgChatId, currentUser]);
 
-  // ── Auth functions ────────────────────────────────────────────────────────
+  // -- Auth functions --------------------------------------------------------
   const signInWithGoogle = async () => {
     setAuthSubmitting(true); setAuthError('');
     try { await signInWithPopup(auth, googleProvider); setShowAuthModal(false); }
@@ -862,7 +862,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
 
   const handleSignOut = async () => { await signOut(auth); setTradeLog([]); };
 
-  // ── Save trade to Firestore (overrides localStorage-only addTrade) ────────
+  // -- Save trade to Firestore (overrides localStorage-only addTrade) --------
   const addTradeWithSync = async (form) => {
     const entry = { ...form, id:Date.now(), timestamp:new Date().toISOString(), pnl: form.exitPrice ? ((parseFloat(form.exitPrice)-parseFloat(form.entryPrice))*(form.action==='BUY'?1:-1)*parseInt(form.qty)*50).toFixed(0) : null };
     const newLog = [entry, ...tradeLog];
@@ -2231,7 +2231,7 @@ Respond ONLY with valid JSON:
         </div>
       </nav>
 
-      {/* ── MOBILE MENU — rendered outside navbar to avoid clipping ── */}
+      {/* -- MOBILE MENU — rendered outside navbar to avoid clipping -- */}
       {showMobileMenu && (
         <div style={{
           position:'fixed', top:'56px', left:0, right:0, bottom:0,
@@ -2310,8 +2310,8 @@ Respond ONLY with valid JSON:
         )}
 
         {/* AUTH MODAL */}
-        {/* ── TELEGRAM SETUP MODAL — for regular users ── */}
-        {/* ── PAYWALL MODAL ── */}
+        {/* -- TELEGRAM SETUP MODAL — for regular users -- */}
+        {/* -- PAYWALL MODAL -- */}
         {showTgSetup && (
           <div className="modal-overlay" onClick={()=>setShowTgSetup(false)}>
             <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'440px',width:'95%'}}>
@@ -2498,7 +2498,7 @@ Respond ONLY with valid JSON:
         )}
 {activeTab === 'home' ? (
           <>
-            {/* ── TELEGRAM ONBOARDING BANNER — shown if not connected ── */}
+            {/* -- TELEGRAM ONBOARDING BANNER — shown if not connected -- */}
             {!tgChatId && currentUser && (
               <div style={{
                 background:'linear-gradient(135deg,rgba(34,158,217,0.15),rgba(0,255,136,0.08))',
@@ -2553,7 +2553,7 @@ Respond ONLY with valid JSON:
                 </button>
               </div>
             )}
-            {/* ── WATCHLIST ── */}
+            {/* -- WATCHLIST -- */}
             {(watchlist.length > 0 || true) && (
               <div style={{margin:'1rem 1.5rem 0'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.6rem'}}>
@@ -2669,7 +2669,7 @@ Respond ONLY with valid JSON:
             {/* HOME CONTENT */}
             <div className="home-content" style={{maxWidth:'1280px',margin:'0 auto'}}>
 
-            {/* ── AI INSIGHT + MARKET PULSE ── */}
+            {/* -- AI INSIGHT + MARKET PULSE -- */}
             <div style={{background:'var(--bg-card)',border:'1px solid var(--border-light)',borderRadius:'var(--radius-lg)',padding:'1.5rem',marginBottom:'1.5rem',position:'relative',overflow:'hidden'}}>
               <div style={{position:'absolute',top:0,right:0,width:'300px',height:'100%',background:'radial-gradient(ellipse at top right,var(--accent-glow),transparent 70%)',pointerEvents:'none'}}/>
               <div className="ai-pulse-row" style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'1.5rem'}}>
@@ -2744,7 +2744,7 @@ Respond ONLY with valid JSON:
 
 
             
-            {/* ══ TRACK YOUR INDICES & STOCKS ══ */}
+            {/* == TRACK YOUR INDICES & STOCKS == */}
             <div className="panel" style={{marginBottom:'1.5rem'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem'}}>
                 <h3 style={{margin:0}}>📊 Track Your Indices &amp; Stocks</h3>
@@ -2923,7 +2923,7 @@ Respond ONLY with valid JSON:
               )}
             </div>
 
-            {/* ══ TOP GAINERS & TOP LOSERS ══ */}
+            {/* == TOP GAINERS & TOP LOSERS == */}
             {(()=>{
               const STOCKS=['Reliance','TCS','HDFC Bank','Infosys','ICICI Bank','Bharti Airtel','ITC','SBI','LT','Kotak Bank','HCL Tech','Axis Bank','Maruti Suzuki','Titan','Bajaj Finance','Wipro','Sun Pharma','Tata Motors','Adani Ports','NTPC'];
               const withData=STOCKS.filter(s=>livePrices[s]!=null&&liveChanges[s]!=null).map(s=>({name:s,value:livePrices[s],change:liveChanges[s]}));
@@ -2965,7 +2965,7 @@ Respond ONLY with valid JSON:
 
                         {/* Market data → go to Markets tab */}
 
-            {/* ══ 6 INSIGHT CARDS ══ */}
+            {/* == 6 INSIGHT CARDS == */}
             <div className="insight-cards-grid" style={{display:'grid',gap:'1rem',marginBottom:'2rem'}}>
 
               {/* CARD 1 — EXPIRY COUNTDOWN */}
@@ -3285,12 +3285,12 @@ Respond ONLY with valid JSON:
             </button>
           </div>
 
-          {/* ── SECURITY & TRUST SECTION ── */}
+          {/* SECURITY AND TRUST SECTION */}
           <div style={{margin:'2rem 0',padding:'1.5rem',background:'linear-gradient(135deg,rgba(0,255,136,0.04),rgba(56,189,248,0.04))',border:'1px solid rgba(0,255,136,0.15)',borderRadius:'16px'}}>
             <div style={{textAlign:'center',marginBottom:'1.5rem'}}>
               <div style={{fontSize:'1.8rem',marginBottom:'0.5rem'}}>🔒</div>
               <h3 style={{margin:0,fontSize:'1.05rem',color:'var(--text-main)'}}>Your Data is Safe with DeltaBuddy</h3>
-              <p style={{color:'var(--text-dim)',fontSize:'0.82rem',margin:'0.4rem 0 0'}}>We take security seriously. Here's exactly how we protect you.</p>
+              <p style={{color:'var(--text-dim)',fontSize:'0.82rem',margin:'0.4rem 0 0'}}>We take security seriously. Here is exactly how we protect you.</p>
             </div>
 
             {/* Trust cards */}
@@ -3313,7 +3313,7 @@ Respond ONLY with valid JSON:
               ))}
             </div>
 
-            {/* What we store vs don't */}
+            {/* What we store vs do not */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem',marginBottom:'1.25rem'}}>
               <div style={{background:'rgba(74,222,128,0.06)',border:'1px solid rgba(74,222,128,0.2)',borderRadius:'10px',padding:'1rem'}}>
                 <div style={{fontWeight:700,fontSize:'0.8rem',color:'#4ade80',marginBottom:'0.6rem'}}>✅ What we store</div>
@@ -4001,7 +4001,7 @@ Respond ONLY with valid JSON:
           </>
         ) : activeTab === 'markets' ? (
           <div>
-            {/* ── STOCK DEEP DIVE ── */}
+            {/* -- STOCK DEEP DIVE -- */}
             <div style={{background:'linear-gradient(135deg,#0f172a,#1a2744)',border:'1px solid #1e3a5f',borderRadius:'12px',padding:'1.25rem',marginBottom:'1.5rem'}}>
               <div style={{fontWeight:700,fontSize:'1rem',marginBottom:'0.75rem',color:'#f0f9ff'}}>🔬 Stock Deep Dive</div>
               <p style={{color:'#64748b',fontSize:'0.82rem',marginBottom:'0.75rem'}}>Search any FnO stock to get OI analysis, key levels, PCR and AI strategy in one shot.</p>
@@ -4141,7 +4141,7 @@ Respond ONLY with valid JSON:
               </div>
             )}
 
-            {/* ── MARKETS SUB-TABS ── */}
+            {/* -- MARKETS SUB-TABS -- */}
             <div className="home-tabs" style={{marginBottom:'1rem'}}>
               {[
                 ['option-chain','⚡ Option Chain'],
@@ -4156,7 +4156,7 @@ Respond ONLY with valid JSON:
               ))}
             </div>
 
-            {/* ── REUSE HOME TAB PANELS with activeMarketsTab ── */}
+            {/* -- REUSE HOME TAB PANELS with activeMarketsTab -- */}
             {activeMarketsTab === 'option-chain' && (() => {
               // Re-render the Kite-style option chain
               return (
@@ -4430,7 +4430,7 @@ Respond ONLY with valid JSON:
               return (
               <div style={{background:'var(--bg-card)',borderRadius:'12px',border:'1px solid var(--border)',overflow:'hidden'}}>
 
-                {/* ── Row 1: Symbol + Candle type + Refresh ── */}
+                {/* -- Row 1: Symbol + Candle type + Refresh -- */}
                 <div style={{display:'flex',gap:'0.5rem',alignItems:'center',padding:'0.75rem 1rem',borderBottom:'1px solid var(--border)',flexWrap:'wrap'}}>
                   <select value={selectedChartSymbol}
                     onChange={e=>{setSelectedChartSymbol(e.target.value);generateCandlestickData(e.target.value,chartTimeframe);}}
@@ -4454,7 +4454,7 @@ Respond ONLY with valid JSON:
                   </button>
                 </div>
 
-                {/* ── Row 2: Timeframes grouped ── */}
+                {/* -- Row 2: Timeframes grouped -- */}
                 <div style={{display:'flex',gap:'0.75rem',alignItems:'center',padding:'0.5rem 1rem',borderBottom:'1px solid var(--border)',flexWrap:'wrap'}}>
                   {TF_GROUPS.map(({label,tfs})=>(
                     <div key={label} style={{display:'flex',alignItems:'center',gap:'0.25rem'}}>
@@ -4469,7 +4469,7 @@ Respond ONLY with valid JSON:
                   ))}
                 </div>
 
-                {/* ── Row 3: Indicators ── */}
+                {/* -- Row 3: Indicators -- */}
                 <div style={{padding:'0.5rem 1rem',borderBottom:'1px solid var(--border)',background:'var(--bg-surface)'}}>
                   <div style={{display:'flex',gap:'1rem',flexWrap:'wrap',alignItems:'flex-start'}}>
                     {INDICATOR_GROUPS.map(({label,items})=>(
@@ -4489,7 +4489,7 @@ Respond ONLY with valid JSON:
                   </div>
                 </div>
 
-                {/* ── Chart ── */}
+                {/* -- Chart -- */}
                 {candlestickData && candlestickData.length > 0 ? (
                   <TradingViewChart
                     data={candlestickData}
@@ -4611,7 +4611,7 @@ Respond ONLY with valid JSON:
 
         ) : activeTab === 'backtest' ? (
           <div>
-            {/* ── HEADER ── */}
+            {/* -- HEADER -- */}
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'1.5rem',flexWrap:'wrap',gap:'1rem'}}>
               <div>
                 <h2 style={{margin:0,fontSize:'1.35rem'}}>📈 Strategy Backtester</h2>
@@ -4625,7 +4625,7 @@ Respond ONLY with valid JSON:
               </button>
             </div>
 
-            {/* ── CONFIG PANEL ── */}
+            {/* -- CONFIG PANEL -- */}
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:'1rem',marginBottom:'1.5rem'}}>
 
               {/* Symbol + Period */}
@@ -4728,7 +4728,7 @@ Respond ONLY with valid JSON:
               </div>
             </div>
 
-            {/* ── RESULTS ── */}
+            {/* -- RESULTS -- */}
             {btRunning && (
               <div style={{textAlign:'center',padding:'4rem',color:'var(--text-dim)'}}>
                 <div style={{fontSize:'2.5rem',marginBottom:'1rem'}}>⚙️</div>
@@ -4745,7 +4745,7 @@ Respond ONLY with valid JSON:
 
             {btResult && !btResult.error && !btRunning && (
               <div>
-                {/* ── STATS CARDS ── */}
+                {/* -- STATS CARDS -- */}
                 <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'0.75rem',marginBottom:'1.5rem'}}>
                   {[
                     ['Total Return', btResult.totalReturn+'%', parseFloat(btResult.totalReturn)>=0?'#4ade80':'#f87171'],
@@ -4764,7 +4764,7 @@ Respond ONLY with valid JSON:
                   ))}
                 </div>
 
-                {/* ── EQUITY CURVE ── */}
+                {/* -- EQUITY CURVE -- */}
                 <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',padding:'1rem',marginBottom:'1.5rem'}}>
                   <div style={{fontWeight:600,marginBottom:'0.75rem',fontSize:'0.9rem'}}>📈 Equity Curve</div>
                   {(() => {
@@ -4818,7 +4818,7 @@ Respond ONLY with valid JSON:
                   })()}
                 </div>
 
-                {/* ── TRADE LOG ── */}
+                {/* -- TRADE LOG -- */}
                 <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',padding:'1rem'}}>
                   <div style={{fontWeight:600,marginBottom:'0.75rem',fontSize:'0.9rem'}}>📋 Trade Log ({btResult.totalTrades} trades)</div>
                   <div style={{overflowX:'auto'}}>
@@ -5270,7 +5270,7 @@ Respond ONLY with valid JSON:
             ); })()}
 
 
-            {/* ── Equity Curve + Emotion Breakdown ── */}
+            {/* -- Equity Curve + Emotion Breakdown -- */}
             {tradeLog.filter(t=>t.pnl!==null).length > 1 && (() => {
               const closed = [...tradeLog].filter(t=>t.pnl!==null).reverse();
               // Cumulative P&L points
@@ -5838,7 +5838,7 @@ Respond ONLY with valid JSON:
           </div>
         ) : null}
 
-        {/* ── FOOTER ── */}
+        {/* -- FOOTER -- */}
         <div style={{borderTop:'1px solid var(--border)',marginTop:'2rem',padding:'1.5rem',textAlign:'center'}}>
           <div style={{fontSize:'0.78rem',color:'var(--text-muted)',marginBottom:'0.75rem'}}>
             <strong>⚠️ Disclaimer:</strong> DeltaBuddy is for educational purposes only. Options trading involves substantial risk. Always consult a SEBI-registered advisor before trading.
@@ -5856,7 +5856,7 @@ Respond ONLY with valid JSON:
           </div>
         </div>
 
-        {/* ── LEGAL MODAL ── */}
+        {/* -- LEGAL MODAL -- */}
         {showLegal && (
           <div className="modal-overlay" onClick={()=>setShowLegal(null)} style={{alignItems:'flex-start',paddingTop:'2rem',overflowY:'auto'}}>
             <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'680px',width:'95%',maxHeight:'85vh',overflowY:'auto',padding:'2rem'}}>
@@ -5954,7 +5954,7 @@ Respond ONLY with valid JSON:
           </div>
         )}
 
-        {/* ── FLOATING WHATSAPP SUPPORT BUTTON ── */}
+        {/* -- FLOATING WHATSAPP SUPPORT BUTTON -- */}
         <a
           href="https://wa.me/917506218502?text=Hi%20DeltaBuddy%20Team%2C%20I%20need%20help%20with..."
           target="_blank"
@@ -5976,7 +5976,7 @@ Respond ONLY with valid JSON:
           </svg>
         </a>
 
-        {/* ── PULSE ANIMATION + MOBILE OVERRIDES ── */}
+        {/* -- PULSE ANIMATION + MOBILE OVERRIDES -- */}
         <style>{`
           @keyframes waPulse {
             0%   { box-shadow: 0 0 0 0 rgba(37,211,102,0.5); }
