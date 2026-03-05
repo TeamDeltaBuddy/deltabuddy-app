@@ -21,7 +21,7 @@ const auth        = getAuth(firebaseApp);
 const db          = getFirestore(firebaseApp);
 const googleProvider = new GoogleAuthProvider();
 
-// Railway backend URL — update after deploying
+// Railway backend URL  -  update after deploying
 const BACKEND_URL   = process.env.REACT_APP_BACKEND_URL || 'https://deltabuddy-backend.onrender.com';
 const ADMIN_EMAIL   = 'mirza.hassanuzzaman@gmail.com';
 
@@ -462,7 +462,7 @@ function App() {
   const [showPositionSizing, setShowPositionSizing] = useState(false);
 
   // NEWS INTELLIGENCE SYSTEM
-  // News fetched via backend RSS proxy — no API key needed
+  // News fetched via backend RSS proxy  -  no API key needed
   const [intelligentNews, setIntelligentNews] = useState([]);
   const [isLoadingNews, setIsLoadingNews] = useState(false);
 
@@ -864,7 +864,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
       }
       setShowAuthModal(false);
     } catch(e) {
-      const msgs = { 'auth/email-already-in-use':'Email already registered — try logging in', 'auth/wrong-password':'Wrong password', 'auth/user-not-found':'No account with this email', 'auth/weak-password':'Password must be 6+ characters', 'auth/invalid-email':'Invalid email address' };
+      const msgs = { 'auth/email-already-in-use':'Email already registered  -  try logging in', 'auth/wrong-password':'Wrong password', 'auth/user-not-found':'No account with this email', 'auth/weak-password':'Password must be 6+ characters', 'auth/invalid-email':'Invalid email address' };
       setAuthError(msgs[e.code] || e.message);
     }
     finally { setAuthSubmitting(false); }
@@ -1142,6 +1142,10 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [adminSearch, setAdminSearch]     = useState('');
   const [subStatus, setSubStatus]         = useState('trial');
   const [trialDaysLeft, setTrialDaysLeft] = useState(90);
+  const [gexData, setGexData]             = useState(null);
+  const [gexLoading, setGexLoading]       = useState(false);
+  const [gexError, setGexError]           = useState('');
+  const [gexSymbol, setGexSymbol]         = useState('NIFTY');
   const [watchlist, setWatchlist]         = useState(() => { try { return JSON.parse(localStorage.getItem('db_watchlist')||'[]'); } catch(e) { return []; }});
   const [watchlistPrices, setWatchlistPrices] = useState({});
   const [showAddWatch, setShowAddWatch]   = useState(false);
@@ -1268,7 +1272,7 @@ Return ONLY the JSON array, nothing else.`
 
       const data = await response.json();
       const text = data.content?.[0]?.text || '[]';
-      const clean = text.replace(/```json|```/g, '').trim();
+      const jsonStart = text.indexOf('['); const jsonEnd = text.lastIndexOf(']'); const clean = jsonStart !== -1 && jsonEnd !== -1 ? text.slice(jsonStart, jsonEnd+1) : text.trim();
       const positions = JSON.parse(clean);
 
       if (!Array.isArray(positions)) throw new Error('Invalid response from AI');
@@ -1278,6 +1282,16 @@ Return ONLY the JSON array, nothing else.`
     } finally {
       setScreenshotAnalyzing(false);
     }
+  };
+
+  const handleScreenshotUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setScreenshotFile(file);
+    setScreenshotResult(null);
+    setScreenshotError('');
+    const url = URL.createObjectURL(file);
+    setScreenshotPreview(url);
   };
 
   const importScreenshotPositions = (positions) => {
@@ -1324,6 +1338,19 @@ Return ONLY the JSON array, nothing else.`
       if (!data.error) setExpiryData(data);
     } catch(e) { console.error('Expiry fetch error:', e); }
     finally { setExpiryLoading(false); }
+  };
+
+  const fetchGex = async (sym) => {
+    const s = sym || gexSymbol;
+    setGexLoading(true);
+    setGexError('');
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/gex?symbol=${s}`);
+      const data = await r.json();
+      if (data.error) setGexError(data.error + (data.detail ? ': ' + data.detail : ''));
+      else setGexData(data);
+    } catch(e) { setGexError('Could not load GEX data'); }
+    finally { setGexLoading(false); }
   };
 
   const executePaperOrder = async () => {
@@ -1395,7 +1422,7 @@ Return ONLY the JSON array, nothing else.`
   // Telegram
   const sendTelegramMessage = async (text, dedupeKey) => {
     if (!tgChatId) return;
-    // Deduplicate — don't send same alert twice within 1 hour
+    // Deduplicate  -  don't send same alert twice within 1 hour
     const key = dedupeKey || text.substring(0, 60);
     if (sentTgAlerts.current.has(key)) return;
     sentTgAlerts.current.add(key);
@@ -1660,7 +1687,7 @@ Respond ONLY with valid JSON:
               setLiveOptionChain(chain);
               setChartData({oi:chain.map(r=>({strike:r.strike,ce:r.ce.oi/1000,pe:r.pe.oi/1000})),iv:chain.map(r=>({strike:r.strike,ce:parseFloat(r.ce.iv),pe:parseFloat(r.pe.iv)})),volume:chain.map(r=>({strike:r.strike,ce:r.ce.volume/1000,pe:r.pe.volume/1000})),priceHistory:[]});
               setMarketData(prev=>({...prev,nifty:underlying==='NIFTY'?{...prev.nifty,value:Math.round(spot)}:prev.nifty,bankNifty:underlying==='BANKNIFTY'?{...prev.bankNifty,value:Math.round(spot)}:prev.bankNifty}));
-              setIsLoadingChain(false); return; // SUCCESS — NSE data loaded
+              setIsLoadingChain(false); return; // SUCCESS  -  NSE data loaded
             }
           }
         }
@@ -1709,7 +1736,7 @@ Respond ONLY with valid JSON:
   const fetchBusinessNews = async () => {
     setIsLoadingBusinessNews(true);
     try {
-      // Use free RSS feeds — no API key needed
+      // Use free RSS feeds  -  no API key needed
       const RSS_PROXY = `${BACKEND_URL}/api/rss-news`;
       const response = await fetch(RSS_PROXY);
       const data = await response.json();
@@ -1838,7 +1865,7 @@ Respond ONLY with valid JSON:
             analysis = {sentiment:ai.sentiment,impact:ai.impact,impactReason:ai.impactReason,affectedIndex:ai.affectedIndex,affectedStocks:ai.affectedStocks||[],keyInsight:ai.keyInsight,keyLevels:kl,tradingIdea:{strategy:ai.tradingStrategy?.name,name:ai.tradingStrategy?.name,reasoning:ai.tradingStrategy?.reasoning,timeframe:ai.tradingStrategy?.timeframe,risk:ai.tradingStrategy?.risk,strikes:null,probability:null,aiPowered:true}};
             if (notifyHighImpact && ai.impact==='high' && tgChatId) {
               const em = ai.sentiment==='bullish'?'🟢':ai.sentiment==='bearish'?'🔴':'⚪';
-              sendTelegramMessage(`${em} <b>HIGH IMPACT — ${ai.affectedIndex}</b>
+              sendTelegramMessage(`${em} <b>HIGH IMPACT  -  ${ai.affectedIndex}</b>
 
 <b>${article.title}</b>
 
@@ -1857,7 +1884,7 @@ Respond ONLY with valid JSON:
         const affectedIndex=predictAffectedIndex(article);
         const keyLevels=calculateKeyLevels(affectedIndex);
         const lv=keyLevels;
-        const tradingIdea=sentiment==='bearish'&&impact!=='low'?{strategy:'Bear Put Spread',name:'Bear Put Spread',reasoning:`${impact} impact bearish news suggests downward pressure.`,timeframe:'1-3 Days',risk:'Medium',strikes:{buy:Math.round(lv.current),sell:Math.round(lv.support[0])},probability:'—',aiPowered:false}:sentiment==='bullish'&&impact!=='low'?{strategy:'Bull Call Spread',name:'Bull Call Spread',reasoning:`${impact} impact bullish news suggests upward momentum.`,timeframe:'1-3 Days',risk:'Medium',strikes:{buy:Math.round(lv.current),sell:Math.round(lv.resistance[0])},probability:'—',aiPowered:false}:{strategy:'Wait and Watch',name:'Wait and Watch',reasoning:'Direction unclear.',timeframe:'N/A',risk:'None',strikes:null,probability:'—',aiPowered:false};
+        const tradingIdea=sentiment==='bearish'&&impact!=='low'?{strategy:'Bear Put Spread',name:'Bear Put Spread',reasoning:`${impact} impact bearish news suggests downward pressure.`,timeframe:'1-3 Days',risk:'Medium',strikes:{buy:Math.round(lv.current),sell:Math.round(lv.support[0])},probability:' - ',aiPowered:false}:sentiment==='bullish'&&impact!=='low'?{strategy:'Bull Call Spread',name:'Bull Call Spread',reasoning:`${impact} impact bullish news suggests upward momentum.`,timeframe:'1-3 Days',risk:'Medium',strikes:{buy:Math.round(lv.current),sell:Math.round(lv.resistance[0])},probability:' - ',aiPowered:false}:{strategy:'Wait and Watch',name:'Wait and Watch',reasoning:'Direction unclear.',timeframe:'N/A',risk:'None',strikes:null,probability:' - ',aiPowered:false};
         analysis={sentiment,impact,impactReason:'',affectedIndex,affectedStocks:[],keyInsight:'',keyLevels,tradingIdea};
         return {id:article.url,title:article.title,description:article.description,source:article.source.name,publishedAt:new Date(article.publishedAt),url:article.url,analysis};
       }));
@@ -2033,7 +2060,7 @@ Respond ONLY with valid JSON:
     setOiChartData(chartData);
   }, [liveOptionChain]);
 
-  // Track prevOI snapshot for Unusual OI card — store first snapshot, compare on next update
+  // Track prevOI snapshot for Unusual OI card  -  store first snapshot, compare on next update
   useEffect(() => {
     if (liveOptionChain.length === 0) return;
     const snapshot = {};
@@ -2346,7 +2373,7 @@ Respond ONLY with valid JSON:
             <span>DeltaBuddy</span>
           </div>
 
-          {/* Nav links — desktop only, scrollable */}
+          {/* Nav links  -  desktop only, scrollable */}
           <div className="nav-links">
             {[
               ['markets',      '📊 Markets'],
@@ -2359,6 +2386,7 @@ Respond ONLY with valid JSON:
               ['paper',        '📝 Paper'],
               ['portfolio',    '💼 Portfolio'],
               ['expiry',       '⏰ Expiry'],
+              ['gex',          '🎯 GEX'],
               ...(isAdmin ? [['admin', '🛡️ Admin']] : []),
             ].map(([tab,label])=>(
               <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}>
@@ -2387,7 +2415,7 @@ Respond ONLY with valid JSON:
                   </button>
                 )}
                 <button onClick={()=>setShowTgSetup(true)}
-                  title={tgChatId?'Telegram connected — click to update':'Connect Telegram for alerts'}
+                  title={tgChatId?'Telegram connected  -  click to update':'Connect Telegram for alerts'}
                   style={{background:'none',border:'none',cursor:'pointer',padding:'4px',fontSize:'1.2rem',lineHeight:1,opacity:tgChatId?1:0.6}}>
                   {tgChatId ? '🔔' : '🔕'}
                 </button>
@@ -2410,14 +2438,14 @@ Respond ONLY with valid JSON:
               💬
             </a>
             <button className="hamburger" onClick={()=>setShowMobileMenu(m=>!m)}
-              style={{background:'none',border:'none',cursor:'pointer',padding:'4px',fontSize:'1.4rem',lineHeight:1,color:'var(--text-main)'}}>
+              style={{background:'none',border:'none',cursor:'pointer',padding:'6px',lineHeight:1,color:'var(--text-main)'}}>
               {showMobileMenu ? '✕' : '☰'}
             </button>
           </div>
         </div>
       </nav>
 
-      {/* -- MOBILE MENU — rendered outside navbar to avoid clipping -- */}
+      {/* -- MOBILE MENU  -  rendered outside navbar to avoid clipping -- */}
       {showMobileMenu && (
         <div style={{
           position:'fixed', top:'56px', left:0, right:0, bottom:0,
@@ -2437,6 +2465,7 @@ Respond ONLY with valid JSON:
             ['paper',        '📝 Paper Trade'],
             ['portfolio',    '💼 Portfolio'],
             ['expiry',       '⏰ Expiry Day'],
+            ['gex',          '🎯 GEX / Greeks'],
             ...(isAdmin ? [['admin', '🛡️ Admin']] : []),
           ].map(([tab,label])=>(
             <div key={tab}
@@ -2497,7 +2526,7 @@ Respond ONLY with valid JSON:
         )}
 
         {/* AUTH MODAL */}
-        {/* -- TELEGRAM SETUP MODAL — for regular users -- */}
+        {/* -- TELEGRAM SETUP MODAL  -  for regular users -- */}
         {/* -- PAYWALL MODAL -- */}
         {showTgSetup && (
           <div className="modal-overlay" onClick={()=>setShowTgSetup(false)}>
@@ -2508,7 +2537,7 @@ Respond ONLY with valid JSON:
               </div>
 
               <p style={{color:'var(--text-dim)',fontSize:'0.85rem',marginBottom:'1.25rem',lineHeight:1.6}}>
-                Get instant alerts for high-impact news and scanner signals — directly on Telegram. Free, takes 60 seconds.
+                Get instant alerts for high-impact news and scanner signals  -  directly on Telegram. Free, takes 60 seconds.
               </p>
 
               {/* Steps */}
@@ -2617,22 +2646,22 @@ Respond ONLY with valid JSON:
               </div>
 
               <div style={{marginBottom:'1.25rem',padding:'1rem',background:'var(--bg-dark)',borderRadius:'8px',border:'1px solid var(--border)'}}>
-                <h3 style={{margin:'0 0 0.5rem',color:'var(--accent)',fontSize:'0.95rem'}}>🤖 Groq AI — News Intelligence (Free)</h3>
-                <p style={{color:'var(--text-dim)',fontSize:'0.78rem',margin:'0 0 0.6rem'}}>Free at <a href="https://console.groq.com" target="_blank" rel="noreferrer" style={{color:'var(--accent)'}}>console.groq.com</a> — 14,400 requests/day. Model: Llama 3.3 70B.</p>
+                <h3 style={{margin:'0 0 0.5rem',color:'var(--accent)',fontSize:'0.95rem'}}>🤖 Groq AI  -  News Intelligence (Free)</h3>
+                <p style={{color:'var(--text-dim)',fontSize:'0.78rem',margin:'0 0 0.6rem'}}>Free at <a href="https://console.groq.com" target="_blank" rel="noreferrer" style={{color:'var(--accent)'}}>console.groq.com</a>  -  14,400 requests/day. Model: Llama 3.3 70B.</p>
                 <input type="password" className="input-field" placeholder="Groq API key (gsk_...)" value={groqApiKey} onChange={e=>setGroqApiKey(e.target.value)} style={{width:'100%',boxSizing:'border-box',marginBottom:'0.5rem'}}/>
                 <div style={{display:'flex',gap:'0.5rem',alignItems:'center',flexWrap:'wrap'}}>
                   <button className="btn-action" onClick={testGroq} disabled={!groqApiKey||groqStatus==='testing'}>{groqStatus==='testing'?'⏳ Testing...':'🔌 Test'}</button>
                   {groqStatus==='ok' && <button className="btn-action" style={{background:'#22c55e',color:'#000'}} onClick={()=>{setShowSettings(false);fetchIntelligentNews();}}>✅ Save & Load News</button>}
-                  {groqStatus==='error' && <span style={{color:'#ef4444',fontSize:'0.82rem'}}>❌ Failed — check key</span>}
-                  {groqStatus==='timeout' && <span style={{color:'#f59e0b',fontSize:'0.82rem'}}>⏳ Server waking up — wait 30s and try again</span>}
-                  {!groqApiKey && <span style={{color:'var(--text-dim)',fontSize:'0.78rem'}}>No key — keyword mode</span>}
+                  {groqStatus==='error' && <span style={{color:'#ef4444',fontSize:'0.82rem'}}>❌ Failed  -  check key</span>}
+                  {groqStatus==='timeout' && <span style={{color:'#f59e0b',fontSize:'0.82rem'}}>⏳ Server waking up  -  wait 30s and try again</span>}
+                  {!groqApiKey && <span style={{color:'var(--text-dim)',fontSize:'0.78rem'}}>No key  -  keyword mode</span>}
                 </div>
               </div>
 
               <div style={{marginBottom:'1.25rem',padding:'1rem',background:'var(--bg-dark)',borderRadius:'8px',border:'1px solid #1e3a5f'}}>
-                <h3 style={{margin:'0 0 0.5rem',color:'#229ED9',fontSize:'0.95rem'}}>📱 Telegram Bot — Admin Config</h3>
+                <h3 style={{margin:'0 0 0.5rem',color:'#229ED9',fontSize:'0.95rem'}}>📱 Telegram Bot  -  Admin Config</h3>
                 <p style={{color:'var(--text-dim)',fontSize:'0.78rem',margin:'0 0 0.75rem'}}>
-                  Bot token is set on Render as <code style={{background:'#1e293b',padding:'1px 5px',borderRadius:'3px'}}>TG_BOT_TOKEN</code> env variable. Users connect via Chat ID only — they never see the token.
+                  Bot token is set on Render as <code style={{background:'#1e293b',padding:'1px 5px',borderRadius:'3px'}}>TG_BOT_TOKEN</code> env variable. Users connect via Chat ID only  -  they never see the token.
                 </p>
                 <p style={{color:'var(--text-dim)',fontSize:'0.78rem',margin:'0 0 0.6rem'}}>
                   Your admin Chat ID (for your own alerts):
@@ -2685,7 +2714,7 @@ Respond ONLY with valid JSON:
         )}
 {activeTab === 'home' ? (
           <>
-            {/* -- TELEGRAM ONBOARDING BANNER — shown if not connected -- */}
+            {/* -- TELEGRAM ONBOARDING BANNER  -  shown if not connected -- */}
             {!tgChatId && currentUser && (
               <div style={{
                 background:'linear-gradient(135deg,rgba(34,158,217,0.15),rgba(0,255,136,0.08))',
@@ -2703,7 +2732,7 @@ Respond ONLY with valid JSON:
                   <span style={{fontSize:'1.8rem'}}>🔔</span>
                   <div>
                     <div style={{fontWeight:700,fontSize:'0.95rem',color:'#f0f9ff'}}>Get instant market alerts on Telegram</div>
-                    <div style={{fontSize:'0.82rem',color:'#94a3b8',marginTop:'2px'}}>Breaking news · Scanner signals · Risk alerts — delivered 24/7, even when you're away</div>
+                    <div style={{fontSize:'0.82rem',color:'#94a3b8',marginTop:'2px'}}>Breaking news  |  Scanner signals  |  Risk alerts  -  delivered 24/7, even when you're away</div>
                   </div>
                 </div>
                 <button
@@ -2752,7 +2781,7 @@ Respond ONLY with valid JSON:
                 </div>
                 {watchlist.length === 0 ? (
                   <div style={{color:'var(--text-muted)',fontSize:'0.82rem',padding:'0.5rem 0'}}>
-                    No symbols yet — click + Add to track stocks & indices
+                    No symbols yet  -  click + Add to track stocks & indices
                   </div>
                 ) : (
                   <div style={{display:'flex',flexWrap:'wrap',gap:'0.5rem'}}>
@@ -2920,7 +2949,7 @@ Respond ONLY with valid JSON:
                   })() : (
                     <div>
                       <h3 style={{margin:'0 0 0.4rem',color:'var(--text-main)'}}>AI-Powered Market Intelligence</h3>
-                      <p style={{fontSize:'0.875rem',margin:'0 0 0.75rem'}}>News analysis, OI signals, strategy ideas — all AI-powered.</p>
+                      <p style={{fontSize:'0.875rem',margin:'0 0 0.75rem'}}>News analysis, OI signals, strategy ideas  -  all AI-powered.</p>
                       <button onClick={()=>setActiveTab('intelligence')} className="btn-primary">
                         Open Market Intelligence →
                       </button>
@@ -2946,7 +2975,7 @@ Respond ONLY with valid JSON:
                       <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'var(--bg-surface)',borderRadius:'var(--radius-sm)',padding:'0.4rem 0.75rem',gap:'0.75rem'}}>
                         <span style={{fontSize:'0.875rem',color:'var(--text-dim)',fontWeight:600}}>{r.label}</span>
                         <div style={{textAlign:'right'}}>
-                          <span style={{fontSize:'0.95rem',fontWeight:800,color:r.chg!=null?chgCol:'var(--text-main)'}}>{r.val?.toLocaleString() || '—'}</span>
+                          <span style={{fontSize:'0.95rem',fontWeight:800,color:r.chg!=null?chgCol:'var(--text-main)'}}>{r.val?.toLocaleString() || ' - '}</span>
                           {r.chg!=null && <span style={{fontSize:'0.75rem',color:chgCol,marginLeft:'5px'}}>{pos?'▲':'▼'}{Math.abs(r.chg||0).toFixed(2)}%</span>}
                           {r.pcr && <span style={{fontSize:'0.75rem',color:pcrCol,marginLeft:'5px',fontWeight:700}}>{r.val>1.2?'BULL':r.val<0.8?'BEAR':'NEUT'}</span>}
                           {r.vix && <span style={{fontSize:'0.75rem',color:vixCol,marginLeft:'5px'}}>{(r.val||14)<13?'LOW':(r.val||14)>18?'HIGH':'MOD'}</span>}
@@ -3015,7 +3044,7 @@ Respond ONLY with valid JSON:
                                   <span style={{fontSize:'0.875rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
                                   {pts && <span style={{fontSize:'0.875rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}{pts} pts</span>}
                                 </div>
-                              ) : <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>—</div>}
+                              ) : <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}> - </div>}
                               {prev && <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.1rem'}}>Prev: {prev.toLocaleString()}</div>}
                             </div>
                           )}
@@ -3060,7 +3089,7 @@ Respond ONLY with valid JSON:
                                   <span style={{fontSize:'0.875rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
                                   {pts && <span style={{fontSize:'0.875rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}{pts} pts</span>}
                                 </div>
-                              ) : <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>—</div>}
+                              ) : <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}> - </div>}
                               {prev && <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.1rem'}}>Prev: {prev.toLocaleString()}</div>}
                             </div>
                           )}
@@ -3188,7 +3217,7 @@ Respond ONLY with valid JSON:
             {/* == 6 INSIGHT CARDS == */}
             <div className="insight-cards-grid" style={{display:'grid',gap:'1rem',marginBottom:'2rem'}}>
 
-              {/* CARD 1 — EXPIRY COUNTDOWN */}
+              {/* CARD 1  -  EXPIRY COUNTDOWN */}
               {(()=>{
                 const now = new Date();
                 const msInDay = 86400000;
@@ -3236,7 +3265,7 @@ Respond ONLY with valid JSON:
                 );
               })()}
 
-              {/* CARD 2 — F&amp;O BAN LIST */}
+              {/* CARD 2  -  F&amp;O BAN LIST */}
               <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'1.25rem'}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem'}}>
                   <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
@@ -3251,7 +3280,7 @@ Respond ONLY with valid JSON:
                   <div style={{color:'var(--text-muted)',fontSize:'0.875rem'}}>Fetching from NSE…</div>
                 ) : banList.length > 0 ? (
                   <div>
-                    <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginBottom:'0.5rem'}}>Stocks in ban — no fresh F&amp;O positions allowed</div>
+                    <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginBottom:'0.5rem'}}>Stocks in ban  -  no fresh F&amp;O positions allowed</div>
                     <div style={{display:'flex',flexWrap:'wrap',gap:'0.4rem'}}>
                       {banList.map((s,i) => (
                         <span key={i} style={{background:'var(--red-dim)',border:'1px solid rgba(248,113,113,0.3)',color:'var(--red)',borderRadius:'6px',padding:'3px 8px',fontSize:'0.875rem',fontWeight:700}}>{s}</span>
@@ -3269,7 +3298,7 @@ Respond ONLY with valid JSON:
                 )}
               </div>
 
-              {/* CARD 3 — MARKET MOOD-O-METER */}
+              {/* CARD 3  -  MARKET MOOD-O-METER */}
               {(()=>{
                 const vix = marketData.nifty?.vix || 14.5;
                 const pcr = pcrData?.pcr || 1.0;
@@ -3298,7 +3327,7 @@ Respond ONLY with valid JSON:
                     </div>
                     <div style={{textAlign:'center',marginBottom:'1rem'}}>
                       <div style={{fontSize:'2rem',fontWeight:900,color:col}}>{label}</div>
-                      <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.2rem'}}>Score: {Math.round(score)}/100 · VIX {vix} · PCR {pcr}</div>
+                      <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.2rem'}}>Score: {Math.round(score)}/100  |  VIX {vix}  |  PCR {pcr}</div>
                     </div>
                     <div style={{display:'flex',borderRadius:'var(--radius-sm)',overflow:'hidden',height:'12px',marginBottom:'0.75rem'}}>
                       {zones.map((z,i) => (
@@ -3322,7 +3351,7 @@ Respond ONLY with valid JSON:
                 );
               })()}
 
-              {/* CARD 4 — OPEN POSITIONS */}
+              {/* CARD 4  -  OPEN POSITIONS */}
               {(()=>{
                 const openTrades = tradeLog.filter(t => !t.exitPrice || t.exitPrice === '');
                 let totalPnl = 0;
@@ -3381,7 +3410,7 @@ Respond ONLY with valid JSON:
                 );
               })()}
 
-              {/* CARD 5 — ECONOMIC CALENDAR */}
+              {/* CARD 5  -  ECONOMIC CALENDAR */}
               {(()=>{
                 const now  = new Date();
                 const yr   = now.getFullYear();
@@ -3423,7 +3452,7 @@ Respond ONLY with valid JSON:
                 );
               })()}
 
-              {/* CARD 6 — UNUSUAL OI ACTIVITY */}
+              {/* CARD 6  -  UNUSUAL OI ACTIVITY */}
               {(()=>{
                 const spot = marketData.nifty?.value || 23500;
                 const unusual = liveOptionChain
@@ -3494,12 +3523,12 @@ Respond ONLY with valid JSON:
             </div>{/* end home content wrapper */}
           </>
         ) : !currentUser ? (
-          /* Not logged in — prompt sign in */
+          /* Not logged in  -  prompt sign in */
           <>
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',padding:'2rem'}}>
             <div style={{fontSize:'3.5rem',marginBottom:'1rem'}}>🔐</div>
             <h2 style={{marginBottom:'0.5rem'}}>Sign in to continue</h2>
-            <p style={{color:'var(--text-dim)',marginBottom:'1.5rem',maxWidth:'360px'}}>Create a free account to access all DeltaBuddy features — 3 months free, no card needed.</p>
+            <p style={{color:'var(--text-dim)',marginBottom:'1.5rem',maxWidth:'360px'}}>Create a free account to access all DeltaBuddy features  -  3 months free, no card needed.</p>
             <button onClick={()=>setShowAuthModal(true)}
               style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'10px',padding:'0.85rem 2rem',fontWeight:800,fontSize:'1rem',cursor:'pointer'}}>
               Sign In Free →
@@ -3518,10 +3547,10 @@ Respond ONLY with valid JSON:
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:'1rem',marginBottom:'1.5rem'}}>
               {[
                 {icon:'🏦', title:'Bank-Grade Encryption', desc:'All data encrypted in transit (TLS 1.3) and at rest. Same standard used by banks.'},
-                {icon:'🔐', title:'Firebase by Google', desc:'Your data lives in Google Firebase — Mumbai region. ISO 27001 certified infrastructure.'},
+                {icon:'🔐', title:'Firebase by Google', desc:'Your data lives in Google Firebase  -  Mumbai region. ISO 27001 certified infrastructure.'},
                 {icon:'👤', title:'You Own Your Data', desc:'Your journal, trades, and settings are private to you. We cannot read them.'},
                 {icon:'🚫', title:'We Never Sell Data', desc:'No ads. No data brokers. No third-party sharing. Your trading data stays yours.'},
-                {icon:'🔑', title:'No Broker Passwords Stored', desc:'We store only your API token — never your broker login, password, or MPIN.'},
+                {icon:'🔑', title:'No Broker Passwords Stored', desc:'We store only your API token  -  never your broker login, password, or MPIN.'},
                 {icon:'⚡', title:'Google Sign-In', desc:'Login via Google means no password to steal. Your account is secured by Google 2FA.'},
               ].map(({icon,title,desc})=>(
                 <div key={title} style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1rem',display:'flex',gap:'0.75rem',alignItems:'flex-start'}}>
@@ -4510,7 +4539,7 @@ Respond ONLY with valid JSON:
                     {/* Legend */}
                     <div style={{display:'flex',gap:'1.5rem',padding:'0.6rem 0.5rem',fontSize:'0.7rem',color:'var(--text-muted)',flexWrap:'wrap',borderTop:'1px solid var(--border)',marginTop:'4px'}}>
                       <span>🟩 ITM Call &nbsp; 🟥 ITM Put &nbsp; 🟠 ATM ★</span>
-                      <span>OI bars show relative size &nbsp;·&nbsp; Bold OI = high open interest</span>
+                      <span>OI bars show relative size &nbsp; | &nbsp; Bold OI = high open interest</span>
                       <span>Chg OI = change in OI from prev close</span>
                     </div>
                   </div>
@@ -4544,7 +4573,7 @@ Respond ONLY with valid JSON:
                 <div style={{textAlign:'center',marginBottom:'1.5rem'}}>
                   <div style={{fontSize:'0.85rem',color:'var(--text-dim)'}}>Max Pain Strike</div>
                   <div style={{fontSize:'3rem',fontWeight:900,color:'#f59e0b'}}>{maxPainData.maxPain?.toLocaleString()}</div>
-                  <div style={{color:'var(--text-dim)',fontSize:'0.85rem'}}>Current Spot: {maxPainData.currentSpot?.toLocaleString()} · Distance: {Math.abs((maxPainData.currentSpot||0)-(maxPainData.maxPain||0))} pts</div>
+                  <div style={{color:'var(--text-dim)',fontSize:'0.85rem'}}>Current Spot: {maxPainData.currentSpot?.toLocaleString()}  |  Distance: {Math.abs((maxPainData.currentSpot||0)-(maxPainData.maxPain||0))} pts</div>
                 </div>
               </div>
             )}
@@ -4735,7 +4764,7 @@ Respond ONLY with valid JSON:
             })()}
 
             {activeMarketsTab === 'oi-chart' && (() => {
-              // Build OI data directly from liveOptionChain — always fresh, no stale state
+              // Build OI data directly from liveOptionChain  -  always fresh, no stale state
               const spot = selectedUnderlying==='NIFTY' ? marketData.nifty.value : marketData.bankNifty.value;
               const chain = liveOptionChain.length > 0 ? liveOptionChain : [];
               const oiRows = chain
@@ -4782,7 +4811,7 @@ Respond ONLY with valid JSON:
                       ].map(c=>(
                         <div key={c.label} style={{background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'10px',padding:'0.75rem 1rem'}}>
                           <div style={{fontSize:'0.68rem',color:'var(--text-muted)',marginBottom:'0.2rem'}}>{c.label}</div>
-                          <div style={{fontSize:'1.2rem',fontWeight:800,color:c.col}}>{c.val||'—'}</div>
+                          <div style={{fontSize:'1.2rem',fontWeight:800,color:c.col}}>{c.val||' - '}</div>
                         </div>
                       ))}
                     </div>
@@ -4793,8 +4822,8 @@ Respond ONLY with valid JSON:
                         <thead>
                           <tr style={{borderBottom:'2px solid var(--border)'}}>
                             <th style={{padding:'0.5rem 0.75rem',textAlign:'left',color:'var(--text-dim)',fontWeight:600}}>Strike</th>
-                            <th style={{padding:'0.5rem 0.75rem',color:'#f87171',fontWeight:600}}>CE OI (K) — Resistance</th>
-                            <th style={{padding:'0.5rem 0.75rem',color:'#4ade80',fontWeight:600}}>PE OI (K) — Support</th>
+                            <th style={{padding:'0.5rem 0.75rem',color:'#f87171',fontWeight:600}}>CE OI (K)  -  Resistance</th>
+                            <th style={{padding:'0.5rem 0.75rem',color:'#4ade80',fontWeight:600}}>PE OI (K)  -  Support</th>
                             <th style={{padding:'0.5rem 0.75rem',textAlign:'right',color:'var(--text-dim)',fontWeight:600}}>CE Vol</th>
                             <th style={{padding:'0.5rem 0.75rem',textAlign:'right',color:'var(--text-dim)',fontWeight:600}}>PE Vol</th>
                           </tr>
@@ -5033,7 +5062,7 @@ Respond ONLY with valid JSON:
                             if(idx<0) return null;
                             return <circle key={i} cx={px(idx)} cy={py(eq[idx]?.value||min)} r="3" fill="#fbbf24" opacity="0.8"/>;
                           })}
-                          <text x={W/2} y={H-5} textAnchor="middle" fill="#64748b" fontSize="9">{btResult.symbol} · {btResult.period} · {btResult.strategy}</text>
+                          <text x={W/2} y={H-5} textAnchor="middle" fill="#64748b" fontSize="9">{btResult.symbol}  |  {btResult.period}  |  {btResult.strategy}</text>
                         </svg>
                       </div>
                     );
@@ -5194,11 +5223,11 @@ Respond ONLY with valid JSON:
 
               {/* OI Buildup */}
               <div style={{background:'#0f172a',borderRadius:'10px',padding:'1rem',border:'1px solid var(--border)',marginBottom:'1rem'}}>
-                <div style={{fontWeight:600,marginBottom:'0.5rem'}}>Largest OI Buildup — NIFTY Strikes</div>
+                <div style={{fontWeight:600,marginBottom:'0.5rem'}}>Largest OI Buildup  -  NIFTY Strikes</div>
                 <p style={{color:'var(--text-dim)',fontSize:'0.78rem',marginBottom:'0.75rem'}}>Highest OI = where institutions are positioned. CE = resistance, PE = support.</p>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem'}}>
                   <div>
-                    <div style={{color:'#f87171',fontWeight:600,fontSize:'0.82rem',marginBottom:'0.5rem'}}>TOP CE OI — Resistance Levels</div>
+                    <div style={{color:'#f87171',fontWeight:600,fontSize:'0.82rem',marginBottom:'0.5rem'}}>TOP CE OI  -  Resistance Levels</div>
                     {[...liveOptionChain].sort((a,b)=>(b.ce?.oi||0)-(a.ce?.oi||0)).slice(0,6).map(row=>(
                       <div key={row.strike} style={{display:'flex',justifyContent:'space-between',padding:'0.3rem 0',borderBottom:'1px solid #1e293b',fontSize:'0.82rem'}}>
                         <span style={{fontWeight:700,color:'#f0f9ff'}}>{row.strike}</span>
@@ -5208,7 +5237,7 @@ Respond ONLY with valid JSON:
                     ))}
                   </div>
                   <div>
-                    <div style={{color:'#4ade80',fontWeight:600,fontSize:'0.82rem',marginBottom:'0.5rem'}}>TOP PE OI — Support Levels</div>
+                    <div style={{color:'#4ade80',fontWeight:600,fontSize:'0.82rem',marginBottom:'0.5rem'}}>TOP PE OI  -  Support Levels</div>
                     {[...liveOptionChain].sort((a,b)=>(b.pe?.oi||0)-(a.pe?.oi||0)).slice(0,6).map(row=>(
                       <div key={row.strike} style={{display:'flex',justifyContent:'space-between',padding:'0.3rem 0',borderBottom:'1px solid #1e293b',fontSize:'0.82rem'}}>
                         <span style={{fontWeight:700,color:'#f0f9ff'}}>{row.strike}</span>
@@ -5230,7 +5259,7 @@ Respond ONLY with valid JSON:
                   <a href="https://www.bseindia.com/markets/equity/EQReports/BulkDeal.aspx" target="_blank" rel="noreferrer" style={{color:'var(--accent)',marginLeft:'0.4rem'}}>View on BSE</a>
                 </p>
                 <div style={{background:'#0a1628',borderRadius:'8px',padding:'1rem',textAlign:'center',fontSize:'0.82rem',color:'#64748b'}}>
-                  Block/Bulk deal real-time integration is planned with the mstock API. Until then, use the NSE/BSE links above for live data — they update throughout the day.
+                  Block/Bulk deal real-time integration is planned with the mstock API. Until then, use the NSE/BSE links above for live data  -  they update throughout the day.
                 </div>
               </div>
             </div>
@@ -5471,7 +5500,7 @@ Respond ONLY with valid JSON:
               <div style={{background:'linear-gradient(135deg,#7f1d1d,#991b1b)',border:'2px solid #ef4444',borderRadius:'12px',padding:'1.25rem 1.5rem',marginBottom:'1.5rem',display:'flex',alignItems:'center',gap:'1rem',flexWrap:'wrap'}}>
                 <div style={{fontSize:'2rem'}}>🛑</div>
                 <div style={{flex:1}}>
-                  <div style={{color:'#fca5a5',fontWeight:700,fontSize:'1.1rem'}}>COOLDOWN ACTIVE — Stop Trading</div>
+                  <div style={{color:'#fca5a5',fontWeight:700,fontSize:'1.1rem'}}>COOLDOWN ACTIVE  -  Stop Trading</div>
                   <div style={{color:'#fecaca',fontSize:'0.85rem',marginTop:'0.25rem'}}>2+ consecutive losses detected. Cooldown until {cooldownEnd.toLocaleTimeString()}. Step away, review your journal, return with clarity.</div>
                 </div>
                 <button onClick={()=>setCooldownActive(false)} style={{background:'#7f1d1d',border:'1px solid #ef4444',color:'#fca5a5',borderRadius:'6px',padding:'0.4rem 0.8rem',cursor:'pointer',fontSize:'0.8rem'}}>Override (not recommended)</button>
@@ -5550,7 +5579,7 @@ Respond ONLY with valid JSON:
                         <div key={em} style={{marginBottom:'0.5rem'}}>
                           <div style={{display:'flex',justifyContent:'space-between',fontSize:'0.8rem',marginBottom:'2px'}}>
                             <span style={{color:emotionColors[em]||'var(--text-main)'}}>{em}</span>
-                            <span style={{color:'var(--text-dim)'}}>{count} trade{count>1?'s':''} · {pct}%</span>
+                            <span style={{color:'var(--text-dim)'}}>{count} trade{count>1?'s':''}  |  {pct}%</span>
                           </div>
                           <div style={{background:'#1e293b',borderRadius:'99px',height:'6px',overflow:'hidden'}}>
                             <div style={{width:`${pct}%`,height:'100%',background:emotionColors[em]||'var(--accent)',borderRadius:'99px',transition:'width 0.4s'}}/>
@@ -5648,7 +5677,7 @@ Respond ONLY with valid JSON:
           <div className="main-content">
             <div className="page-header">
               <h1>📝 Paper Trading</h1>
-              <p className="subtitle">Practice with virtual money — zero real capital at risk</p>
+              <p className="subtitle">Practice with virtual money  -  zero real capital at risk</p>
             </div>
 
             {/* Stats */}
@@ -5799,37 +5828,33 @@ Respond ONLY with valid JSON:
             {/* Header */}
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:'0.75rem'}}>
               <div>
-                <h2 style={{margin:0,fontSize:'1.35rem'}}>Portfolio</h2>
+                <h2 style={{margin:0}}>Portfolio</h2>
                 <p style={{color:'var(--text-dim)',fontSize:'0.82rem',margin:'0.2rem 0 0'}}>Live positions, holdings and funds</p>
               </div>
               {selectedBroker !== 'manual' && (
                 <button onClick={()=>fetchPortfolio()} disabled={portfolioLoading}
-                  style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.5rem 1.2rem',fontWeight:700,cursor:'pointer',fontSize:'0.88rem'}}>
+                  style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.5rem 1.2rem',fontWeight:700,cursor:'pointer'}}>
                   {portfolioLoading ? 'Loading...' : 'Refresh'}
                 </button>
               )}
             </div>
 
-            {/* Broker selector */}
+            {/* Broker Selector */}
             <div style={{display:'flex',gap:'0.5rem',marginBottom:'1.25rem',flexWrap:'wrap'}}>
               {[
-                {id:'dhan',    label:'Dhan',       icon:'💼', ready:true},
-                {id:'zerodha', label:'Zerodha',     icon:'🟢', ready:true},
-                {id:'angel',   label:'Angel One',   icon:'👼', ready:true},
-                {id:'manual',  label:'Manual Entry', icon:'✏️', ready:true},
-                {id:'upstox',  label:'Upstox',      icon:'🔵', ready:false},
-                {id:'5paisa',  label:'5paisa',       icon:'🟡', ready:false},
-              ].map(({id,label,icon,ready})=>(
-                <button key={id}
-                  onClick={()=>{ if(ready){ setSelectedBroker(id); setPortfolio(null); setPortfolioError(''); } }}
-                  style={{
-                    padding:'0.4rem 0.85rem',borderRadius:'20px',fontSize:'0.8rem',fontWeight:700,cursor:ready?'pointer':'default',
-                    background: selectedBroker===id ? 'var(--accent)' : 'var(--bg-surface)',
-                    color: selectedBroker===id ? '#000' : ready ? 'var(--text-dim)' : 'var(--text-muted)',
-                    border: selectedBroker===id ? '2px solid var(--accent)' : '1px solid var(--border)',
-                    opacity: ready ? 1 : 0.5,
-                  }}>
-                  {icon} {label}{!ready ? ' (soon)' : ''}
+                {id:'dhan',   label:'Dhan',        ready:true},
+                {id:'zerodha',label:'Zerodha',      ready:true},
+                {id:'angel',  label:'Angel One',    ready:true},
+                {id:'manual', label:'Manual / Screenshot', ready:true},
+                {id:'upstox', label:'Upstox',       ready:false},
+              ].map(({id,label,ready})=>(
+                <button key={id} onClick={()=>{if(ready){setSelectedBroker(id);setPortfolio(null);setPortfolioError('');}}}
+                  style={{padding:'0.4rem 0.85rem',borderRadius:'20px',fontSize:'0.8rem',fontWeight:700,
+                    cursor:ready?'pointer':'default',opacity:ready?1:0.5,
+                    background:selectedBroker===id?'var(--accent)':'var(--bg-surface)',
+                    color:selectedBroker===id?'#000':'var(--text-dim)',
+                    border:selectedBroker===id?'2px solid var(--accent)':'1px solid var(--border)'}}>
+                  {label}{!ready?' (soon)':''}
                 </button>
               ))}
             </div>
@@ -5842,25 +5867,28 @@ Respond ONLY with valid JSON:
 
             {/* DHAN */}
             {selectedBroker === 'dhan' && (
-              <>
-                {!portfolio && !portfolioLoading && !portfolioError && (
+              <div>
+                {!portfolio && !portfolioLoading && (
                   <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>
                     <div style={{fontSize:'3rem',marginBottom:'1rem'}}>💼</div>
                     <p style={{marginBottom:'1rem'}}>Click Refresh to load your Dhan portfolio</p>
-                    <button onClick={()=>fetchPortfolio('dhan')} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.75rem 2rem',fontWeight:700,cursor:'pointer'}}>Load Portfolio</button>
+                    <button onClick={()=>fetchPortfolio('dhan')}
+                      style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.75rem 2rem',fontWeight:700,cursor:'pointer'}}>
+                      Load Portfolio
+                    </button>
                   </div>
                 )}
                 {portfolio && portfolio.funds && (
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:'0.75rem',marginBottom:'1.25rem'}}>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'0.75rem',marginBottom:'1.25rem'}}>
                     {[
-                      {label:'Available',   value:'Rs '+(portfolio.funds.availabelBalance||portfolio.funds.availableBalance||0).toLocaleString('en-IN',{maximumFractionDigits:0}), color:'#4ade80'},
-                      {label:'Used Margin', value:'Rs '+(portfolio.funds.utilizedAmount||0).toLocaleString('en-IN',{maximumFractionDigits:0}), color:'#f87171'},
-                      {label:'Total',       value:'Rs '+(portfolio.funds.sodLimit||0).toLocaleString('en-IN',{maximumFractionDigits:0}), color:'var(--text-main)'},
-                      {label:'Withdrawable',value:'Rs '+(portfolio.funds.withdrawableBalance||0).toLocaleString('en-IN',{maximumFractionDigits:0}), color:'#38bdf8'},
+                      {label:'Available',    value:portfolio.funds.availabelBalance||portfolio.funds.availableBalance||0, color:'#4ade80'},
+                      {label:'Used Margin',  value:portfolio.funds.utilizedAmount||0,  color:'#f87171'},
+                      {label:'Total',        value:portfolio.funds.sodLimit||0,         color:'var(--text-main)'},
+                      {label:'Withdrawable', value:portfolio.funds.withdrawableBalance||0, color:'#38bdf8'},
                     ].map(({label,value,color})=>(
                       <div key={label} className="panel" style={{textAlign:'center',padding:'0.85rem'}}>
                         <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginBottom:'0.3rem'}}>{label}</div>
-                        <div style={{fontSize:'1.1rem',fontWeight:700,color}}>{value}</div>
+                        <div style={{fontSize:'1.1rem',fontWeight:700,color}}>Rs {Number(value).toLocaleString('en-IN',{maximumFractionDigits:0})}</div>
                       </div>
                     ))}
                   </div>
@@ -5876,16 +5904,20 @@ Respond ONLY with valid JSON:
                       </tr></thead>
                       <tbody>
                         {portfolio.positions.map((pos,i)=>{
-                          const qty=pos.netQty||pos.quantity||0, avg=pos.costPrice||pos.buyAvg||0, ltp=pos.ltp||0;
+                          const qty=Number(pos.netQty||pos.quantity||0);
+                          const avg=Number(pos.costPrice||pos.buyAvg||0);
+                          const ltp=Number(pos.ltp||0);
                           const pnl=(ltp-avg)*qty;
-                          return (<tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
-                            <td style={{padding:'0.6rem 0.75rem',fontWeight:700}}>{pos.tradingSymbol||pos.symbol}</td>
-                            <td style={{padding:'0.6rem 0.75rem',color:qty>=0?'#4ade80':'#f87171',fontWeight:700}}>{qty>0?'+':''}{qty}</td>
-                            <td style={{padding:'0.6rem 0.75rem'}}>Rs {(+avg).toFixed(2)}</td>
-                            <td style={{padding:'0.6rem 0.75rem',fontWeight:700}}>Rs {(+ltp).toFixed(2)}</td>
-                            <td style={{padding:'0.6rem 0.75rem',fontWeight:700,color:pnl>=0?'#4ade80':'#f87171'}}>{pnl>=0?'+':''}Rs {pnl.toFixed(0)}</td>
-                            <td style={{padding:'0.6rem 0.75rem',color:'var(--text-muted)',fontSize:'0.78rem'}}>{pos.productType||'—'}</td>
-                          </tr>);
+                          return (
+                            <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700}}>{pos.tradingSymbol||pos.symbol}</td>
+                              <td style={{padding:'0.6rem 0.75rem',color:qty>=0?'#4ade80':'#f87171',fontWeight:700}}>{qty>0?'+':''}{qty}</td>
+                              <td style={{padding:'0.6rem 0.75rem'}}>Rs {avg.toFixed(2)}</td>
+                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700}}>Rs {ltp.toFixed(2)}</td>
+                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700,color:pnl>=0?'#4ade80':'#f87171'}}>{pnl>=0?'+':''}Rs {pnl.toFixed(0)}</td>
+                              <td style={{padding:'0.6rem 0.75rem',color:'var(--text-muted)',fontSize:'0.78rem'}}>{pos.productType||'-'}</td>
+                            </tr>
+                          );
                         })}
                       </tbody>
                     </table>
@@ -5902,207 +5934,182 @@ Respond ONLY with valid JSON:
                       </tr></thead>
                       <tbody>
                         {portfolio.holdings.map((h,i)=>{
-                          const qty=h.totalQty||h.quantity||0, avg=h.avgCostPrice||0, ltp=h.ltp||0;
-                          const pnl=(ltp-avg)*qty, ret=avg?((ltp-avg)/avg*100):0;
-                          return (<tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
-                            <td style={{padding:'0.6rem 0.75rem',fontWeight:700}}>{h.tradingSymbol||h.symbol}</td>
-                            <td style={{padding:'0.6rem 0.75rem'}}>{qty}</td>
-                            <td style={{padding:'0.6rem 0.75rem'}}>Rs {(+avg).toFixed(2)}</td>
-                            <td style={{padding:'0.6rem 0.75rem',fontWeight:700}}>Rs {(+ltp).toFixed(2)}</td>
-                            <td style={{padding:'0.6rem 0.75rem'}}>Rs {(ltp*qty).toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
-                            <td style={{padding:'0.6rem 0.75rem',fontWeight:700,color:pnl>=0?'#4ade80':'#f87171'}}>{pnl>=0?'+':''}Rs {pnl.toFixed(0)}</td>
-                            <td style={{padding:'0.6rem 0.75rem',fontWeight:700,color:ret>=0?'#4ade80':'#f87171'}}>{ret>=0?'+':''}{ret.toFixed(2)}%</td>
-                          </tr>);
+                          const qty=Number(h.totalQty||h.quantity||0);
+                          const avg=Number(h.avgCostPrice||0);
+                          const ltp=Number(h.ltp||0);
+                          const pnl=(ltp-avg)*qty;
+                          const ret=avg?((ltp-avg)/avg*100):0;
+                          return (
+                            <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700}}>{h.tradingSymbol||h.symbol}</td>
+                              <td style={{padding:'0.6rem 0.75rem'}}>{qty}</td>
+                              <td style={{padding:'0.6rem 0.75rem'}}>Rs {avg.toFixed(2)}</td>
+                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700}}>Rs {ltp.toFixed(2)}</td>
+                              <td style={{padding:'0.6rem 0.75rem'}}>Rs {(ltp*qty).toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
+                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700,color:pnl>=0?'#4ade80':'#f87171'}}>{pnl>=0?'+':''}Rs {pnl.toFixed(0)}</td>
+                              <td style={{padding:'0.6rem 0.75rem',fontWeight:700,color:ret>=0?'#4ade80':'#f87171'}}>{ret>=0?'+':''}{ret.toFixed(2)}%</td>
+                            </tr>
+                          );
                         })}
                       </tbody>
                     </table>
                   </div>
                 )}
-                {portfolio && portfolio.positions?.length===0 && portfolio.holdings?.length===0 && (
+                {portfolio && (!portfolio.positions || portfolio.positions.length===0) && (!portfolio.holdings || portfolio.holdings.length===0) && (
                   <div style={{textAlign:'center',padding:'3rem',color:'var(--text-muted)'}}>
                     <div style={{fontSize:'2.5rem',marginBottom:'0.75rem'}}>💼</div>
-                    <div style={{fontWeight:700,color:'var(--text-main)'}}>No open positions or holdings</div>
+                    <div>No open positions or holdings found</div>
                   </div>
                 )}
-              </>
+              </div>
             )}
 
             {/* ZERODHA */}
             {selectedBroker === 'zerodha' && (
-              <div>
-                <div className="panel" style={{marginBottom:'1.25rem'}}>
-                  <h3 style={{marginTop:0,marginBottom:'1rem',color:'#4ade80'}}>Zerodha Kite Connect</h3>
-                  <div style={{fontSize:'0.82rem',color:'var(--text-dim)',marginBottom:'1rem',lineHeight:1.7}}>
-                    Zerodha requires a daily access token. Steps to connect:<br/>
-                    1. Contact us to get your API key configured (one-time)<br/>
-                    2. Login to Kite, copy your access token from browser URL<br/>
-                    3. Paste it below
-                  </div>
-                  <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap'}}>
-                    <input value={zerodhaToken} onChange={e=>{setZerodhaToken(e.target.value); localStorage.setItem('db_zerodha_token',e.target.value);}}
-                      placeholder="Paste Zerodha access token..."
-                      type="password"
-                      style={{flex:1,minWidth:'200px',background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.6rem 1rem',color:'var(--text-main)',fontSize:'0.85rem'}}/>
-                    <button onClick={()=>fetchPortfolio('zerodha')} disabled={!zerodhaToken||portfolioLoading}
-                      style={{background:'#4ade80',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1.2rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem'}}>
-                      {portfolioLoading ? 'Loading...' : 'Load Portfolio'}
-                    </button>
-                  </div>
+              <div className="panel">
+                <h3 style={{marginTop:0,color:'#4ade80'}}>Zerodha Kite Connect</h3>
+                <p style={{fontSize:'0.82rem',color:'var(--text-dim)',lineHeight:1.7}}>
+                  Zerodha requires a daily access token.<br/>
+                  1. Get your API key configured with us (one-time setup)<br/>
+                  2. Login to Kite and copy access token from browser URL<br/>
+                  3. Paste below
+                </p>
+                <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap',marginTop:'1rem'}}>
+                  <input value={zerodhaToken}
+                    onChange={e=>{setZerodhaToken(e.target.value);localStorage.setItem('db_zerodha_token',e.target.value);}}
+                    placeholder="Paste Zerodha access token..." type="password"
+                    style={{flex:1,minWidth:'200px',background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.6rem 1rem',color:'var(--text-main)',fontSize:'0.85rem'}}/>
+                  <button onClick={()=>fetchPortfolio('zerodha')} disabled={!zerodhaToken||portfolioLoading}
+                    style={{background:'#4ade80',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1.2rem',fontWeight:700,cursor:'pointer'}}>
+                    {portfolioLoading ? 'Loading...' : 'Load'}
+                  </button>
                 </div>
-                {portfolio && portfolio.broker === 'zerodha' && (
-                  <div style={{textAlign:'center',padding:'2rem',color:'var(--accent)'}}>
-                    Zerodha portfolio loaded — positions and holdings shown above
-                  </div>
-                )}
               </div>
             )}
 
             {/* ANGEL ONE */}
             {selectedBroker === 'angel' && (
-              <div>
-                <div className="panel" style={{marginBottom:'1.25rem'}}>
-                  <h3 style={{marginTop:0,marginBottom:'1rem',color:'#f97316'}}>Angel One SmartAPI</h3>
-                  <div style={{fontSize:'0.82rem',color:'var(--text-dim)',marginBottom:'1rem',lineHeight:1.7}}>
-                    Connect using your Angel One JWT token. Steps:<br/>
-                    1. Login to Angel One SmartAPI dashboard<br/>
-                    2. Generate a session - copy your JWT token<br/>
-                    3. Paste your API key and JWT token below
-                  </div>
-                  <div style={{display:'flex',flexDirection:'column',gap:'0.5rem',maxWidth:'480px'}}>
-                    <input value={angelApiKey} onChange={e=>{setAngelApiKey(e.target.value); localStorage.setItem('db_angel_apikey',e.target.value);}}
-                      placeholder="Angel One API Key"
-                      style={{background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.6rem 1rem',color:'var(--text-main)',fontSize:'0.85rem'}}/>
-                    <input value={angelJwt} onChange={e=>{setAngelJwt(e.target.value); localStorage.setItem('db_angel_jwt',e.target.value);}}
-                      placeholder="Angel One JWT Token"
-                      type="password"
-                      style={{background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.6rem 1rem',color:'var(--text-main)',fontSize:'0.85rem'}}/>
-                    <button onClick={()=>fetchPortfolio('angel')} disabled={!angelJwt||portfolioLoading}
-                      style={{background:'#f97316',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1.2rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem',width:'fit-content'}}>
-                      {portfolioLoading ? 'Loading...' : 'Load Portfolio'}
-                    </button>
-                  </div>
+              <div className="panel">
+                <h3 style={{marginTop:0,color:'#f97316'}}>Angel One SmartAPI</h3>
+                <p style={{fontSize:'0.82rem',color:'var(--text-dim)',lineHeight:1.7}}>
+                  1. Login to Angel One SmartAPI dashboard<br/>
+                  2. Generate a session and copy your JWT token<br/>
+                  3. Paste your API key and JWT below
+                </p>
+                <div style={{display:'flex',flexDirection:'column',gap:'0.5rem',maxWidth:'460px',marginTop:'1rem'}}>
+                  <input value={angelApiKey}
+                    onChange={e=>{setAngelApiKey(e.target.value);localStorage.setItem('db_angel_apikey',e.target.value);}}
+                    placeholder="Angel One API Key"
+                    style={{background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.6rem 1rem',color:'var(--text-main)',fontSize:'0.85rem'}}/>
+                  <input value={angelJwt}
+                    onChange={e=>{setAngelJwt(e.target.value);localStorage.setItem('db_angel_jwt',e.target.value);}}
+                    placeholder="Angel One JWT Token" type="password"
+                    style={{background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.6rem 1rem',color:'var(--text-main)',fontSize:'0.85rem'}}/>
+                  <button onClick={()=>fetchPortfolio('angel')} disabled={!angelJwt||portfolioLoading}
+                    style={{background:'#f97316',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1.2rem',fontWeight:700,cursor:'pointer',width:'fit-content'}}>
+                    {portfolioLoading ? 'Loading...' : 'Load Portfolio'}
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* MANUAL POSITIONS */}
+            {/* MANUAL + SCREENSHOT */}
             {selectedBroker === 'manual' && (
               <div>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
-                  <div style={{fontSize:'0.85rem',color:'var(--text-dim)'}}>Track positions from any broker manually. P&L calculated using live NSE prices.</div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:'0.5rem'}}>
+                  <p style={{margin:0,fontSize:'0.85rem',color:'var(--text-dim)'}}>
+                    Upload a screenshot from any broker or add positions manually.
+                  </p>
                   <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap'}}>
-                    <label style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',border:'none',borderRadius:'8px',padding:'0.5rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:'0.4rem'}}>
-                      📸 Upload Screenshot
-                      <input type="file" accept="image/*" style={{display:'none'}}
-                        onChange={e => {
-                          const file = e.target.files[0];
-                          if (!file) return;
-                          setScreenshotFile(file);
-                          setScreenshotResult(null);
-                          setScreenshotError('');
-                          const url = URL.createObjectURL(file);
-                          setScreenshotPreview(url);
-                        }}/>
+                    <label style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',borderRadius:'8px',padding:'0.5rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem',display:'inline-block'}}>
+                      Upload Screenshot
+                      <input type="file" accept="image/*" style={{display:'none'}} onChange={handleScreenshotUpload}/>
                     </label>
-                  <button onClick={()=>setShowManualForm(f=>!f)}
-                    style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.5rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem',whiteSpace:'nowrap'}}>
-                    + Add Position
-                  </button>
+                    <button onClick={()=>setShowManualForm(f=>!f)}
+                      style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.5rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem'}}>
+                      + Add Position
+                    </button>
+                  </div>
                 </div>
 
-                {/* Screenshot Analysis Panel */}
                 {(screenshotPreview || screenshotAnalyzing || screenshotResult || screenshotError) && (
-                  <div className="panel" style={{marginBottom:'1.25rem',border:'1px solid rgba(99,102,241,0.4)',background:'rgba(99,102,241,0.05)'}}>
+                  <div className="panel" style={{marginBottom:'1.25rem',border:'1px solid rgba(99,102,241,0.4)'}}>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
-                      <h3 style={{margin:0,color:'#818cf8'}}>📸 Screenshot Analysis</h3>
+                      <h3 style={{margin:0,color:'#818cf8'}}>Screenshot Analysis</h3>
                       <button onClick={()=>{setScreenshotPreview(null);setScreenshotFile(null);setScreenshotResult(null);setScreenshotError('');}}
-                        style={{background:'none',border:'none',color:'var(--text-dim)',cursor:'pointer',fontSize:'1.2rem'}}>✕</button>
+                        style={{background:'none',border:'none',color:'var(--text-dim)',cursor:'pointer',fontSize:'1.2rem'}}>X</button>
                     </div>
-
-                    {screenshotPreview && !screenshotResult && (
+                    {screenshotPreview && !screenshotResult && !screenshotAnalyzing && (
                       <div style={{display:'flex',gap:'1rem',alignItems:'flex-start',flexWrap:'wrap'}}>
-                        <img src={screenshotPreview} alt="screenshot"
-                          style={{maxWidth:'280px',maxHeight:'200px',borderRadius:'8px',border:'1px solid var(--border)',objectFit:'contain'}}/>
-                        <div style={{flex:1,minWidth:'200px'}}>
-                          <div style={{fontSize:'0.85rem',color:'var(--text-dim)',marginBottom:'1rem',lineHeight:1.6}}>
-                            Screenshot ready. Click Analyze to extract all positions automatically using AI.
-                            Works with Zerodha, Angel One, ICICI Direct, HDFC Securities, Upstox, 5paisa and more.
-                          </div>
-                          <button onClick={()=>analyzeScreenshot(screenshotFile)} disabled={screenshotAnalyzing}
-                            style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',border:'none',borderRadius:'8px',padding:'0.65rem 1.5rem',fontWeight:700,cursor:'pointer',fontSize:'0.9rem',display:'flex',alignItems:'center',gap:'0.5rem'}}>
-                            {screenshotAnalyzing ? (
-                              'Analyzing...'
-                            ) : '🤖 Analyze with AI'}
+                        <img src={screenshotPreview} alt="preview"
+                          style={{maxWidth:'220px',maxHeight:'160px',borderRadius:'8px',border:'1px solid var(--border)',objectFit:'contain'}}/>
+                        <div>
+                          <p style={{fontSize:'0.85rem',color:'var(--text-dim)',marginTop:0}}>
+                            Works with Zerodha, Angel One, ICICI, HDFC, Upstox and more.
+                          </p>
+                          <button onClick={()=>analyzeScreenshot(screenshotFile)}
+                            style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',border:'none',borderRadius:'8px',padding:'0.65rem 1.5rem',fontWeight:700,cursor:'pointer'}}>
+                            Analyze with AI
                           </button>
                         </div>
                       </div>
                     )}
-
                     {screenshotAnalyzing && (
                       <div style={{textAlign:'center',padding:'2rem',color:'#818cf8'}}>
-                        <div style={{fontSize:'2rem',marginBottom:'0.75rem',animation:'spin 2s linear infinite',display:'inline-block'}}>🔍</div>
-                        <div style={{fontWeight:700,marginBottom:'0.3rem'}}>AI is reading your screenshot...</div>
-                        <div style={{fontSize:'0.82rem',color:'var(--text-dim)'}}>Extracting positions, quantities, prices</div>
+                        <div style={{fontWeight:700}}>AI is reading your screenshot...</div>
+                        <div style={{fontSize:'0.82rem',color:'var(--text-dim)',marginTop:'0.3rem'}}>Extracting positions, quantities, prices</div>
                       </div>
                     )}
-
                     {screenshotError && (
                       <div style={{background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.3)',borderRadius:'8px',padding:'0.85rem',color:'#f87171',fontSize:'0.85rem'}}>
                         {screenshotError}
                       </div>
                     )}
-
-                    {screenshotResult && (
+                    {screenshotResult && screenshotResult.length === 0 && (
+                      <div style={{textAlign:'center',padding:'1.5rem',color:'var(--text-dim)'}}>
+                        <div style={{fontWeight:600}}>No positions found in screenshot</div>
+                        <div style={{fontSize:'0.82rem',marginTop:'0.25rem'}}>Try a clearer screenshot of the positions screen</div>
+                      </div>
+                    )}
+                    {screenshotResult && screenshotResult.length > 0 && (
                       <div>
-                        {screenshotResult.length === 0 ? (
-                          <div style={{textAlign:'center',padding:'1.5rem',color:'var(--text-dim)'}}>
-                            <div style={{fontSize:'1.5rem',marginBottom:'0.5rem'}}>🤷</div>
-                            <div style={{fontWeight:600,marginBottom:'0.25rem'}}>No positions found</div>
-                            <div style={{fontSize:'0.82rem'}}>Try a clearer screenshot of the positions screen</div>
-                          </div>
-                        ) : (
-                          <>
-                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem'}}>
-                              <div style={{color:'#4ade80',fontWeight:700,fontSize:'0.88rem'}}>
-                                ✅ Found {screenshotResult.length} position{screenshotResult.length > 1 ? 's' : ''}
-                              </div>
-                              <button onClick={()=>importScreenshotPositions(screenshotResult)}
-                                style={{background:'#4ade80',color:'#000',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
-                                Import All
-                              </button>
-                            </div>
-                            <div style={{overflowX:'auto'}}>
-                              <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.82rem'}}>
-                                <thead><tr style={{background:'var(--bg-surface)'}}>
-                                  {['Symbol','Type','Qty','Avg Price','LTP','P&L','Product'].map(h=>(
-                                    <th key={h} style={{padding:'0.4rem 0.6rem',textAlign:'left',color:'var(--text-muted)',fontSize:'0.7rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
-                                  ))}
-                                </tr></thead>
-                                <tbody>
-                                  {screenshotResult.map((pos,i)=>(
-                                    <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
-                                      <td style={{padding:'0.5rem 0.6rem',fontWeight:700,fontSize:'0.82rem'}}>{pos.symbol}</td>
-                                      <td style={{padding:'0.5rem 0.6rem'}}>
-                                        <span style={{padding:'2px 7px',borderRadius:'4px',fontSize:'0.7rem',fontWeight:700,
-                                          background:pos.type==='BUY'?'rgba(74,222,128,0.15)':'rgba(248,113,113,0.15)',
-                                          color:pos.type==='BUY'?'#4ade80':'#f87171'}}>
-                                          {pos.type}
-                                        </span>
-                                      </td>
-                                      <td style={{padding:'0.5rem 0.6rem'}}>{pos.qty}</td>
-                                      <td style={{padding:'0.5rem 0.6rem'}}>Rs {Number(pos.avgPrice).toFixed(2)}</td>
-                                      <td style={{padding:'0.5rem 0.6rem'}}>{pos.ltp ? 'Rs '+Number(pos.ltp).toFixed(2) : '-'}</td>
-                                      <td style={{padding:'0.5rem 0.6rem',fontWeight:700,color:Number(pos.pnl)>=0?'#4ade80':'#f87171'}}>
-                                        {pos.pnl ? (Number(pos.pnl)>=0?'+':'')+'Rs '+Number(pos.pnl).toFixed(0) : '-'}
-                                      </td>
-                                      <td style={{padding:'0.5rem 0.6rem',color:'var(--text-muted)',fontSize:'0.75rem'}}>{pos.product}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </>
-                        )}
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem'}}>
+                          <div style={{color:'#4ade80',fontWeight:700,fontSize:'0.88rem'}}>Found {screenshotResult.length} position(s)</div>
+                          <button onClick={()=>importScreenshotPositions(screenshotResult)}
+                            style={{background:'#4ade80',color:'#000',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
+                            Import All
+                          </button>
+                        </div>
+                        <div style={{overflowX:'auto'}}>
+                          <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.82rem'}}>
+                            <thead><tr style={{background:'var(--bg-surface)'}}>
+                              {['Symbol','Type','Qty','Avg','LTP','P&L','Product'].map(h=>(
+                                <th key={h} style={{padding:'0.4rem 0.6rem',textAlign:'left',color:'var(--text-muted)',fontSize:'0.7rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
+                              ))}
+                            </tr></thead>
+                            <tbody>
+                              {screenshotResult.map((pos,i)=>(
+                                <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                                  <td style={{padding:'0.5rem 0.6rem',fontWeight:700}}>{pos.symbol}</td>
+                                  <td style={{padding:'0.5rem 0.6rem'}}>
+                                    <span style={{padding:'2px 7px',borderRadius:'4px',fontSize:'0.7rem',fontWeight:700,
+                                      background:pos.type==='BUY'?'rgba(74,222,128,0.15)':'rgba(248,113,113,0.15)',
+                                      color:pos.type==='BUY'?'#4ade80':'#f87171'}}>
+                                      {pos.type}
+                                    </span>
+                                  </td>
+                                  <td style={{padding:'0.5rem 0.6rem'}}>{pos.qty}</td>
+                                  <td style={{padding:'0.5rem 0.6rem'}}>Rs {Number(pos.avgPrice).toFixed(2)}</td>
+                                  <td style={{padding:'0.5rem 0.6rem'}}>{pos.ltp ? 'Rs '+Number(pos.ltp).toFixed(2) : '-'}</td>
+                                  <td style={{padding:'0.5rem 0.6rem',fontWeight:700,color:Number(pos.pnl)>=0?'#4ade80':'#f87171'}}>
+                                    {pos.pnl ? (Number(pos.pnl)>=0?'+':'')+'Rs '+Number(pos.pnl).toFixed(0) : '-'}
+                                  </td>
+                                  <td style={{padding:'0.5rem 0.6rem',color:'var(--text-muted)',fontSize:'0.75rem'}}>{pos.product}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -6111,15 +6118,16 @@ Respond ONLY with valid JSON:
                 {showManualForm && (
                   <div className="panel" style={{marginBottom:'1.25rem'}}>
                     <h3 style={{marginTop:0,marginBottom:'1rem'}}>Add Position</h3>
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'0.75rem',marginBottom:'1rem'}}>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:'0.75rem',marginBottom:'1rem'}}>
                       {[
-                        {key:'symbol',    label:'Symbol',    placeholder:'NIFTY25MAR24500CE'},
-                        {key:'qty',       label:'Quantity',  placeholder:'75', type:'number'},
-                        {key:'avgPrice',  label:'Avg Price', placeholder:'150.50', type:'number'},
-                      ].map(({key,label,placeholder,type='text'})=>(
+                        {key:'symbol',   label:'Symbol',    placeholder:'NIFTY25MAR24500CE', type:'text'},
+                        {key:'qty',      label:'Quantity',  placeholder:'75',                type:'number'},
+                        {key:'avgPrice', label:'Avg Price', placeholder:'150.50',            type:'number'},
+                      ].map(({key,label,placeholder,type})=>(
                         <div key={key}>
                           <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginBottom:'0.3rem',fontWeight:700,textTransform:'uppercase'}}>{label}</div>
-                          <input value={manualForm[key]} onChange={e=>setManualForm(f=>({...f,[key]:e.target.value}))}
+                          <input value={manualForm[key]}
+                            onChange={e=>setManualForm(f=>({...f,[key]:e.target.value}))}
                             placeholder={placeholder} type={type}
                             style={{width:'100%',background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.5rem 0.75rem',color:'var(--text-main)',fontSize:'0.85rem',boxSizing:'border-box'}}/>
                         </div>
@@ -6146,7 +6154,7 @@ Respond ONLY with valid JSON:
                     <div style={{display:'flex',gap:'0.5rem'}}>
                       <button onClick={addManualPosition}
                         style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1.5rem',fontWeight:700,cursor:'pointer'}}>
-                        Add Position
+                        Add
                       </button>
                       <button onClick={()=>setShowManualForm(false)}
                         style={{background:'var(--bg-surface)',color:'var(--text-dim)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.6rem 1rem',cursor:'pointer'}}>
@@ -6159,15 +6167,15 @@ Respond ONLY with valid JSON:
                 {manualPositions.length === 0 ? (
                   <div style={{textAlign:'center',padding:'3rem',color:'var(--text-muted)'}}>
                     <div style={{fontSize:'2.5rem',marginBottom:'0.75rem'}}>✏️</div>
-                    <div style={{fontWeight:700,color:'var(--text-main)',marginBottom:'0.5rem'}}>No positions added</div>
-                    <div style={{fontSize:'0.85rem'}}>Add your positions manually to track P&L across any broker</div>
+                    <div style={{fontWeight:700,color:'var(--text-main)',marginBottom:'0.5rem'}}>No positions yet</div>
+                    <div style={{fontSize:'0.85rem'}}>Upload a screenshot or add positions manually</div>
                   </div>
                 ) : (
                   <div className="panel" style={{overflowX:'auto'}}>
                     <h3 style={{marginTop:0,marginBottom:'1rem'}}>Manual Positions ({manualPositions.length})</h3>
                     <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.83rem'}}>
                       <thead><tr style={{background:'var(--bg-surface)'}}>
-                        {['Symbol','Type','Qty','Avg Price','Product','Action'].map(h=>(
+                        {['Symbol','Type','Qty','Avg Price','Product','Remove'].map(h=>(
                           <th key={h} style={{padding:'0.5rem 0.75rem',textAlign:'left',color:'var(--text-muted)',fontSize:'0.72rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
                         ))}
                       </tr></thead>
@@ -6183,7 +6191,7 @@ Respond ONLY with valid JSON:
                               </span>
                             </td>
                             <td style={{padding:'0.6rem 0.75rem'}}>{pos.qty}</td>
-                            <td style={{padding:'0.6rem 0.75rem'}}>Rs {(+pos.avgPrice).toFixed(2)}</td>
+                            <td style={{padding:'0.6rem 0.75rem'}}>Rs {Number(pos.avgPrice).toFixed(2)}</td>
                             <td style={{padding:'0.6rem 0.75rem',color:'var(--text-muted)',fontSize:'0.78rem'}}>{pos.product}</td>
                             <td style={{padding:'0.6rem 0.75rem'}}>
                               <button onClick={()=>removeManualPosition(pos.id)}
@@ -6195,9 +6203,6 @@ Respond ONLY with valid JSON:
                         ))}
                       </tbody>
                     </table>
-                    <div style={{marginTop:'0.75rem',fontSize:'0.75rem',color:'var(--text-muted)'}}>
-                      Positions saved in your browser. Live P&L coming soon with NSE price feed integration.
-                    </div>
                   </div>
                 )}
               </div>
@@ -6209,7 +6214,7 @@ Respond ONLY with valid JSON:
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem'}}>
               <div>
                 <h2 style={{margin:0,fontSize:'1.35rem'}}>⏰ Expiry Day Tools</h2>
-                <p style={{color:'var(--text-dim)',fontSize:'0.82rem',margin:'0.2rem 0 0'}}>Max Pain · PCR · OI Analysis · Key Levels</p>
+                <p style={{color:'var(--text-dim)',fontSize:'0.82rem',margin:'0.2rem 0 0'}}>Max Pain  |  PCR  |  OI Analysis  |  Key Levels</p>
               </div>
               <div style={{display:'flex',gap:'0.5rem',alignItems:'center',flexWrap:'wrap'}}>
                 {['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY'].map(sym => (
@@ -6252,7 +6257,7 @@ Respond ONLY with valid JSON:
                     <span style={{fontSize:'1.5rem'}}>🔥</span>
                     <div>
                       <div style={{fontWeight:700,color:'#f97316'}}>Today is Expiry Day!</div>
-                      <div style={{fontSize:'0.82rem',color:'var(--text-dim)'}}>Weekly options expire today — monitor max pain and PCR closely</div>
+                      <div style={{fontSize:'0.82rem',color:'var(--text-dim)'}}>Weekly options expire today  -  monitor max pain and PCR closely</div>
                     </div>
                   </div>
                 )}
@@ -6279,7 +6284,7 @@ Respond ONLY with valid JSON:
 
                 {/* OI Chart */}
                 <div className="panel" style={{marginBottom:'1.25rem'}}>
-                  <h3 style={{marginTop:0,marginBottom:'1rem',fontSize:'1rem'}}>📊 Open Interest — CE vs PE</h3>
+                  <h3 style={{marginTop:0,marginBottom:'1rem',fontSize:'1rem'}}>📊 Open Interest  -  CE vs PE</h3>
                   <div style={{overflowX:'auto'}}>
                     <div style={{minWidth:'500px'}}>
                       {(expiryData.oiChart || []).map(row => {
@@ -6335,6 +6340,244 @@ Respond ONLY with valid JSON:
               </>
             )}
           </div>
+
+        ) : activeTab === 'gex' ? (
+          <div>
+            <div style={{marginBottom:'1.25rem'}}>
+              <h2 style={{margin:'0 0 0.25rem'}}>GEX + Greeks Analysis</h2>
+              <p style={{color:'var(--text-dim)',fontSize:'0.82rem',margin:0}}>
+                Gamma Exposure (GEX), Delta Walls, Vanna, Charm - calculated live from NSE option chain
+              </p>
+            </div>
+            <div style={{display:'flex',gap:'0.5rem',marginBottom:'1.25rem',flexWrap:'wrap',alignItems:'center'}}>
+              {['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY'].map(sym=>(
+                <button key={sym} onClick={()=>{setGexSymbol(sym);fetchGex(sym);}}
+                  style={{padding:'0.4rem 0.85rem',borderRadius:'20px',fontSize:'0.82rem',fontWeight:700,cursor:'pointer',
+                    background:gexSymbol===sym?'var(--accent)':'var(--bg-surface)',
+                    color:gexSymbol===sym?'#000':'var(--text-dim)',
+                    border:gexSymbol===sym?'2px solid var(--accent)':'1px solid var(--border)'}}>
+                  {sym}
+                </button>
+              ))}
+              <button onClick={()=>fetchGex(gexSymbol)} disabled={gexLoading}
+                style={{background:'#6366f1',color:'#fff',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem',marginLeft:'auto'}}>
+                {gexLoading ? 'Calculating...' : 'Load GEX'}
+              </button>
+            </div>
+            {gexError && (
+              <div style={{background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.3)',borderRadius:'10px',padding:'1rem',marginBottom:'1rem',color:'#f87171',fontSize:'0.85rem'}}>
+                {gexError}
+              </div>
+            )}
+            {!gexData && !gexLoading && !gexError && (
+              <div style={{textAlign:'center',padding:'4rem 2rem',color:'var(--text-dim)'}}>
+                <div style={{fontSize:'3rem',marginBottom:'1rem'}}>🎯</div>
+                <div style={{fontWeight:700,fontSize:'1.1rem',color:'var(--text-main)',marginBottom:'0.5rem'}}>Gamma Exposure Analysis</div>
+                <div style={{fontSize:'0.88rem',maxWidth:'480px',margin:'0 auto 1.5rem',lineHeight:1.7}}>
+                  Understand where market makers are positioned. GEX reveals hidden support and resistance levels that traditional charts miss.
+                </div>
+                <button onClick={()=>fetchGex(gexSymbol)}
+                  style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',border:'none',borderRadius:'10px',padding:'0.85rem 2.5rem',fontWeight:800,fontSize:'1rem',cursor:'pointer'}}>
+                  Analyze {gexSymbol} GEX
+                </button>
+              </div>
+            )}
+            {gexData && (
+              <>
+                <div style={{
+                  borderRadius:'12px',padding:'1rem 1.5rem',marginBottom:'1.25rem',
+                  background:gexData.regime==='positive'?'rgba(74,222,128,0.08)':'rgba(248,113,113,0.08)',
+                  border:`1px solid ${gexData.regime==='positive'?'rgba(74,222,128,0.3)':'rgba(248,113,113,0.3)'}`,
+                  display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'0.5rem'
+                }}>
+                  <div>
+                    <div style={{fontWeight:800,fontSize:'1rem',color:gexData.regime==='positive'?'#4ade80':'#f87171'}}>
+                      {gexData.regime==='positive'?'POSITIVE GAMMA REGIME':'NEGATIVE GAMMA REGIME'}
+                    </div>
+                    <div style={{fontSize:'0.82rem',color:'var(--text-dim)',marginTop:'0.2rem'}}>{gexData.zoneLabel}</div>
+                  </div>
+                  <div style={{textAlign:'right'}}>
+                    <div style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>SPOT</div>
+                    <div style={{fontSize:'1.2rem',fontWeight:800,color:'var(--text-main)'}}>{(gexData.spot||0).toLocaleString('en-IN')}</div>
+                  </div>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'0.75rem',marginBottom:'1.25rem'}}>
+                  {[
+                    {label:'Gamma Flip',  value:gexData.gammaFlip?gexData.gammaFlip.toLocaleString('en-IN'):'None', sublabel:'Regime change level', color:'#f97316'},
+                    {label:'Vanna Flip',  value:gexData.vannaFlip?gexData.vannaFlip.toLocaleString('en-IN'):'None', sublabel:'Vol-driven reversal',  color:'#a78bfa'},
+                    {label:'Charm Centre',value:(gexData.charmCentre||0).toLocaleString('en-IN'),                  sublabel:'Expiry pin level',      color:'#38bdf8'},
+                    {label:'Total GEX',   value:(gexData.totalGEX>=0?'+':'')+gexData.totalGEX.toLocaleString('en-IN'), sublabel:'Net dealer exposure', color:gexData.totalGEX>=0?'#4ade80':'#f87171'},
+                  ].map(({label,value,sublabel,color})=>(
+                    <div key={label} className="panel" style={{padding:'1rem'}}>
+                      <div style={{fontSize:'0.72rem',color:'var(--text-muted)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'0.3rem'}}>{label}</div>
+                      <div style={{fontSize:'1.15rem',fontWeight:800,color,margin:'0.2rem 0'}}>{value}</div>
+                      <div style={{fontSize:'0.72rem',color:'var(--text-dim)'}}>{sublabel}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.75rem',marginBottom:'1.25rem'}}>
+                  <div className="panel">
+                    <div style={{fontWeight:700,marginBottom:'0.5rem',color:'#f87171'}}>Call Walls (Resistance)</div>
+                    <div style={{fontSize:'0.78rem',color:'var(--text-dim)',marginBottom:'0.75rem',lineHeight:1.5}}>Dealers sold calls here. They sell the underlying if price rises.</div>
+                    {(gexData.topCallOI||[]).map((s,i)=>(
+                      <div key={s} style={{display:'flex',justifyContent:'space-between',padding:'0.4rem 0',borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
+                        <span style={{fontWeight:700,color:i===0?'#f87171':'var(--text-main)'}}>{s.toLocaleString('en-IN')}</span>
+                        <span style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>Wall #{i+1}{i===0?' (strongest)':''}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="panel">
+                    <div style={{fontWeight:700,marginBottom:'0.5rem',color:'#4ade80'}}>Put Walls (Support)</div>
+                    <div style={{fontSize:'0.78rem',color:'var(--text-dim)',marginBottom:'0.75rem',lineHeight:1.5}}>Dealers sold puts here. They buy the underlying if price falls.</div>
+                    {(gexData.topPutOI||[]).map((s,i)=>(
+                      <div key={s} style={{display:'flex',justifyContent:'space-between',padding:'0.4rem 0',borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
+                        <span style={{fontWeight:700,color:i===0?'#4ade80':'var(--text-main)'}}>{s.toLocaleString('en-IN')}</span>
+                        <span style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>Wall #{i+1}{i===0?' (strongest)':''}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {gexData.strikes && gexData.strikes.length > 0 && (
+                  <div className="panel" style={{overflowX:'auto',marginBottom:'1.25rem'}}>
+                    <div style={{fontWeight:700,marginBottom:'1rem'}}>Strike-level GEX (Near ATM)</div>
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.8rem'}}>
+                      <thead>
+                        <tr style={{background:'var(--bg-surface)'}}>
+                          {['Strike','Net GEX','CE Delta','PE Delta','Vanna','Charm','CE OI','PE OI'].map(h=>(
+                            <th key={h} style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'var(--text-muted)',fontSize:'0.7rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {gexData.strikes.map(s=>{
+                          const atm=Math.abs(s.strike-gexData.spot)<100;
+                          return (
+                            <tr key={s.strike} style={{borderBottom:'1px solid rgba(255,255,255,0.04)',background:atm?'rgba(249,115,22,0.08)':'transparent'}}>
+                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',fontWeight:atm?800:600,color:atm?'#f97316':'var(--text-main)'}}>{s.strike.toLocaleString('en-IN')}{atm?' *':''}</td>
+                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',fontWeight:700,color:s.netGEX>=0?'#4ade80':'#f87171'}}>{s.netGEX>=0?'+':''}{Math.round(s.netGEX).toLocaleString('en-IN')}</td>
+                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'#f87171'}}>{(s.ceDelta/1000).toFixed(1)}K</td>
+                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'#4ade80'}}>{(s.peDelta/1000).toFixed(1)}K</td>
+                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'#a78bfa'}}>{s.netVanna.toFixed(0)}</td>
+                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'#38bdf8'}}>{s.netCharm.toFixed(0)}</td>
+                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'var(--text-dim)'}}>{(s.ceOI/1000).toFixed(0)}K</td>
+                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'var(--text-dim)'}}>{(s.peOI/1000).toFixed(0)}K</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.5rem'}}>* ATM strike</div>
+                  </div>
+                )}
+                <div className="panel" style={{background:'rgba(99,102,241,0.05)',border:'1px solid rgba(99,102,241,0.2)'}}>
+                  <div style={{fontWeight:700,marginBottom:'0.75rem',color:'#818cf8'}}>How to read this</div>
+                  <div style={{fontSize:'0.82rem',color:'var(--text-dim)',lineHeight:1.8}}>
+                    <b style={{color:'#f97316'}}>Gamma Flip:</b> Strike where dealers switch from range-bound to trend-amplifying. Spot above flip = stable. Spot below = volatile.<br/>
+                    <b style={{color:'#a78bfa'}}>Vanna Flip:</b> When VIX spikes or crashes, dealers rehedge here. Key on RBI policy days, earnings, expiry.<br/>
+                    <b style={{color:'#38bdf8'}}>Charm Centre:</b> As expiry approaches, time decay forces hedge unwind. Price gravitates here on expiry day (pin risk).<br/>
+                    <b style={{color:'#4ade80'}}>Put Walls:</b> Strong support - dealers buy underlying if price falls to defend short puts.<br/>
+                    <b style={{color:'#f87171'}}>Call Walls:</b> Strong resistance - dealers sell underlying if price rises to defend short calls.
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+        ) : activeTab === 'admin' && isAdmin ? (
+          <div>
+            <div style={{marginBottom:'1.5rem'}}>
+              <h2 style={{margin:'0 0 0.3rem'}}>Admin Panel</h2>
+              <p style={{color:'var(--text-dim)',fontSize:'0.82rem',margin:0}}>Manage users and subscriptions</p>
+            </div>
+            {adminMsg && (
+              <div style={{background:'rgba(0,255,136,0.1)',border:'1px solid rgba(0,255,136,0.3)',borderRadius:'8px',padding:'0.75rem 1rem',marginBottom:'1rem',fontSize:'0.85rem',color:'var(--accent)',display:'flex',justifyContent:'space-between'}}>
+                <span>{adminMsg}</span>
+                <button onClick={()=>setAdminMsg('')} style={{background:'none',border:'none',color:'var(--text-dim)',cursor:'pointer'}}>X</button>
+              </div>
+            )}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'0.75rem',marginBottom:'1.5rem'}}>
+              {[
+                {label:'Total Users',val:adminUsers.length,                                                   color:'var(--text-main)'},
+                {label:'Pro Users',  val:adminUsers.filter(u=>u.subStatus==='pro').length,                    color:'#f97316'},
+                {label:'On Trial',   val:adminUsers.filter(u=>u.subStatus!=='pro'&&u.subStatus!=='expired').length, color:'var(--accent)'},
+                {label:'Expired',    val:adminUsers.filter(u=>u.subStatus==='expired').length,                color:'#f87171'},
+              ].map(({label,val,color})=>(
+                <div key={label} className="panel" style={{textAlign:'center',padding:'0.85rem'}}>
+                  <div style={{fontSize:'1.6rem',fontWeight:900,color}}>{val}</div>
+                  <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'2px'}}>{label}</div>
+                </div>
+              ))}
+            </div>
+            <div className="panel">
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:'0.75rem'}}>
+                <h3 style={{margin:0}}>All Users</h3>
+                <div style={{display:'flex',gap:'0.5rem'}}>
+                  <input value={adminSearch} onChange={e=>setAdminSearch(e.target.value)}
+                    placeholder="Search email..."
+                    style={{background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.4rem 0.75rem',color:'var(--text-main)',fontSize:'0.82rem',width:'180px'}}/>
+                  <button onClick={fetchAllUsers} disabled={adminLoading}
+                    style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
+                    {adminLoading?'Loading...':'Load Users'}
+                  </button>
+                </div>
+              </div>
+              {adminUsers.length === 0 ? (
+                <div style={{textAlign:'center',padding:'3rem',color:'var(--text-muted)'}}>
+                  <div style={{fontSize:'2.5rem',marginBottom:'0.75rem'}}>👥</div>
+                  <div>Click Load Users to see all registered users</div>
+                </div>
+              ) : (
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.82rem'}}>
+                    <thead>
+                      <tr style={{background:'var(--bg-surface)'}}>
+                        {['Email','Name','Joined','Status','Action'].map(h=>(
+                          <th key={h} style={{padding:'0.5rem 0.75rem',textAlign:'left',color:'var(--text-muted)',fontSize:'0.72rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminUsers
+                        .filter(u=>!adminSearch||(u.email||'').toLowerCase().includes(adminSearch.toLowerCase())||(u.name||'').toLowerCase().includes(adminSearch.toLowerCase()))
+                        .map(u=>{
+                          const isPro=u.subStatus==='pro';
+                          const joined=u.createdAt?.toDate?.()?.toLocaleDateString('en-IN')||'Unknown';
+                          return (
+                            <tr key={u.id} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                              <td style={{padding:'0.6rem 0.75rem',color:'var(--text-dim)'}}>{u.email||u.id}</td>
+                              <td style={{padding:'0.6rem 0.75rem',fontWeight:600}}>{u.name||'-'}</td>
+                              <td style={{padding:'0.6rem 0.75rem',color:'var(--text-muted)',fontSize:'0.75rem'}}>{joined}</td>
+                              <td style={{padding:'0.6rem 0.75rem'}}>
+                                <span style={{padding:'2px 10px',borderRadius:'20px',fontSize:'0.72rem',fontWeight:700,
+                                  background:isPro?'rgba(249,115,22,0.15)':'rgba(0,255,136,0.1)',
+                                  color:isPro?'#f97316':'var(--accent)',
+                                  border:`1px solid ${isPro?'rgba(249,115,22,0.3)':'rgba(0,255,136,0.3)'}`}}>
+                                  {isPro?'PRO':'Trial'}
+                                </span>
+                              </td>
+                              <td style={{padding:'0.6rem 0.75rem'}}>
+                                {isPro ? (
+                                  <button onClick={()=>setUserPro(u.id,false)}
+                                    style={{background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.3)',color:'#f87171',borderRadius:'6px',padding:'3px 10px',cursor:'pointer',fontSize:'0.75rem',fontWeight:700}}>
+                                    Remove Pro
+                                  </button>
+                                ) : (
+                                  <button onClick={()=>setUserPro(u.id,true)}
+                                    style={{background:'rgba(249,115,22,0.15)',border:'1px solid rgba(249,115,22,0.4)',color:'#f97316',borderRadius:'6px',padding:'3px 10px',cursor:'pointer',fontSize:'0.75rem',fontWeight:700}}>
+                                    Make Pro
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
         ) : null}
 
         {/* -- FOOTER -- */}
@@ -6351,7 +6594,7 @@ Respond ONLY with valid JSON:
             ))}
           </div>
           <div style={{marginTop:'0.75rem',fontSize:'0.72rem',color:'var(--text-muted)'}}>
-            © 2025 DeltaBuddy · <a href="mailto:legal@deltabuddy.com" style={{color:'var(--text-muted)'}}>legal@deltabuddy.com</a>
+            © 2025 DeltaBuddy  |  <a href="mailto:legal@deltabuddy.com" style={{color:'var(--text-muted)'}}>legal@deltabuddy.com</a>
           </div>
         </div>
 
@@ -6477,7 +6720,7 @@ Respond ONLY with valid JSON:
               ))}
 
               {showLegal==='privacy' && [
-                ['1. Data We Collect','Account: Email, display name, profile photo (via Google Sign-In). Trading Data: Strategies, journal entries, paper trades stored in Firebase. Technical: IP address, browser type, session duration. Preferences: Groq API key, Telegram Chat ID, notification settings. Payment: We do NOT store card or bank details — only Razorpay transaction IDs.'],
+                ['1. Data We Collect','Account: Email, display name, profile photo (via Google Sign-In). Trading Data: Strategies, journal entries, paper trades stored in Firebase. Technical: IP address, browser type, session duration. Preferences: Groq API key, Telegram Chat ID, notification settings. Payment: We do NOT store card or bank details  -  only Razorpay transaction IDs.'],
                 ['2. How We Use Your Data','To provide and improve the platform. To send Telegram alerts you subscribed to. To process payments. We do NOT sell your data or use your trading journal for advertising.'],
                 ['3. Third-Party Services','Firebase (Google): Authentication and database. Razorpay: Payment processing. Groq AI / Google Gemini: AI processing of news text only. Yahoo Finance / NSE: Public market data.'],
                 ['4. Data Security','Data stored in Google Firebase (Mumbai region). HTTPS/TLS encryption in transit. Firebase Security Rules restrict access to authenticated users only.'],
@@ -6495,8 +6738,8 @@ Respond ONLY with valid JSON:
                 ['1. Free Trial','All new users get 90 days free with full access. No payment required during trial. Cancel anytime at zero cost.'],
                 ['2. Paid Subscription','After the trial, continued access requires ₹299/quarter, billed via Razorpay. You will receive email reminders 7 days before the first charge.'],
                 ['3. Cancellation','Cancel anytime via Account Settings or by emailing legal@deltabuddy.com. You retain access until the end of the current billing period.'],
-                ['4. Refund Policy','Within 7 days of any charge: Full refund, no questions asked. After 7 days: No pro-rated refunds — you retain access until quarter end. Service outage >72 hours: Pro-rated credit for next cycle.'],
-                ['5. Refund Process','Approved refunds processed within 5–7 business days to the original payment method.'],
+                ['4. Refund Policy','Within 7 days of any charge: Full refund, no questions asked. After 7 days: No pro-rated refunds  -  you retain access until quarter end. Service outage >72 hours: Pro-rated credit for next cycle.'],
+                ['5. Refund Process','Approved refunds processed within 5-7 business days to the original payment method.'],
                 ['6. Price Changes','We will notify you at least 30 days before any price increase.'],
                 ['7. Contact','Email legal@deltabuddy.com with your registered email and transaction ID. Response within 2 business days.'],
               ].map(([h,p])=>(
@@ -6521,7 +6764,7 @@ Respond ONLY with valid JSON:
               ))}
 
               <div style={{marginTop:'1.5rem',paddingTop:'1rem',borderTop:'1px solid var(--border)',fontSize:'0.75rem',color:'var(--text-muted)',textAlign:'center'}}>
-                Questions? <a href="mailto:legal@deltabuddy.com" style={{color:'var(--accent)'}}>legal@deltabuddy.com</a> · © 2025 DeltaBuddy
+                Questions? <a href="mailto:legal@deltabuddy.com" style={{color:'var(--accent)'}}>legal@deltabuddy.com</a>  |  © 2025 DeltaBuddy
               </div>
             </div>
           </div>
@@ -6549,26 +6792,63 @@ Respond ONLY with valid JSON:
           </svg>
         </a>
 
-        {/* -- PULSE ANIMATION + MOBILE OVERRIDES -- */}
+        {/* -- STYLES -- */}
         <style>{`
           @keyframes waPulse {
             0%   { box-shadow: 0 0 0 0 rgba(37,211,102,0.5); }
             70%  { box-shadow: 0 0 0 12px rgba(37,211,102,0); }
             100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); }
           }
+          @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+          /* NAV - desktop: show links, hide hamburger */
+          .nav-links { display: flex; }
+          .hamburger { display: none; font-size: 1.4rem; }
+
+          /* MOBILE: hide nav links, show hamburger */
           @media (max-width: 768px) {
-            .main-content, [class*="main-content"] { padding: 0.75rem !important; }
-            .panel, [class*="panel"] { padding: 0.75rem !important; border-radius: 8px !important; }
+            .nav-links { display: none !important; }
+            .hamburger { display: block !important; }
+
+            /* Navbar right: hide trial badge and telegram on small screens */
+            .trial-badge { display: none !important; }
+            .tg-btn { display: none !important; }
+
+            /* Main content padding */
+            .main-content { padding: 0.75rem !important; }
+            .panel { padding: 0.75rem !important; border-radius: 8px !important; }
+
+            /* Tables scroll horizontally */
+            table { display: block !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+
+            /* Modals full width */
+            .modal-content {
+              width: 96% !important;
+              max-width: 96% !important;
+              margin: 0.5rem auto !important;
+              max-height: 90vh !important;
+              padding: 1rem !important;
+            }
+
+            /* Grids collapse to 1 column */
             .quick-actions-grid { grid-template-columns: 1fr !important; }
-            .option-chain-table { font-size: 0.72rem !important; }
-            .modal-content { width: 95% !important; max-width: 95% !important; margin: 0.5rem !important; max-height: 85vh !important; }
-            table { display: block !important; overflow-x: auto !important; }
-            .page-header h1 { font-size: 1.3rem !important; }
-            [style*="minmax(260px"] { grid-template-columns: 1fr !important; }
+            .page-header h1 { font-size: 1.2rem !important; }
+
+            /* Option chain: smaller font */
+            .option-chain-table th,
+            .option-chain-table td { font-size: 0.68rem !important; padding: 0.3rem 0.4rem !important; }
+
+            /* Broker selector wraps */
+            .broker-selector { flex-wrap: wrap !important; }
+
+            /* Home greeting */
+            .home-greeting { flex-direction: column !important; align-items: flex-start !important; }
           }
+
           @media (max-width: 480px) {
-            [style*="grid-template-columns: repeat(auto-fit"] { grid-template-columns: 1fr 1fr !important; }
-            .ticker-items { gap: 0.75rem !important; }
+            .navbar-right .trial-badge { display: none; }
+            .ticker-items { gap: 0.5rem !important; }
+            h2 { font-size: 1.1rem !important; }
           }
         `}</style>
 
