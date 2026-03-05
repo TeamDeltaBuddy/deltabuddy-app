@@ -6031,7 +6031,7 @@ Respond ONLY with valid JSON:
                           <button onClick={()=>analyzeScreenshot(screenshotFile)} disabled={screenshotAnalyzing}
                             style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',border:'none',borderRadius:'8px',padding:'0.65rem 1.5rem',fontWeight:700,cursor:'pointer',fontSize:'0.9rem',display:'flex',alignItems:'center',gap:'0.5rem'}}>
                             {screenshotAnalyzing ? (
-                              Analyzing...
+                              'Analyzing...'
                             ) : '🤖 Analyze with AI'}
                           </button>
                         </div>
