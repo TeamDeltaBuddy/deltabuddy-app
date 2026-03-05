@@ -3284,6 +3284,66 @@ Respond ONLY with valid JSON:
               Sign In Free →
             </button>
           </div>
+
+          {/* ── SECURITY & TRUST SECTION ── */}
+          <div style={{margin:'2rem 0',padding:'1.5rem',background:'linear-gradient(135deg,rgba(0,255,136,0.04),rgba(56,189,248,0.04))',border:'1px solid rgba(0,255,136,0.15)',borderRadius:'16px'}}>
+            <div style={{textAlign:'center',marginBottom:'1.5rem'}}>
+              <div style={{fontSize:'1.8rem',marginBottom:'0.5rem'}}>🔒</div>
+              <h3 style={{margin:0,fontSize:'1.05rem',color:'var(--text-main)'}}>Your Data is Safe with DeltaBuddy</h3>
+              <p style={{color:'var(--text-dim)',fontSize:'0.82rem',margin:'0.4rem 0 0'}}>We take security seriously. Here's exactly how we protect you.</p>
+            </div>
+
+            {/* Trust cards */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:'1rem',marginBottom:'1.5rem'}}>
+              {[
+                {icon:'🏦', title:'Bank-Grade Encryption', desc:'All data encrypted in transit (TLS 1.3) and at rest. Same standard used by banks.'},
+                {icon:'🔐', title:'Firebase by Google', desc:'Your data lives in Google Firebase — Mumbai region. ISO 27001 certified infrastructure.'},
+                {icon:'👤', title:'You Own Your Data', desc:'Your journal, trades, and settings are private to you. We cannot read them.'},
+                {icon:'🚫', title:'We Never Sell Data', desc:'No ads. No data brokers. No third-party sharing. Your trading data stays yours.'},
+                {icon:'🔑', title:'No Broker Passwords Stored', desc:'We store only your API token — never your broker login, password, or MPIN.'},
+                {icon:'⚡', title:'Google Sign-In', desc:'Login via Google means no password to steal. Your account is secured by Google\'s 2FA.'},
+              ].map(({icon,title,desc})=>(
+                <div key={title} style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1rem',display:'flex',gap:'0.75rem',alignItems:'flex-start'}}>
+                  <span style={{fontSize:'1.4rem',flexShrink:0}}>{icon}</span>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:'0.82rem',color:'var(--text-main)',marginBottom:'0.25rem'}}>{title}</div>
+                    <div style={{fontSize:'0.75rem',color:'var(--text-dim)',lineHeight:1.5}}>{desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* What we store vs don't */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem',marginBottom:'1.25rem'}}>
+              <div style={{background:'rgba(74,222,128,0.06)',border:'1px solid rgba(74,222,128,0.2)',borderRadius:'10px',padding:'1rem'}}>
+                <div style={{fontWeight:700,fontSize:'0.8rem',color:'#4ade80',marginBottom:'0.6rem'}}>✅ What we store</div>
+                {['Your email (for login)','Journal entries you write','Paper trade history','Telegram Chat ID (alerts)','Display name & profile photo'].map(item=>(
+                  <div key={item} style={{fontSize:'0.75rem',color:'var(--text-dim)',padding:'0.2rem 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>{item}</div>
+                ))}
+              </div>
+              <div style={{background:'rgba(248,113,113,0.06)',border:'1px solid rgba(248,113,113,0.2)',borderRadius:'10px',padding:'1rem'}}>
+                <div style={{fontWeight:700,fontSize:'0.8rem',color:'#f87171',marginBottom:'0.6rem'}}>❌ What we NEVER store</div>
+                {['Broker passwords or MPIN','Bank account details','Credit/debit card numbers','Your actual trades from broker','Aadhaar or PAN number'].map(item=>(
+                  <div key={item} style={{fontSize:'0.75rem',color:'var(--text-dim)',padding:'0.2rem 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>{item}</div>
+                ))}
+              </div>
+            </div>
+
+            {/* Badges */}
+            <div style={{display:'flex',justifyContent:'center',gap:'1.5rem',flexWrap:'wrap',paddingTop:'0.75rem',borderTop:'1px solid var(--border)'}}>
+              {[
+                {badge:'🔒', label:'SSL / TLS 1.3'},
+                {badge:'🌐', label:'Google Firebase'},
+                {badge:'🇮🇳', label:'Mumbai Region'},
+                {badge:'🛡️', label:'ISO 27001 Infra'},
+                {badge:'📵', label:'No Ads Ever'},
+              ].map(({badge,label})=>(
+                <div key={label} style={{display:'flex',alignItems:'center',gap:'0.4rem',fontSize:'0.75rem',color:'var(--text-dim)',fontWeight:600}}>
+                  <span>{badge}</span><span>{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         ) : activeTab === 'single' ? (
           <>
             <div className="page-header">
