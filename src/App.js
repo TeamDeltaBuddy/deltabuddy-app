@@ -1122,6 +1122,10 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [expirySymbol, setExpirySymbol]   = useState('NIFTY');
   const [showLegal, setShowLegal]         = useState(null);
   const [showPricing, setShowPricing]     = useState(false);
+  const [adminUsers, setAdminUsers]       = useState([]);
+  const [adminLoading, setAdminLoading]   = useState(false);
+  const [adminMsg, setAdminMsg]           = useState('');
+  const [adminSearch, setAdminSearch]     = useState('');
   const [subStatus, setSubStatus]         = useState('trial');
   const [trialDaysLeft, setTrialDaysLeft] = useState(90);
   const [watchlist, setWatchlist]         = useState(() => { try { return JSON.parse(localStorage.getItem('db_watchlist')||'[]'); } catch(e) { return []; }});
@@ -1165,6 +1169,27 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
       else setPortfolio(data);
     } catch(e) { setPortfolioError('Could not connect to backend'); }
     finally { setPortfolioLoading(false); }
+  };
+
+  // ── ADMIN FUNCTIONS ────────────────────────────────────────────────────────
+  const fetchAllUsers = async () => {
+    if (!isAdmin) return;
+    setAdminLoading(true);
+    try {
+      const snap = await getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc')));
+      const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setAdminUsers(users);
+    } catch(e) { setAdminMsg('Error: ' + e.message); }
+    finally { setAdminLoading(false); }
+  };
+
+  const setUserPro = async (uid, makePro) => {
+    if (!isAdmin) return;
+    try {
+      await setDoc(doc(db, 'users', uid), { subStatus: makePro ? 'pro' : 'trial' }, { merge: true });
+      setAdminMsg(makePro ? '✅ User upgraded to Pro' : '✅ User reverted to Trial');
+      fetchAllUsers();
+    } catch(e) { setAdminMsg('Error: ' + e.message); }
   };
 
   const fetchExpiryData = async (sym) => {
@@ -1814,12 +1839,20 @@ Respond ONLY with valid JSON:
       // Watchlist: every 30 seconds
       const watchInterval = setInterval(fetchWatchlistPrices, 30000);
 
+      // Portfolio: every 30 seconds
+      const portfolioInterval = setInterval(fetchPortfolio, 30000);
+
+      // Expiry tools: every 60 seconds
+      const expiryInterval = setInterval(() => fetchExpiryData(expirySymbol), 60000);
+
       return () => {
         clearInterval(globalInterval);
         clearInterval(indiaInterval);
         clearInterval(chainInterval);
         clearInterval(newsInterval);
         clearInterval(watchInterval);
+        clearInterval(portfolioInterval);
+        clearInterval(expiryInterval);
       };
     }
   }, [isLiveMode, selectedUnderlying, selectedChartSymbol, chartTimeframe]);
@@ -2202,6 +2235,7 @@ Respond ONLY with valid JSON:
               ['paper',        '📝 Paper'],
               ['portfolio',    '💼 Portfolio'],
               ['expiry',       '⏰ Expiry'],
+              ...(isAdmin ? [['admin', '🛡️ Admin']] : []),
             ].map(([tab,label])=>(
               <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}>
                 {label}
@@ -2279,6 +2313,7 @@ Respond ONLY with valid JSON:
             ['paper',        '📝 Paper Trade'],
             ['portfolio',    '💼 Portfolio'],
             ['expiry',       '⏰ Expiry Day'],
+            ...(isAdmin ? [['admin', '🛡️ Admin']] : []),
           ].map(([tab,label])=>(
             <div key={tab}
               onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}
@@ -2650,6 +2685,39 @@ Respond ONLY with valid JSON:
                       style={{flex:1,background:'var(--bg-surface)',color:'var(--text-dim)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.6rem',cursor:'pointer'}}>
                       Cancel
                     </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* PERSONALISED GREETING */}
+            {currentUser && (
+              <div style={{padding:'1rem 1.5rem 0'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'0.5rem'}}>
+                  <div>
+                    <span style={{fontSize:'1.1rem',fontWeight:700,color:'var(--text-main)'}}>
+                      Good {new Date().getHours()<12?'morning':new Date().getHours()<17?'afternoon':'evening'}, {currentUser?.displayName?.split(' ')[0] || 'Trader'} 👋
+                    </span>
+                    <div style={{fontSize:'0.78rem',color:'var(--text-dim)',marginTop:'2px'}}>
+                      {new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap'}}>
+                    {subStatus==='trial' && (
+                      <span onClick={()=>setShowPricing(true)} style={{fontSize:'0.75rem',padding:'0.25rem 0.75rem',borderRadius:'20px',background:'rgba(0,255,136,0.1)',border:'1px solid rgba(0,255,136,0.25)',color:'var(--accent)',cursor:'pointer',fontWeight:600}}>
+                        {trialDaysLeft} days free trial remaining
+                      </span>
+                    )}
+                    {subStatus==='expired' && (
+                      <span onClick={()=>setShowPricing(true)} style={{fontSize:'0.75rem',padding:'0.25rem 0.75rem',borderRadius:'20px',background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.3)',color:'#f87171',cursor:'pointer',fontWeight:600}}>
+                        Trial expired - Upgrade to Pro
+                      </span>
+                    )}
+                    {subStatus==='pro' && (
+                      <span style={{fontSize:'0.75rem',padding:'0.25rem 0.75rem',borderRadius:'20px',background:'linear-gradient(135deg,rgba(249,115,22,0.15),rgba(251,191,36,0.1))',border:'1px solid rgba(249,115,22,0.3)',color:'#f97316',fontWeight:700}}>
+                        PRO Member
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -5732,6 +5800,109 @@ Respond ONLY with valid JSON:
                 )}
               </>
             )}
+          </div>
+
+        ) : activeTab === 'admin' && isAdmin ? (
+          <div>
+            <div style={{marginBottom:'1.5rem'}}>
+              <h2 style={{margin:'0 0 0.3rem'}}>Admin Panel</h2>
+              <p style={{color:'var(--text-dim)',fontSize:'0.82rem',margin:0}}>Manage users and subscriptions</p>
+            </div>
+
+            {adminMsg && (
+              <div style={{background:'rgba(0,255,136,0.1)',border:'1px solid rgba(0,255,136,0.3)',borderRadius:'8px',padding:'0.75rem 1rem',marginBottom:'1rem',fontSize:'0.85rem',color:'var(--accent)',display:'flex',justifyContent:'space-between'}}>
+                <span>{adminMsg}</span>
+                <button onClick={()=>setAdminMsg('')} style={{background:'none',border:'none',color:'var(--text-dim)',cursor:'pointer'}}>X</button>
+              </div>
+            )}
+
+            {/* Stats row */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'0.75rem',marginBottom:'1.5rem'}}>
+              {[
+                {label:'Total Users',  val: adminUsers.length,                                        color:'var(--text-main)'},
+                {label:'Pro Users',    val: adminUsers.filter(u=>u.subStatus==='pro').length,          color:'#f97316'},
+                {label:'On Trial',     val: adminUsers.filter(u=>u.subStatus!=='pro' && u.subStatus!=='expired').length, color:'var(--accent)'},
+                {label:'Expired',      val: adminUsers.filter(u=>u.subStatus==='expired').length,      color:'#f87171'},
+              ].map(({label,val,color})=>(
+                <div key={label} className="panel" style={{textAlign:'center',padding:'0.85rem'}}>
+                  <div style={{fontSize:'1.6rem',fontWeight:900,color}}>{val}</div>
+                  <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'2px'}}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* User management */}
+            <div className="panel">
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:'0.75rem'}}>
+                <h3 style={{margin:0}}>All Users</h3>
+                <div style={{display:'flex',gap:'0.5rem'}}>
+                  <input value={adminSearch} onChange={e=>setAdminSearch(e.target.value)}
+                    placeholder="Search email..."
+                    style={{background:'var(--bg-surface)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.4rem 0.75rem',color:'var(--text-main)',fontSize:'0.82rem',width:'180px'}}/>
+                  <button onClick={fetchAllUsers} disabled={adminLoading}
+                    style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
+                    {adminLoading ? 'Loading...' : 'Load Users'}
+                  </button>
+                </div>
+              </div>
+
+              {adminUsers.length === 0 ? (
+                <div style={{textAlign:'center',padding:'3rem',color:'var(--text-muted)'}}>
+                  <div style={{fontSize:'2.5rem',marginBottom:'0.75rem'}}>👥</div>
+                  <div>Click Load Users to see all registered users</div>
+                </div>
+              ) : (
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.82rem'}}>
+                    <thead>
+                      <tr style={{background:'var(--bg-surface)'}}>
+                        {['Email','Name','Joined','Status','Actions'].map(h=>(
+                          <th key={h} style={{padding:'0.5rem 0.75rem',textAlign:'left',color:'var(--text-muted)',fontSize:'0.72rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminUsers
+                        .filter(u => !adminSearch || (u.email||'').toLowerCase().includes(adminSearch.toLowerCase()) || (u.name||'').toLowerCase().includes(adminSearch.toLowerCase()))
+                        .map(u => {
+                          const isPro = u.subStatus === 'pro';
+                          const isExp = u.subStatus === 'expired';
+                          const joined = u.createdAt?.toDate?.()?.toLocaleDateString('en-IN') || 'Unknown';
+                          return (
+                            <tr key={u.id} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                              <td style={{padding:'0.6rem 0.75rem',color:'var(--text-dim)'}}>{u.email || u.id}</td>
+                              <td style={{padding:'0.6rem 0.75rem',fontWeight:600}}>{u.name || '—'}</td>
+                              <td style={{padding:'0.6rem 0.75rem',color:'var(--text-muted)',fontSize:'0.75rem'}}>{joined}</td>
+                              <td style={{padding:'0.6rem 0.75rem'}}>
+                                <span style={{padding:'2px 10px',borderRadius:'20px',fontSize:'0.72rem',fontWeight:700,
+                                  background: isPro ? 'rgba(249,115,22,0.15)' : isExp ? 'rgba(248,113,113,0.15)' : 'rgba(0,255,136,0.1)',
+                                  color: isPro ? '#f97316' : isExp ? '#f87171' : 'var(--accent)',
+                                  border: `1px solid ${isPro ? 'rgba(249,115,22,0.3)' : isExp ? 'rgba(248,113,113,0.3)' : 'rgba(0,255,136,0.3)'}`
+                                }}>
+                                  {isPro ? 'PRO' : isExp ? 'Expired' : 'Trial'}
+                                </span>
+                              </td>
+                              <td style={{padding:'0.6rem 0.75rem'}}>
+                                {isPro ? (
+                                  <button onClick={()=>setUserPro(u.id, false)}
+                                    style={{background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.3)',color:'#f87171',borderRadius:'6px',padding:'3px 10px',cursor:'pointer',fontSize:'0.75rem',fontWeight:700}}>
+                                    Remove Pro
+                                  </button>
+                                ) : (
+                                  <button onClick={()=>setUserPro(u.id, true)}
+                                    style={{background:'rgba(249,115,22,0.15)',border:'1px solid rgba(249,115,22,0.4)',color:'#f97316',borderRadius:'6px',padding:'3px 10px',cursor:'pointer',fontSize:'0.75rem',fontWeight:700}}>
+                                    Make Pro
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
 
         ) : activeTab === 'expiry' ? (
