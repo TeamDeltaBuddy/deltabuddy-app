@@ -1184,8 +1184,8 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [adminSearch, setAdminSearch]     = useState('');
   const [subStatus, setSubStatus]         = useState('trial');
   const [trialDaysLeft, setTrialDaysLeft] = useState(90);
-  // Helper — single source of truth for Pro check
-  const isPro = subStatus === 'pro';
+  // Helper — trial users get full Pro access for 90 days
+  const isPro = subStatus === 'pro' || subStatus === 'trial';
   const openUpgrade = () => setShowPricing(true);
   const [gexData, setGexData]             = useState(null);
   const [gexLoading, setGexLoading]       = useState(false);
@@ -2087,6 +2087,11 @@ Respond ONLY with valid JSON:
       };
     }
   }, [isLiveMode, selectedUnderlying, selectedChartSymbol, chartTimeframe]);
+
+  // Auto-load option chain on mount so PCR calculates immediately
+  useEffect(() => {
+    if (currentUser) fetchOptionChain();
+  }, [currentUser]);
 
   // Calculate PCR from option chain data
   useEffect(() => {
@@ -6764,10 +6769,24 @@ Respond ONLY with valid JSON:
                       You are on Pro
                     </div>
                   ) : (
-                    <button onClick={()=>alert('Payment coming soon! You will be notified by email.')}
-                      style={{width:'100%',background:'var(--accent)',color:'#000',border:'none',borderRadius:'10px',padding:'0.75rem',fontWeight:800,fontSize:'0.95rem',cursor:'pointer',marginBottom:'1rem'}}>
-                      {subStatus==='expired' ? 'Renew Now' : 'Upgrade to Pro'}
-                    </button>
+                    <div style={{marginBottom:'1rem'}}>
+                      <div style={{
+                        width:'100%',background:'rgba(0,255,136,0.06)',
+                        border:'1px solid rgba(0,255,136,0.25)',
+                        borderRadius:'10px',padding:'0.85rem 1rem',
+                        textAlign:'center',marginBottom:'0.6rem',
+                      }}>
+                        <div style={{fontSize:'1rem',fontWeight:800,color:'var(--accent)',marginBottom:'0.25rem'}}>
+                          🎉 You have full Pro access
+                        </div>
+                        <div style={{fontSize:'0.78rem',color:'var(--text-dim)',lineHeight:1.5}}>
+                          Your 90-day trial includes everything. Payment gateway is being set up — you will be notified on Telegram when ready.
+                        </div>
+                      </div>
+                      <div style={{textAlign:'center',fontSize:'0.72rem',color:'var(--text-muted)'}}>
+                        No action needed during trial period
+                      </div>
+                    </div>
                   )}
                   <div style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>
                     {['All Free features','GEX + Greeks Analysis','AI Market Intelligence','Live F&O Scanner','Strategy Backtester','Full Expiry Suite (OI + Key Levels)','Live Dhan / Zerodha / Angel sync','AI Screenshot import','Telegram alerts','Unlimited strategy legs','All F&O stocks option chain','Priority support'].map((f,i) => (
