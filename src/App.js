@@ -905,7 +905,6 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [banFetched,    setBanFetched]    = useState(false);
   const [prevOI,        setPrevOI]        = useState({});
   const [watchNSE,     setWatchNSE]     = useState(['Nifty 50','Bank Nifty','Nifty IT']);
-  const [watchBSE,     setWatchBSE]     = useState(['Sensex','BSE Midcap']);
   const [watchStocks,  setWatchStocks]  = useState(['Reliance','TCS','HDFC Bank']);
   const [watchTab,     setWatchTab]     = useState('nse');
   const [livePrices, setLivePrices] = useState({
@@ -938,22 +937,6 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     'Nifty Healthcare': 12500,
     'Nifty Oil & Gas': 11000,
     'Nifty PSE': 7800,
-    
-    // BSE Indices
-    'Sensex': 77000,
-    'BSE 100': 24000,
-    'BSE 200': 13500,
-    'BSE 500': 32000,
-    'BSE Midcap': 43000,
-    'BSE Smallcap': 48000,
-    'BSE Auto': 48000,
-    'BSE Bankex': 55000,
-    'BSE IT': 42000,
-    'BSE Healthcare': 40000,
-    'BSE Power': 5200,
-    'BSE Realty': 4800,
-    'BSE Metal': 29000,
-    'BSE Oil & Gas': 23000,
     
     // Top FNO Stocks (Nifty 50 constituents)
     'Reliance': 2850,
@@ -1493,8 +1476,6 @@ Respond ONLY with valid JSON:
         'Nifty Midcap 50':'NIFTYMIDCAP50.NS','Nifty Smallcap 50':'NIFTYSMLCAP50.NS',
         'Nifty Financial Services':'CNXFINANCE.NS','Nifty Next 50':'NIFTYJR.NS',
         'Nifty 100':'NIFTY100.NS','Nifty 200':'NIFTY200.NS',
-        'Sensex':'^BSESN','BSE 100':'BSE100.BO','BSE 200':'BSE200.BO',
-        'BSE 500':'BSE500.BO','BSE Midcap':'BSEMID.BO','BSE Smallcap':'BSESMALL.BO',
         'Reliance':'RELIANCE.NS','TCS':'TCS.NS','HDFC Bank':'HDFCBANK.NS',
         'Infosys':'INFY.NS','ICICI Bank':'ICICIBANK.NS','Bharti Airtel':'BHARTIARTL.NS',
         'ITC':'ITC.NS','SBI':'SBIN.NS','LT':'LT.NS','Kotak Bank':'KOTAKBANK.NS',
@@ -1513,7 +1494,7 @@ Respond ONLY with valid JSON:
         'ICICI Bank','SBI','Axis Bank','Bajaj Finance','Maruti Suzuki','Tata Motors',
         'Sun Pharma','HCL Tech','Wipro','ITC','LT','Titan','Kotak Bank','Adani Ports',
         'NTPC','Bharti Airtel','Bharti Airtel'];
-      const allNames = [...new Set([...watchNSE,...watchBSE,...watchStocks,...CORE])];
+      const allNames = [...new Set([...watchNSE,...watchStocks,...CORE])];
       // Build symbol list string for batch endpoint
       const symbolsParam = allNames.map(n=>SYMBOL_MAP[n]).filter(Boolean).join(',');
       if (!symbolsParam) return;
@@ -1553,6 +1534,18 @@ Respond ONLY with valid JSON:
     } finally {
       setIsPriceLoading(false);
     }
+  };
+
+
+  const fetchVix = async () => {
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/vix`);
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d.vix) {
+        setMarketData(prev => ({ ...prev, vix: { value: d.vix, change: d.change || 0, level: d.level, color: d.color } }));
+      }
+    } catch(e) { /* silent fail */ }
   };
 
     // Fetch Global Indices (Real-time from Yahoo Finance)
@@ -1938,6 +1931,7 @@ Respond ONLY with valid JSON:
       }).catch(() => {});
     }
     fetchLivePrices();
+    fetchVix();
     fetchBanList();
     fetchIntelligentNews();
     fetchGlobalIndices();
@@ -1968,6 +1962,9 @@ Respond ONLY with valid JSON:
       // Expiry tools: every 60 seconds
       const expiryInterval = setInterval(() => fetchExpiryData(expirySymbol), 60000);
 
+      // VIX: every 60 seconds
+      const vixInterval = setInterval(fetchVix, 60000);
+
       return () => {
         clearInterval(globalInterval);
         clearInterval(indiaInterval);
@@ -1976,6 +1973,7 @@ Respond ONLY with valid JSON:
         clearInterval(watchInterval);
         clearInterval(portfolioInterval);
         clearInterval(expiryInterval);
+        clearInterval(vixInterval);
       };
     }
   }, [isLiveMode, selectedUnderlying, selectedChartSymbol, chartTimeframe]);
@@ -2933,24 +2931,30 @@ Respond ONLY with valid JSON:
                 <div style={{display:'flex',flexDirection:'column',gap:'0.5rem',minWidth:'200px'}}>
                   <div style={{fontSize:'0.75rem',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:'0.25rem'}}>Market Pulse</div>
                   {[
-                    {label:'NIFTY',     val:marketData.nifty.value,    chg:marketData.nifty.change},
-                    {label:'BANKNIFTY', val:marketData.bankNifty.value, chg:marketData.bankNifty.change},
-                    {label:'VIX',       val:marketData.nifty?.vix,      chg:null, vix:true},
-                    {label:'PCR',       val:pcrData?.pcr?.toFixed(2),   chg:null, pcr:true},
+                    {label:'NIFTY',     val:marketData.nifty.value,         chg:marketData.nifty.change},
+                    {label:'BANKNIFTY', val:marketData.bankNifty.value,      chg:marketData.bankNifty.change},
+                    {label:'VIX',       val:marketData.vix?.value,           chg:marketData.vix?.change ?? null, vix:true},
+                    {label:'PCR',       val:pcrData?.totalCE>0 ? pcrData?.pcr?.toFixed(2) : null, chg:null, pcr:true},
                   ].map((r,i)=>{
                     const pos = (r.chg||0) >= 0;
-                    const vixCol = r.vix ? ((r.val||14)<13?'var(--green)':(r.val||14)>18?'var(--red)':'var(--yellow)') : null;
-                    const pcrCol = r.pcr ? (r.val>1.2?'var(--green)':r.val<0.8?'var(--red)':'var(--yellow)') : null;
+                    const vixVal = r.val || 0;
+                    const vixCol = r.vix ? (vixVal>22?'var(--red)':vixVal>17?'#f97316':vixVal>13?'var(--yellow)':'var(--green)') : null;
+                    const pcrVal = parseFloat(r.val);
+                    const pcrCol = r.pcr && r.val ? (pcrVal>1.2?'var(--green)':pcrVal<0.8?'var(--red)':'var(--yellow)') : null;
                     const chgCol = pos ? 'var(--green)' : 'var(--red)';
                     const valCol = vixCol || pcrCol || chgCol;
+                    const vixLevel = marketData.vix?.level || (vixVal>22?'HIGH':vixVal>17?'ELEV':vixVal>13?'MOD':'LOW');
+                    const pcrSignal = pcrData?.totalCE>0 ? (pcrVal>1.3?'BULL':pcrVal>1.1?'M-BULL':pcrVal<0.7?'BEAR':pcrVal<0.9?'M-BEAR':'NEUT') : '...';
                     return (
                       <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'var(--bg-surface)',borderRadius:'var(--radius-sm)',padding:'0.4rem 0.75rem',gap:'0.75rem'}}>
                         <span style={{fontSize:'0.875rem',color:'var(--text-dim)',fontWeight:600}}>{r.label}</span>
                         <div style={{textAlign:'right'}}>
-                          <span style={{fontSize:'0.95rem',fontWeight:800,color:r.chg!=null?chgCol:'var(--text-main)'}}>{r.val?.toLocaleString() || ' - '}</span>
+                          <span style={{fontSize:'0.95rem',fontWeight:800,color:r.vix?vixCol:r.pcr?pcrCol||'var(--text-main)':r.chg!=null?chgCol:'var(--text-main)'}}>
+                            {r.val != null ? (r.vix ? vixVal.toFixed(2) : r.val.toLocaleString?.() ?? r.val) : ' - '}
+                          </span>
                           {r.chg!=null && <span style={{fontSize:'0.75rem',color:chgCol,marginLeft:'5px'}}>{pos?'▲':'▼'}{Math.abs(r.chg||0).toFixed(2)}%</span>}
-                          {r.pcr && <span style={{fontSize:'0.75rem',color:pcrCol,marginLeft:'5px',fontWeight:700}}>{r.val>1.2?'BULL':r.val<0.8?'BEAR':'NEUT'}</span>}
-                          {r.vix && <span style={{fontSize:'0.75rem',color:vixCol,marginLeft:'5px'}}>{(r.val||14)<13?'LOW':(r.val||14)>18?'HIGH':'MOD'}</span>}
+                          {r.pcr && <span style={{fontSize:'0.75rem',color:pcrCol||'var(--text-muted)',marginLeft:'5px',fontWeight:700}}>{pcrSignal}</span>}
+                          {r.vix && r.val && <span style={{fontSize:'0.75rem',color:vixCol,marginLeft:'5px',fontWeight:700}}>{vixLevel}</span>}
                         </div>
                       </div>
                     );
@@ -2976,7 +2980,7 @@ Respond ONLY with valid JSON:
 
               {/* Tab switcher */}
               <div style={{display:'flex',borderBottom:'1px solid var(--border)',marginBottom:'1.25rem'}}>
-                {[['nse','📊 NSE'],['bse','🏦 BSE'],['stocks','🏢 Stocks']].map(([key,label])=>(
+                {[['nse','📊 NSE'],['stocks','🏢 Stocks']].map(([key,label])=>(
                   <button key={key} onClick={()=>setWatchTab(key)} style={{background:'none',border:'none',borderBottom:watchTab===key?'2px solid var(--accent)':'2px solid transparent',color:watchTab===key?'var(--accent)':'var(--text-dim)',padding:'0.5rem 1.25rem',fontWeight:watchTab===key?700:500,fontSize:'0.95rem',cursor:'pointer',fontFamily:'inherit',marginBottom:'-1px'}}>
                     {label}
                   </button>
@@ -3007,51 +3011,6 @@ Respond ONLY with valid JSON:
                       return (
                         <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+border,borderRadius:'12px',padding:'0.9rem 1rem',position:'relative'}}>
                           <button onClick={()=>setWatchNSE(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.35rem',right:'0.5rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
-                          <div style={{fontSize:'0.75rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.3rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
-                          <div style={{fontSize:'1.25rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em'}}>{val!=null ? val.toLocaleString() : <span style={{fontSize:'0.875rem',color:'var(--text-muted)'}}>Loading…</span>}</div>
-                          {val!=null && (
-                            <div style={{marginTop:'0.3rem'}}>
-                              {chg!=null ? (
-                                <div style={{display:'flex',gap:'0.4rem',alignItems:'baseline'}}>
-                                  <span style={{fontSize:'0.875rem',fontWeight:700,color:pos?'var(--green)':'var(--red)'}}>{pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%</span>
-                                  {pts && <span style={{fontSize:'0.875rem',color:pos?'var(--green)':'var(--red)',fontWeight:600}}>{pos?'+':'−'}{pts} pts</span>}
-                                </div>
-                              ) : <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}> - </div>}
-                              {prev && <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.1rem'}}>Prev: {prev.toLocaleString()}</div>}
-                            </div>
-                          )}
-                          {val==null && <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Click Refresh ↑</div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* BSE TAB */}
-              {watchTab==='bse' && (
-                <div>
-                  <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'1rem',flexWrap:'wrap'}}>
-                    <select value="" onChange={e=>{if(e.target.value&&!watchBSE.includes(e.target.value))setWatchBSE(p=>[...p,e.target.value]);}} style={{background:'var(--bg-surface)',border:'1px solid var(--border-light)',color:'var(--text-main)',borderRadius:'8px',padding:'0.45rem 0.85rem',fontSize:'0.875rem',cursor:'pointer',minWidth:'210px',fontFamily:'inherit'}}>
-                      <option value="">+ Add BSE Index</option>
-                      {['Sensex','BSE 100','BSE 200','BSE 500','BSE Midcap','BSE Smallcap'].filter(n=>!watchBSE.includes(n)).map(n=>(
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
-                    <span style={{fontSize:'0.875rem',color:'var(--text-muted)'}}>Click × on a card to remove</span>
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:'0.75rem'}}>
-                    {watchBSE.length===0 && <div style={{color:'var(--text-muted)',fontSize:'0.875rem',gridColumn:'1/-1'}}>Add indices from dropdown above.</div>}
-                    {watchBSE.map(name=>{
-                      const val=livePrices[name];
-                      const chg=liveChanges[name];
-                      const prev=livePrevClose[name];
-                      const pos=(chg||0)>=0;
-                      const pts=val&&chg!=null?Math.abs(((chg/100)*val)/(1+chg/100)).toFixed(0):(val&&prev?Math.abs(val-prev).toFixed(0):null);
-                      const border=val!=null?(pos?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'):'var(--border)';
-                      return (
-                        <div key={name} style={{background:'var(--bg-surface)',border:'1px solid '+border,borderRadius:'12px',padding:'0.9rem 1rem',position:'relative'}}>
-                          <button onClick={()=>setWatchBSE(p=>p.filter(x=>x!==name))} style={{position:'absolute',top:'0.35rem',right:'0.5rem',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'0.9rem',lineHeight:1,padding:0,fontFamily:'inherit'}}>×</button>
                           <div style={{fontSize:'0.75rem',color:'var(--text-muted)',fontWeight:700,marginBottom:'0.3rem',paddingRight:'1rem',textTransform:'uppercase',letterSpacing:'0.04em'}}>{name}</div>
                           <div style={{fontSize:'1.25rem',fontWeight:800,color:'var(--text-main)',letterSpacing:'-0.01em'}}>{val!=null ? val.toLocaleString() : <span style={{fontSize:'0.875rem',color:'var(--text-muted)'}}>Loading…</span>}</div>
                           {val!=null && (
@@ -3147,7 +3106,7 @@ Respond ONLY with valid JSON:
             {/* == TOP GAINERS & TOP LOSERS == */}
             {(()=>{
               const STOCKS=['Reliance','TCS','HDFC Bank','Infosys','ICICI Bank','Bharti Airtel','ITC','SBI','LT','Kotak Bank','HCL Tech','Axis Bank','Maruti Suzuki','Titan','Bajaj Finance','Wipro','Sun Pharma','Tata Motors','Adani Ports','NTPC'];
-              const withData=STOCKS.filter(s=>livePrices[s]!=null&&liveChanges[s]!=null).map(s=>({name:s,value:livePrices[s],change:liveChanges[s]}));
+              const withData=STOCKS.filter(s=>livePrices[s]!=null).map(s=>({name:s,value:livePrices[s],change:liveChanges[s]??null})).filter(s=>s.change!==null);
               const gainers=[...withData].sort((a,b)=>b.change-a.change).slice(0,5);
               const losers=[...withData].sort((a,b)=>a.change-b.change).slice(0,5);
               const renderRow=(s,isGainer)=>{
@@ -4357,7 +4316,6 @@ Respond ONLY with valid JSON:
                     </a>
                     <a href={`https://www.bseindia.com/markets/equity/EQReports/BulkDeal.aspx`} target="_blank" rel="noreferrer"
                       style={{background:'#1e293b',color:'#94a3b8',textDecoration:'none',borderRadius:'6px',padding:'0.4rem 0.9rem',fontWeight:600,fontSize:'0.82rem',border:'1px solid var(--border)'}}>
-                      BSE Bulk Deals →
                     </a>
                   </div>
                 </div>
@@ -5588,7 +5546,7 @@ Respond ONLY with valid JSON:
                     <button onClick={()=>setShowTradeEntry(false)} style={{background:'none',border:'none',color:'var(--text-dim)',fontSize:'1.4rem',cursor:'pointer'}}>✕</button>
                   </div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.75rem'}}>
-                    {[['symbol','Symbol',['NIFTY','BANKNIFTY','FINNIFTY','SENSEX','RELIANCE','TCS','HDFCBANK','ICICIBANK','SBIN','INFY','ITC','AXISBANK'],'select'],['type','Option Type',['CE','PE'],'select'],['action','Action',['BUY','SELL'],'select'],['strike','Strike Price','','text'],['expiry','Expiry Date','','text'],['qty','Qty (Lots)','','number'],['entryPrice','Entry Price','','number'],['exitPrice','Exit Price (if closed)','','number'],['emotion','Emotion Before Trade',['Calm','Confident','Anxious','Excited','Fearful','Greedy'],'select'],['reason','Trade Reason',['Setup','Trend Follow','Reversal','Scalp','Hedge','FOMO','Revenge','Boredom','Tip/News'],'select']].map(([field,label,opts,type])=>(
+                    {[['symbol','Symbol',['NIFTY','BANKNIFTY','FINNIFTY','RELIANCE','TCS','HDFCBANK','ICICIBANK','SBIN','INFY','ITC','AXISBANK'],'select'],['type','Option Type',['CE','PE'],'select'],['action','Action',['BUY','SELL'],'select'],['strike','Strike Price','','text'],['expiry','Expiry Date','','text'],['qty','Qty (Lots)','','number'],['entryPrice','Entry Price','','number'],['exitPrice','Exit Price (if closed)','','number'],['emotion','Emotion Before Trade',['Calm','Confident','Anxious','Excited','Fearful','Greedy'],'select'],['reason','Trade Reason',['Setup','Trend Follow','Reversal','Scalp','Hedge','FOMO','Revenge','Boredom','Tip/News'],'select']].map(([field,label,opts,type])=>(
                       <div key={field} style={{display:'flex',flexDirection:'column',gap:'0.25rem'}}>
                         <label style={{fontSize:'0.78rem',color:'var(--text-dim)'}}>{label}</label>
                         {type==='select'?(<select className="input-field" value={tradeForm[field]} onChange={e=>setTradeForm(p=>({...p,[field]:e.target.value}))} style={{fontSize:'0.85rem',padding:'0.4rem'}}>{opts.map(o=><option key={o} value={o}>{o}</option>)}</select>):(<input type={type} className="input-field" value={tradeForm[field]} onChange={e=>setTradeForm(p=>({...p,[field]:e.target.value}))} placeholder={label} style={{fontSize:'0.85rem',padding:'0.4rem'}}/>)}
@@ -6593,7 +6551,7 @@ Respond ONLY with valid JSON:
                     </div>
                   )}
                   <div style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>
-                    {['Full option chain (NSE + BSE)','Market Intelligence (AI news)','Strategy Builder','Paper Trading','Expiry Day tools','Telegram alerts','Trade Journal','No Portfolio sync','No Priority support'].map((f,i) => (
+                    {['Full option chain (NSE)','Market Intelligence (AI news)','Strategy Builder','Paper Trading','Expiry Day tools','Telegram alerts','Trade Journal','No Portfolio sync','No Priority support'].map((f,i) => (
                       <div key={i} style={{padding:'0.3rem 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>{i < 7 ? '+ ' : '- '}{f}</div>
                     ))}
                   </div>
@@ -6617,7 +6575,7 @@ Respond ONLY with valid JSON:
                     </button>
                   )}
                   <div style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>
-                    {['Everything in Free Trial','Live Portfolio sync (Dhan)','Real-time WebSocket ticks','All F&O stocks option chain','BSE data included','Advanced scanner filters','Priority WhatsApp support','Early access to new features','Cancel anytime'].map((f,i) => (
+                    {['Everything in Free Trial','Live Portfolio sync (Dhan)','Real-time WebSocket ticks','All F&O stocks option chain','Advanced scanner filters','Priority WhatsApp support','Early access to new features','Cancel anytime'].map((f,i) => (
                       <div key={i} style={{padding:'0.3rem 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>+ {f}</div>
                     ))}
                   </div>
