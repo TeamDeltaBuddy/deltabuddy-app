@@ -1551,8 +1551,8 @@ Respond ONLY with valid JSON:
           vix: {
             value  : vd.price,
             change : vd.change ?? 0,
-            level  : vd.price > 22 ? 'HIGH' : vd.price > 17 ? 'ELEVATED' : vd.price > 13 ? 'MODERATE' : 'LOW',
-            color  : vd.price > 22 ? 'red'  : vd.price > 17 ? 'orange'   : vd.price > 13 ? 'yellow'   : 'green',
+            level  : vd.price > 24 ? 'HIGH' : vd.price > 20 ? 'ELEVATED' : vd.price > 14 ? 'MODERATE' : 'LOW',
+            color  : vd.price > 24 ? 'red'  : vd.price > 20 ? 'orange'   : vd.price > 14 ? 'yellow'   : 'green',
           }
         }));
       }
@@ -2987,12 +2987,12 @@ Respond ONLY with valid JSON:
                   ].map((r,i)=>{
                     const pos = (r.chg||0) >= 0;
                     const vixVal = r.val || 0;
-                    const vixCol = r.vix ? (vixVal>22?'var(--red)':vixVal>17?'#f97316':vixVal>13?'var(--yellow)':'var(--green)') : null;
+                    const vixCol = r.vix ? (vixVal>24?'var(--red)':vixVal>20?'#f97316':vixVal>14?'var(--yellow)':'var(--green)') : null;
                     const pcrVal = parseFloat(r.val);
                     const pcrCol = r.pcr && r.val ? (pcrVal>1.2?'var(--green)':pcrVal<0.8?'var(--red)':'var(--yellow)') : null;
                     const chgCol = pos ? 'var(--green)' : 'var(--red)';
                     const valCol = vixCol || pcrCol || chgCol;
-                    const vixLevel = marketData.vix?.level || (vixVal>22?'HIGH':vixVal>17?'ELEV':vixVal>13?'MOD':'LOW');
+                    const vixLevel = marketData.vix?.level || (vixVal>24?'HIGH':vixVal>20?'ELEV':vixVal>14?'MOD':'LOW');
                     const pcrSignal = pcrData?.totalCE>0 ? (pcrVal>1.3?'BULL':pcrVal>1.1?'M-BULL':pcrVal<0.7?'BEAR':pcrVal<0.9?'M-BEAR':'NEUT') : '...';
                     return (
                       <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'var(--bg-surface)',borderRadius:'var(--radius-sm)',padding:'0.4rem 0.75rem',gap:'0.75rem'}}>
@@ -6772,6 +6772,40 @@ Respond ONLY with valid JSON:
         )}
 
         {/* -- FLOATING WHATSAPP SUPPORT BUTTON -- */}
+        {/* -- SCREENSHOT FLOATING BUTTON -- */}
+        <label
+          title="Import positions from any broker screenshot"
+          style={{
+            position:'fixed', bottom:'92px', right:'24px', zIndex:9999,
+            width:'56px', height:'56px', borderRadius:'50%',
+            background:'linear-gradient(135deg,#6366f1,#8b5cf6)', color:'white',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            boxShadow:'0 4px 20px rgba(99,102,241,0.5)',
+            fontSize:'1.4rem', cursor:'pointer',
+            transition:'transform 0.2s',
+          }}
+          onMouseEnter={e=>e.currentTarget.style.transform='scale(1.1)'}
+          onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}
+        >
+          📸
+          <input type="file" accept="image/*" style={{display:'none'}}
+            onChange={e=>{
+              handleScreenshotUpload(e);
+              setActiveTab('portfolio');
+              setSelectedBroker('manual');
+            }}/>
+        </label>
+
+        {/* Tooltip label for screenshot button */}
+        <div style={{
+          position:'fixed', bottom:'100px', right:'90px', zIndex:9998,
+          background:'rgba(0,0,0,0.75)', color:'#fff',
+          fontSize:'0.72rem', fontWeight:600, padding:'4px 10px',
+          borderRadius:'6px', pointerEvents:'none', whiteSpace:'nowrap',
+        }}>
+          Import from screenshot
+        </div>
+
         <a
           href="https://wa.me/917506218502?text=Hi%20DeltaBuddy%20Team%2C%20I%20need%20help%20with..."
           target="_blank"
