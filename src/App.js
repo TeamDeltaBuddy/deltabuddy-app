@@ -905,6 +905,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [banFetched,    setBanFetched]    = useState(false);
   const [prevOI,        setPrevOI]        = useState({});
   const [watchNSE,     setWatchNSE]     = useState(['Nifty 50','Bank Nifty','Nifty IT']);
+  const [watchBSE,     setWatchBSE]     = useState(['Sensex','BSE Midcap']);
   const [watchStocks,  setWatchStocks]  = useState(['Reliance','TCS','HDFC Bank']);
   const [watchTab,     setWatchTab]     = useState('nse');
   const [livePrices, setLivePrices] = useState({
@@ -1464,73 +1465,116 @@ Respond ONLY with valid JSON:
   const calculateImpact = (article) => { const t=(article.title+' '+(article.description||'')).toLowerCase(); const h=['rbi','reserve bank','repo rate','budget','fii','interest rate','inflation','gdp','crude oil','election','policy'],m=['earnings','profit','revenue','results','quarter','stocks','market']; let s=0; h.forEach(w=>{if(t.includes(w))s+=3;}); m.forEach(w=>{if(t.includes(w))s+=1;}); return s>=5?'high':s>=2?'medium':'low'; };
   const predictAffectedIndex = (article) => { const t=(article.title+' '+(article.description||'')).toLowerCase(); if(t.includes('bank')||t.includes('hdfc')||t.includes('icici')||t.includes('sbi')) return 'Bank Nifty'; if(t.includes('tcs')||t.includes('infosys')||t.includes('wipro')||t.includes('hcl')) return 'Nifty IT'; if(t.includes('pharma')||t.includes('drug')) return 'Nifty Pharma'; if(t.includes('auto')||t.includes('maruti')) return 'Nifty Auto'; if(t.includes('metal')||t.includes('steel')||t.includes('alumin')) return 'Nifty Metal'; return 'Nifty 50'; };
 
-  // Fetch live prices from Yahoo Finance (free, no API key needed)
+  // NSE → display name mapping for indices
+  const NSE_INDEX_MAP = {
+    'Nifty 50'                 : 'NIFTY 50',
+    'Bank Nifty'               : 'NIFTY BANK',
+    'Nifty IT'                 : 'NIFTY IT',
+    'Nifty Pharma'             : 'NIFTY PHARMA',
+    'Nifty Auto'               : 'NIFTY AUTO',
+    'Nifty Metal'              : 'NIFTY METAL',
+    'Nifty FMCG'               : 'NIFTY FMCG',
+    'Nifty Realty'             : 'NIFTY REALTY',
+    'Nifty Energy'             : 'NIFTY ENERGY',
+    'Nifty Midcap 50'          : 'NIFTY MIDCAP 50',
+    'Nifty Smallcap 50'        : 'NIFTY SMLCAP 50',
+    'Nifty Financial Services' : 'NIFTY FIN SERVICE',
+    'Nifty Next 50'            : 'NIFTY NEXT 50',
+    'Nifty 100'                : 'NIFTY 100',
+    'Nifty 200'                : 'NIFTY 200',
+    'Nifty 500'                : 'NIFTY 500',
+    'India VIX'                : 'INDIA VIX',
+  };
+
+  // NSE stock symbol map (display name → NSE symbol)
+  const NSE_STOCK_MAP = {
+    'Reliance':'RELIANCE','TCS':'TCS','HDFC Bank':'HDFCBANK',
+    'Infosys':'INFY','ICICI Bank':'ICICIBANK','Bharti Airtel':'BHARTIARTL',
+    'ITC':'ITC','SBI':'SBIN','LT':'LT','Kotak Bank':'KOTAKBANK',
+    'HCL Tech':'HCLTECH','Axis Bank':'AXISBANK','Maruti Suzuki':'MARUTI',
+    'Titan':'TITAN','Bajaj Finance':'BAJFINANCE','Wipro':'WIPRO',
+    'Sun Pharma':'SUNPHARMA','Tata Motors':'TATAMOTORS','Asian Paints':'ASIANPAINT',
+    'Adani Ports':'ADANIPORTS','ONGC':'ONGC','NTPC':'NTPC',
+    'Power Grid':'POWERGRID','M&M':'M&M','Tech Mahindra':'TECHM',
+    'Tata Steel':'TATASTEEL','JSW Steel':'JSWSTEEL','Coal India':'COALINDIA',
+    'Dr Reddy':'DRREDDY','Cipla':'CIPLA','Bajaj Auto':'BAJAJ-AUTO',
+    'Hero MotoCorp':'HEROMOTOCO','Eicher Motors':'EICHERMOT',
+    'Hindalco':'HINDALCO','Britannia':'BRITANNIA','Nestle India':'NESTLEIND',
+    'UltraTech Cement':'ULTRACEMCO','Adani Enterprises':'ADANIENT',
+    'Bajaj Finserv':'BAJAJFINSV','Divi Labs':'DIVISLAB','Grasim':'GRASIM',
+    'IndusInd Bank':'INDUSINDBK','SBI Life':'SBILIFE','HDFC Life':'HDFCLIFE',
+    'UPL':'UPL',
+  };
+
+  // Fetch live prices from NSE directly — exact same data as NSE website & brokers
   const fetchLivePrices = async () => {
     setIsPriceLoading(true);
     try {
-      // All symbols we ever need: watchlists + core gainers list
-      const SYMBOL_MAP = {
-        'Nifty 50':'^NSEI','Bank Nifty':'^NSEBANK','Nifty IT':'NIFTYIT.NS',
-        'Nifty Pharma':'NIFTYPHARMA.NS','Nifty Auto':'NIFTYAUTO.NS','Nifty Metal':'NIFTYMETAL.NS',
-        'Nifty FMCG':'NIFTYFMCG.NS','Nifty Realty':'NIFTYREALTY.NS','Nifty Energy':'NIFTYENERGY.NS',
-        'Nifty Midcap 50':'NIFTYMIDCAP50.NS','Nifty Smallcap 50':'NIFTYSMLCAP50.NS',
-        'Nifty Financial Services':'CNXFINANCE.NS','Nifty Next 50':'NIFTYJR.NS',
-        'Nifty 100':'NIFTY100.NS','Nifty 200':'NIFTY200.NS',
-        'Reliance':'RELIANCE.NS','TCS':'TCS.NS','HDFC Bank':'HDFCBANK.NS',
-        'Infosys':'INFY.NS','ICICI Bank':'ICICIBANK.NS','Bharti Airtel':'BHARTIARTL.NS',
-        'ITC':'ITC.NS','SBI':'SBIN.NS','LT':'LT.NS','Kotak Bank':'KOTAKBANK.NS',
-        'HCL Tech':'HCLTECH.NS','Axis Bank':'AXISBANK.NS','Maruti Suzuki':'MARUTI.NS',
-        'Titan':'TITAN.NS','Bajaj Finance':'BAJFINANCE.NS','Wipro':'WIPRO.NS',
-        'Sun Pharma':'SUNPHARMA.NS','Tata Motors':'TATAMOTORS.NS','Asian Paints':'ASIANPAINT.NS',
-        'Adani Ports':'ADANIPORTS.NS','ONGC':'ONGC.NS','NTPC':'NTPC.NS',
-        'Power Grid':'POWERGRID.NS','M&M':'MM.NS','Tech Mahindra':'TECHM.NS',
-        'Tata Steel':'TATASTEEL.NS','JSW Steel':'JSWSTEEL.NS','Coal India':'COALINDIA.NS',
-        'Dr Reddy':'DRREDDY.NS','Cipla':'CIPLA.NS','Bajaj Auto':'BAJAJ-AUTO.NS',
-        'Hero MotoCorp':'HEROMOTOCO.NS','Eicher Motors':'EICHERMOT.NS',
-        'Hindalco':'HINDALCO.NS','Britannia':'BRITANNIA.NS',
-      };
-      // Collect all needed names (watchlists + core gainers)
-      const CORE = ['Nifty 50','Bank Nifty','Reliance','TCS','HDFC Bank','Infosys',
-        'ICICI Bank','SBI','Axis Bank','Bajaj Finance','Maruti Suzuki','Tata Motors',
-        'Sun Pharma','HCL Tech','Wipro','ITC','LT','Titan','Kotak Bank','Adani Ports',
-        'NTPC','Bharti Airtel','Bharti Airtel'];
-      const allNames = [...new Set([...watchNSE,...watchStocks,...CORE])];
-      // Build symbol list string for batch endpoint
-      const symbolsParam = allNames.map(n=>SYMBOL_MAP[n]).filter(Boolean).join(',');
-      if (!symbolsParam) return;
+      const r = await fetch(`${BACKEND_URL}/api/nse-quotes`);
+      if (!r.ok) throw new Error(`NSE quotes ${r.status}`);
+      const raw = await r.json();
 
-      const res = await fetch(`${BACKEND_URL}/api/prices?symbols=${encodeURIComponent(symbolsParam)}`);
-      if (!res.ok) throw new Error(`Prices endpoint ${res.status}`);
-      const raw = await res.json(); // { 'RELIANCE.NS': {price, change, prevClose}, ... }
+      const priceMap = {}, changeMap = {}, prevCloseMap = {}, netChangeMap = {};
 
-      // Build reverse map: yahoo symbol → display name
-      const reverseMap = {};
-      allNames.forEach(n => { if (SYMBOL_MAP[n]) reverseMap[SYMBOL_MAP[n]] = n; });
+      // Map indices — NSE returns name like 'NIFTY 50', we map to our display name
+      const reverseIndexMap = Object.fromEntries(Object.entries(NSE_INDEX_MAP).map(([k,v])=>[v,k]));
+      Object.entries(raw).forEach(([nseName, d]) => {
+        // Try direct match first, then reverse index map
+        const displayName = reverseIndexMap[nseName] || nseName;
+        if (!d?.price) return;
+        priceMap[displayName]     = d.price;
+        changeMap[displayName]    = d.change ?? 0;
+        prevCloseMap[displayName] = d.prevClose || 0;
+        netChangeMap[displayName] = d.netChange || 0;
 
-      const priceMap = {}, changeMap = {}, prevCloseMap = {};
-      Object.entries(raw).forEach(([sym, d]) => {
-        const name = reverseMap[sym];
-        if (!name || !d?.price) return;
-        priceMap[name]    = d.price;
-        changeMap[name]   = d.change != null ? d.change : 0;
-        if (d.prevClose)  prevCloseMap[name] = d.prevClose;
+        // Also store by NSE symbol for stocks (e.g. 'RELIANCE')
+        priceMap[nseName]     = d.price;
+        changeMap[nseName]    = d.change ?? 0;
+        prevCloseMap[nseName] = d.prevClose || 0;
       });
 
+      // Also map by our stock display names
+      Object.entries(NSE_STOCK_MAP).forEach(([displayName, nseSymbol]) => {
+        if (raw[nseSymbol]) {
+          const d = raw[nseSymbol];
+          priceMap[displayName]     = d.price;
+          changeMap[displayName]    = d.change ?? 0;
+          prevCloseMap[displayName] = d.prevClose || 0;
+        }
+      });
+
+      // India VIX from NSE allIndices
+      if (raw['INDIA VIX']) {
+        const vd = raw['INDIA VIX'];
+        setMarketData(prev => ({
+          ...prev,
+          vix: {
+            value  : vd.price,
+            change : vd.change ?? 0,
+            level  : vd.price > 22 ? 'HIGH' : vd.price > 17 ? 'ELEVATED' : vd.price > 13 ? 'MODERATE' : 'LOW',
+            color  : vd.price > 22 ? 'red'  : vd.price > 17 ? 'orange'   : vd.price > 13 ? 'yellow'   : 'green',
+          }
+        }));
+      }
+
       if (Object.keys(priceMap).length > 0) {
-        setLivePrices(prev   => ({ ...prev,   ...priceMap    }));
-        setLiveChanges(prev  => ({ ...prev,   ...changeMap   }));
-        setLivePrevClose(prev=> ({ ...prev,   ...prevCloseMap}));
-        // Update market data (Nifty / BankNifty)
-        if (priceMap['Nifty 50'] || priceMap['Bank Nifty']) {
+        setLivePrices(prev    => ({ ...prev, ...priceMap    }));
+        setLiveChanges(prev   => ({ ...prev, ...changeMap   }));
+        setLivePrevClose(prev => ({ ...prev, ...prevCloseMap}));
+
+        // Update top-level market data cards
+        const niftyPrice = priceMap['Nifty 50'] || priceMap['NIFTY 50'];
+        const bankPrice  = priceMap['Bank Nifty'] || priceMap['NIFTY BANK'];
+        if (niftyPrice || bankPrice) {
           setMarketData(prev => ({
-            nifty    : priceMap['Nifty 50']   ? { value: priceMap['Nifty 50'],   change: changeMap['Nifty 50']   || prev.nifty.change,    vix: prev.nifty.vix    } : prev.nifty,
-            bankNifty: priceMap['Bank Nifty'] ? { value: priceMap['Bank Nifty'], change: changeMap['Bank Nifty'] || prev.bankNifty.change, vix: prev.bankNifty.vix} : prev.bankNifty,
-            vix      : prev.vix,
+            ...prev,
+            nifty    : niftyPrice ? { value: niftyPrice, change: changeMap['Nifty 50'] || changeMap['NIFTY 50'] || prev.nifty.change } : prev.nifty,
+            bankNifty: bankPrice  ? { value: bankPrice,  change: changeMap['Bank Nifty']|| changeMap['NIFTY BANK'] || prev.bankNifty.change } : prev.bankNifty,
           }));
         }
       }
-    } catch (err) {
-      console.error('fetchLivePrices error:', err.message);
+    } catch(err) {
+      console.error('fetchLivePrices (NSE) error:', err.message);
     } finally {
       setIsPriceLoading(false);
     }
@@ -1538,14 +1582,19 @@ Respond ONLY with valid JSON:
 
 
   const fetchVix = async () => {
+    // VIX is now fetched inside fetchLivePrices from NSE allIndices
+    // This is kept as a fallback via Yahoo Finance
     try {
       const r = await fetch(`${BACKEND_URL}/api/vix`);
       if (!r.ok) return;
       const d = await r.json();
       if (d.vix) {
-        setMarketData(prev => ({ ...prev, vix: { value: d.vix, change: d.change || 0, level: d.level, color: d.color } }));
+        setMarketData(prev => ({
+          ...prev,
+          vix: prev.vix?.value ? prev.vix : { value: d.vix, change: d.change || 0, level: d.level, color: d.color }
+        }));
       }
-    } catch(e) { /* silent fail */ }
+    } catch(e) { /* silent */ }
   };
 
     // Fetch Global Indices (Real-time from Yahoo Finance)
@@ -2980,7 +3029,7 @@ Respond ONLY with valid JSON:
 
               {/* Tab switcher */}
               <div style={{display:'flex',borderBottom:'1px solid var(--border)',marginBottom:'1.25rem'}}>
-                {[['nse','📊 NSE'],['stocks','🏢 Stocks']].map(([key,label])=>(
+                {[['nse','📊 NSE'],['bse','🏦 BSE'],['stocks','🏢 Stocks']].map(([key,label])=>(
                   <button key={key} onClick={()=>setWatchTab(key)} style={{background:'none',border:'none',borderBottom:watchTab===key?'2px solid var(--accent)':'2px solid transparent',color:watchTab===key?'var(--accent)':'var(--text-dim)',padding:'0.5rem 1.25rem',fontWeight:watchTab===key?700:500,fontSize:'0.95rem',cursor:'pointer',fontFamily:'inherit',marginBottom:'-1px'}}>
                     {label}
                   </button>
@@ -3028,6 +3077,28 @@ Respond ONLY with valid JSON:
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+
+              {/* BSE TAB - Coming Soon */}
+              {watchTab==='bse' && (
+                <div style={{textAlign:'center',padding:'4rem 2rem',color:'var(--text-dim)'}}>
+                  <div style={{fontSize:'3rem',marginBottom:'1rem'}}>🏦</div>
+                  <div style={{fontWeight:800,fontSize:'1.15rem',color:'var(--text-main)',marginBottom:'0.5rem'}}>
+                    BSE Data Coming Soon
+                  </div>
+                  <div style={{fontSize:'0.88rem',maxWidth:'360px',margin:'0 auto',lineHeight:1.7}}>
+                    Sensex, BANKEX and BSE sector indices are on the roadmap.
+                    We are building a reliable BSE data feed for zero-hero traders who love the volatility.
+                  </div>
+                  <div style={{marginTop:'1.5rem',display:'flex',gap:'0.5rem',justifyContent:'center',flexWrap:'wrap'}}>
+                    {['Sensex','BANKEX','BSE Midcap','BSE Smallcap','BSE 500'].map(idx=>(
+                      <span key={idx} style={{padding:'4px 12px',borderRadius:'20px',fontSize:'0.78rem',fontWeight:600,
+                        background:'rgba(255,255,255,0.05)',border:'1px solid var(--border)',color:'var(--text-muted)'}}>
+                        {idx}
+                      </span>
+                    ))}
                   </div>
                 </div>
               )}
