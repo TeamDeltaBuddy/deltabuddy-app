@@ -434,6 +434,64 @@ const STRATEGY_TEMPLATES = {
 const YAHOO = `${BACKEND_URL}/api/yahoo`;
 const GROQ  = `${BACKEND_URL}/api`;
 
+// ── PRO GATE COMPONENT ─────────────────────────────────────────────────────────
+// Wraps any feature with a lock screen when user is not Pro
+function ProGate({ isActive, onUpgrade, feature, description, children, inline = false }) {
+  if (isActive) return children;
+
+  if (inline) {
+    // Compact lock — used inside tabs/buttons
+    return (
+      <div onClick={onUpgrade} style={{
+        display:'inline-flex', alignItems:'center', gap:'0.4rem',
+        background:'rgba(249,115,22,0.1)', border:'1px solid rgba(249,115,22,0.3)',
+        borderRadius:'8px', padding:'0.35rem 0.85rem', cursor:'pointer',
+        fontSize:'0.82rem', fontWeight:700, color:'#f97316',
+      }}>
+        🔒 Pro
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+      minHeight:'60vh', padding:'2rem', textAlign:'center',
+    }}>
+      <div style={{
+        background:'linear-gradient(135deg,rgba(249,115,22,0.08),rgba(251,191,36,0.08))',
+        border:'1px solid rgba(249,115,22,0.25)', borderRadius:'20px',
+        padding:'2.5rem 2rem', maxWidth:'420px', width:'100%',
+      }}>
+        <div style={{fontSize:'3rem', marginBottom:'1rem'}}>🔒</div>
+        <div style={{
+          fontWeight:800, fontSize:'1.2rem', color:'var(--text-main)',
+          marginBottom:'0.5rem',
+        }}>
+          {feature}
+        </div>
+        <div style={{
+          fontSize:'0.88rem', color:'var(--text-dim)', lineHeight:1.7,
+          marginBottom:'1.75rem',
+        }}>
+          {description}
+        </div>
+        <button onClick={onUpgrade} style={{
+          background:'linear-gradient(135deg,#f97316,#fbbf24)',
+          color:'#000', border:'none', borderRadius:'12px',
+          padding:'0.85rem 2.5rem', fontWeight:800, fontSize:'1rem',
+          cursor:'pointer', width:'100%', marginBottom:'0.75rem',
+        }}>
+          Upgrade to Pro
+        </button>
+        <div style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>
+          Cancel anytime - No lock-in
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState('home');
   
@@ -1126,6 +1184,9 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [adminSearch, setAdminSearch]     = useState('');
   const [subStatus, setSubStatus]         = useState('trial');
   const [trialDaysLeft, setTrialDaysLeft] = useState(90);
+  // Helper — single source of truth for Pro check
+  const isPro = subStatus === 'pro';
+  const openUpgrade = () => setShowPricing(true);
   const [gexData, setGexData]             = useState(null);
   const [gexLoading, setGexLoading]       = useState(false);
   const [gexError, setGexError]           = useState('');
@@ -2678,29 +2739,37 @@ Respond ONLY with valid JSON:
               </div>
 
               <div style={{marginBottom:'1.25rem',padding:'1rem',background:'var(--bg-dark)',borderRadius:'8px',border:'1px solid #1e3a5f'}}>
-                <h3 style={{margin:'0 0 0.5rem',color:'#229ED9',fontSize:'0.95rem'}}>📱 Telegram Bot  -  Admin Config</h3>
-                <p style={{color:'var(--text-dim)',fontSize:'0.78rem',margin:'0 0 0.75rem'}}>
-                  Bot token is set on Render as <code style={{background:'#1e293b',padding:'1px 5px',borderRadius:'3px'}}>TG_BOT_TOKEN</code> env variable. Users connect via Chat ID only  -  they never see the token.
-                </p>
+                <h3 style={{margin:'0 0 0.5rem',color:'#229ED9',fontSize:'0.95rem'}}>📱 Telegram Alerts {!isPro && <span style={{fontSize:'0.7rem',background:'rgba(249,115,22,0.2)',color:'#f97316',border:'1px solid rgba(249,115,22,0.4)',borderRadius:'4px',padding:'1px 6px',marginLeft:'6px',fontWeight:700}}>PRO</span>}</h3>
+                {isPro ? (<>
                 <p style={{color:'var(--text-dim)',fontSize:'0.78rem',margin:'0 0 0.6rem'}}>
-                  Your admin Chat ID (for your own alerts):
+                  Enter your Telegram Chat ID to receive live alerts:
                 </p>
                 <input type="text" className="input-field" placeholder="Your Chat ID (e.g. 6458200459)" value={tgChatId} onChange={e=>setTgChatId(e.target.value)} style={{width:'100%',boxSizing:'border-box',marginBottom:'0.5rem'}}/>
                 <div style={{display:'flex',gap:'0.5rem',alignItems:'center',flexWrap:'wrap'}}>
                   <button className="btn-action" onClick={testTelegram} disabled={!tgChatId||tgStatus==='testing'}>{tgStatus==='testing'?'⏳ Sending...':'📤 Test Alert'}</button>
                   {tgStatus==='ok' && <span style={{color:'#22c55e',fontSize:'0.82rem'}}>✅ Sent! Check Telegram.</span>}
-                  {tgStatus==='error' && <span style={{color:'#ef4444',fontSize:'0.82rem'}}>❌ Add TG_BOT_TOKEN to <b>backend</b> service on Render (not frontend)</span>}
+                  {tgStatus==='error' && <span style={{color:'#ef4444',fontSize:'0.82rem'}}>❌ Failed. Check backend TG_BOT_TOKEN on Render.</span>}
                 </div>
+                </>) : (
+                  <div>
+                    <p style={{color:'var(--text-dim)',fontSize:'0.82rem',margin:'0 0 0.75rem',lineHeight:1.6}}>
+                      Get instant Telegram alerts for high-impact news, scanner setups and PCR extremes — directly to your phone.
+                    </p>
+                    <button onClick={openUpgrade} style={{background:'linear-gradient(135deg,#f97316,#fbbf24)',color:'#000',border:'none',borderRadius:'8px',padding:'0.5rem 1.5rem',fontWeight:800,cursor:'pointer',fontSize:'0.85rem'}}>
+                      Upgrade to Pro to Enable
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div style={{padding:'1rem',background:'var(--bg-dark)',borderRadius:'8px',border:'1px solid var(--border)'}}>
-                <h3 style={{margin:'0 0 0.75rem',fontSize:'0.95rem'}}>🔔 Notify Me When</h3>
-                <label style={{display:'flex',alignItems:'center',gap:'0.6rem',marginBottom:'0.6rem',cursor:'pointer'}}>
-                  <input type="checkbox" checked={notifyHighImpact} onChange={e=>setNotifyHighImpact(e.target.checked)}/>
+                <h3 style={{margin:'0 0 0.75rem',fontSize:'0.95rem'}}>🔔 Notify Me When {!isPro && <span style={{fontSize:'0.7rem',background:'rgba(249,115,22,0.2)',color:'#f97316',border:'1px solid rgba(249,115,22,0.4)',borderRadius:'4px',padding:'1px 6px',marginLeft:'6px',fontWeight:700}}>PRO</span>}</h3>
+                <label style={{display:'flex',alignItems:'center',gap:'0.6rem',marginBottom:'0.6rem',cursor:isPro?'pointer':'not-allowed',opacity:isPro?1:0.5}}>
+                  <input type="checkbox" checked={notifyHighImpact} onChange={e=>isPro&&setNotifyHighImpact(e.target.checked)} disabled={!isPro}/>
                   📰 High-impact news detected by AI
                 </label>
-                <label style={{display:'flex',alignItems:'center',gap:'0.6rem',cursor:'pointer'}}>
-                  <input type="checkbox" checked={notifyScanner} onChange={e=>setNotifyScanner(e.target.checked)}/>
+                <label style={{display:'flex',alignItems:'center',gap:'0.6rem',cursor:isPro?'pointer':'not-allowed',opacity:isPro?1:0.5}}>
+                  <input type="checkbox" checked={notifyScanner} onChange={e=>isPro&&setNotifyScanner(e.target.checked)} disabled={!isPro}/>
                   🔍 Scanner alerts (IV Crush, PCR Extreme, Gamma Squeeze)
                 </label>
               </div>
@@ -4862,6 +4931,9 @@ Respond ONLY with valid JSON:
           </div>
 
         ) : activeTab === 'backtest' ? (
+          <ProGate isActive={isPro} onUpgrade={openUpgrade}
+            feature="Strategy Backtester"
+            description="Test any options strategy on historical data before risking real money. Uses NSE OHLCV + Black-Scholes pricing. See win rate, max drawdown, P&L curve across months.">
           <div>
             {/* -- HEADER -- */}
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'1.5rem',flexWrap:'wrap',gap:'1rem'}}>
@@ -5104,7 +5176,11 @@ Respond ONLY with valid JSON:
               </div>
             )}
           </div>
+          </ProGate>
         ) : activeTab === 'intelligence' ? (
+          <ProGate isActive={isPro} onUpgrade={openUpgrade}
+            feature="AI Market Intelligence"
+            description="AI-powered analysis of high-impact news, economic events and market sentiment using Claude. Get trading ideas, affected indices, and risk levels for every major event — before the market reacts.">
           <div>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem'}}>
               <div>
@@ -5265,7 +5341,11 @@ Respond ONLY with valid JSON:
               </div>
             </div>
           </div>
+          </ProGate>
         ) : activeTab === 'scanner' ? (
+          <ProGate isActive={isPro} onUpgrade={openUpgrade}
+            feature="Live F&O Scanner"
+            description="Real-time scanner for IV Crush, PCR Extremes, Gamma Squeeze, unusual OI buildup and more. Catches setups as they form — before retail traders notice.">
           <>
             <div className="page-header">
               <h1>📊 Options Scanner</h1>
@@ -5483,6 +5563,7 @@ Respond ONLY with valid JSON:
               )}
             </div>
           </>
+          </ProGate>
         ) : activeTab === 'journal' ? (
           <div>
             {/* Sign-in prompt for journal sync */}
@@ -5868,6 +5949,7 @@ Respond ONLY with valid JSON:
 
             {/* DHAN */}
             {selectedBroker === 'dhan' && (
+              isPro ? (
               <div>
                 {!portfolio && !portfolioLoading && (
                   <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>
@@ -5963,10 +6045,16 @@ Respond ONLY with valid JSON:
                   </div>
                 )}
               </div>
+              ) : (
+                <ProGate isActive={false} onUpgrade={openUpgrade}
+                  feature="Live Dhan Portfolio Sync"
+                  description="See your real positions, holdings, funds and live P&L from Dhan — updated every 30 seconds. Upgrade to Pro to connect your broker."/>
+              )
             )}
 
             {/* ZERODHA */}
             {selectedBroker === 'zerodha' && (
+              isPro ? (
               <div className="panel">
                 <h3 style={{marginTop:0,color:'#4ade80'}}>Zerodha Kite Connect</h3>
                 <p style={{fontSize:'0.82rem',color:'var(--text-dim)',lineHeight:1.7}}>
@@ -5986,10 +6074,16 @@ Respond ONLY with valid JSON:
                   </button>
                 </div>
               </div>
+              ) : (
+                <ProGate isActive={false} onUpgrade={openUpgrade}
+                  feature="Live Zerodha Portfolio Sync"
+                  description="Connect your Zerodha account to see live positions and holdings. Pro feature."/>
+              )
             )}
 
             {/* ANGEL ONE */}
             {selectedBroker === 'angel' && (
+              isPro ? (
               <div className="panel">
                 <h3 style={{marginTop:0,color:'#f97316'}}>Angel One SmartAPI</h3>
                 <p style={{fontSize:'0.82rem',color:'var(--text-dim)',lineHeight:1.7}}>
@@ -6012,6 +6106,11 @@ Respond ONLY with valid JSON:
                   </button>
                 </div>
               </div>
+              ) : (
+                <ProGate isActive={false} onUpgrade={openUpgrade}
+                  feature="Live Angel One Portfolio Sync"
+                  description="Connect your Angel One SmartAPI to see live positions and P&L. Pro feature."/>
+              )
             )}
 
             {/* MANUAL + SCREENSHOT */}
@@ -6019,13 +6118,20 @@ Respond ONLY with valid JSON:
               <div>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:'0.5rem'}}>
                   <p style={{margin:0,fontSize:'0.85rem',color:'var(--text-dim)'}}>
-                    Upload a screenshot from any broker or add positions manually.
+                    {isPro ? 'Upload a screenshot from any broker or add positions manually.' : 'Add positions manually. Upgrade to Pro to import via AI screenshot.'}
                   </p>
                   <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap'}}>
-                    <label style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',borderRadius:'8px',padding:'0.5rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem',display:'inline-block'}}>
-                      Upload Screenshot
-                      <input type="file" accept="image/*" style={{display:'none'}} onChange={handleScreenshotUpload}/>
-                    </label>
+                    {isPro ? (
+                      <label style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',borderRadius:'8px',padding:'0.5rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem',display:'inline-block'}}>
+                        📸 Upload Screenshot
+                        <input type="file" accept="image/*" style={{display:'none'}} onChange={handleScreenshotUpload}/>
+                      </label>
+                    ) : (
+                      <button onClick={openUpgrade}
+                        style={{background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.4)',color:'#818cf8',borderRadius:'8px',padding:'0.5rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem'}}>
+                        🔒 Screenshot Import (Pro)
+                      </button>
+                    )}
                     <button onClick={()=>setShowManualForm(f=>!f)}
                       style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.5rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.85rem'}}>
                       + Add Position
@@ -6283,6 +6389,8 @@ Respond ONLY with valid JSON:
                   ))}
                 </div>
 
+                {/* OI Chart + Key Levels — Pro only */}
+                {isPro ? (<>
                 {/* OI Chart */}
                 <div className="panel" style={{marginBottom:'1.25rem'}}>
                   <h3 style={{marginTop:0,marginBottom:'1rem',fontSize:'1rem'}}>📊 Open Interest  -  CE vs PE</h3>
@@ -6338,11 +6446,26 @@ Respond ONLY with valid JSON:
                     ))}
                   </div>
                 </div>
+                </>) : (
+                  <div onClick={openUpgrade} style={{
+                    background:'linear-gradient(135deg,rgba(249,115,22,0.08),rgba(251,191,36,0.06))',
+                    border:'1px dashed rgba(249,115,22,0.35)', borderRadius:'14px',
+                    padding:'2rem', textAlign:'center', cursor:'pointer', marginBottom:'1rem',
+                  }}>
+                    <div style={{fontSize:'1.6rem',marginBottom:'0.5rem'}}>🔒</div>
+                    <div style={{fontWeight:700,color:'var(--text-main)',marginBottom:'0.3rem'}}>OI Chart + Key Levels</div>
+                    <div style={{fontSize:'0.82rem',color:'var(--text-dim)',marginBottom:'1rem'}}>Full CE vs PE OI analysis, resistance and support levels — Pro feature.</div>
+                    <div style={{background:'linear-gradient(135deg,#f97316,#fbbf24)',color:'#000',borderRadius:'8px',padding:'0.5rem 1.5rem',fontWeight:800,display:'inline-block',fontSize:'0.88rem'}}>Upgrade to Pro</div>
+                  </div>
+                )}
               </>
             )}
           </div>
 
         ) : activeTab === 'gex' ? (
+          <ProGate isActive={isPro} onUpgrade={openUpgrade}
+            feature="GEX + Greeks Analysis"
+            description="Gamma Exposure, Delta Walls, Vanna and Charm reveal where market makers are positioned — the hidden support and resistance levels that chart traders miss. This is your edge.">
           <div>
             <div style={{marginBottom:'1.25rem'}}>
               <h2 style={{margin:'0 0 0.25rem'}}>GEX + Greeks Analysis</h2>
@@ -6483,6 +6606,7 @@ Respond ONLY with valid JSON:
               </>
             )}
           </div>
+          </ProGate>
 
         ) : activeTab === 'admin' && isAdmin ? (
           <div>
@@ -6622,7 +6746,7 @@ Respond ONLY with valid JSON:
                     </div>
                   )}
                   <div style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>
-                    {['Full option chain (NSE)','Market Intelligence (AI news)','Strategy Builder','Paper Trading','Expiry Day tools','Telegram alerts','Trade Journal','No Portfolio sync','No Priority support'].map((f,i) => (
+                    {['Option Chain — NIFTY & BANKNIFTY','Strategy Builder (2 legs)','Paper Trading','Trade Journal','Market Watchlist','Max Pain (Expiry tools)','Manual portfolio entry'].map((f,i) => (
                       <div key={i} style={{padding:'0.3rem 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>{i < 7 ? '+ ' : '- '}{f}</div>
                     ))}
                   </div>
@@ -6646,7 +6770,7 @@ Respond ONLY with valid JSON:
                     </button>
                   )}
                   <div style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>
-                    {['Everything in Free Trial','Live Portfolio sync (Dhan)','Real-time WebSocket ticks','All F&O stocks option chain','Advanced scanner filters','Priority WhatsApp support','Early access to new features','Cancel anytime'].map((f,i) => (
+                    {['All Free features','GEX + Greeks Analysis','AI Market Intelligence','Live F&O Scanner','Strategy Backtester','Full Expiry Suite (OI + Key Levels)','Live Dhan / Zerodha / Angel sync','AI Screenshot import','Telegram alerts','Unlimited strategy legs','All F&O stocks option chain','Priority support'].map((f,i) => (
                       <div key={i} style={{padding:'0.3rem 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>+ {f}</div>
                     ))}
                   </div>
@@ -6772,29 +6896,46 @@ Respond ONLY with valid JSON:
         )}
 
         {/* -- FLOATING WHATSAPP SUPPORT BUTTON -- */}
-        {/* -- SCREENSHOT FLOATING BUTTON -- */}
-        <label
-          title="Import positions from any broker screenshot"
-          style={{
-            position:'fixed', bottom:'92px', right:'24px', zIndex:9999,
-            width:'56px', height:'56px', borderRadius:'50%',
-            background:'linear-gradient(135deg,#6366f1,#8b5cf6)', color:'white',
-            display:'flex', alignItems:'center', justifyContent:'center',
-            boxShadow:'0 4px 20px rgba(99,102,241,0.5)',
-            fontSize:'1.4rem', cursor:'pointer',
-            transition:'transform 0.2s',
-          }}
-          onMouseEnter={e=>e.currentTarget.style.transform='scale(1.1)'}
-          onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}
-        >
-          📸
-          <input type="file" accept="image/*" style={{display:'none'}}
-            onChange={e=>{
-              handleScreenshotUpload(e);
-              setActiveTab('portfolio');
-              setSelectedBroker('manual');
-            }}/>
-        </label>
+        {/* -- SCREENSHOT FLOATING BUTTON — Pro only -- */}
+        {isPro ? (
+          <label
+            title="Import positions from any broker screenshot"
+            style={{
+              position:'fixed', bottom:'92px', right:'24px', zIndex:9999,
+              width:'56px', height:'56px', borderRadius:'50%',
+              background:'linear-gradient(135deg,#6366f1,#8b5cf6)', color:'white',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              boxShadow:'0 4px 20px rgba(99,102,241,0.5)',
+              fontSize:'1.4rem', cursor:'pointer',
+              transition:'transform 0.2s',
+            }}
+            onMouseEnter={e=>e.currentTarget.style.transform='scale(1.1)'}
+            onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}
+          >
+            📸
+            <input type="file" accept="image/*" style={{display:'none'}}
+              onChange={e=>{
+                handleScreenshotUpload(e);
+                setActiveTab('portfolio');
+                setSelectedBroker('manual');
+              }}/>
+          </label>
+        ) : (
+          <button
+            onClick={openUpgrade}
+            title="Pro feature — Import positions from any broker screenshot"
+            style={{
+              position:'fixed', bottom:'92px', right:'24px', zIndex:9999,
+              width:'56px', height:'56px', borderRadius:'50%',
+              background:'rgba(99,102,241,0.25)', color:'#818cf8',
+              border:'2px solid rgba(99,102,241,0.5)',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              fontSize:'1.4rem', cursor:'pointer',
+            }}
+          >
+            🔒
+          </button>
+        )}
 
         {/* Tooltip label for screenshot button */}
         <div style={{
