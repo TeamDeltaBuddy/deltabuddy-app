@@ -1223,7 +1223,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     setScreenshotError('');
     setScreenshotResult(null);
     try {
-      // Convert file to base64
+      // Convert to base64
       const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result.split(',')[1]);
@@ -1233,52 +1233,24 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
 
       const mediaType = file.type || 'image/jpeg';
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      // Call backend — API key lives there, never in browser
+      const r = await fetch(`${BACKEND_URL}/api/analyze-screenshot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [{
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: { type: 'base64', media_type: mediaType, data: base64 }
-              },
-              {
-                type: 'text',
-                text: `This is a screenshot from an Indian stock broker app showing trading positions or holdings.
-Extract ALL positions/holdings you can see and return ONLY a JSON array, no other text.
-Each item must have these exact fields:
-- symbol: the stock/option symbol (string)
-- qty: quantity as a number (positive for buy/long, negative for sell/short)
-- avgPrice: average buy price as a number
-- ltp: last traded price if visible, else 0
-- pnl: P&L value if visible, else 0
-- type: "BUY" or "SELL"
-- product: "INTRADAY", "DELIVERY", "FUTURES", or "OPTIONS" based on what you see
-
-Example output format:
-[{"symbol":"NIFTY25MAR24500CE","qty":75,"avgPrice":150.50,"ltp":180.00,"pnl":2212.50,"type":"BUY","product":"OPTIONS"}]
-
-If you cannot find any positions, return an empty array: []
-Return ONLY the JSON array, nothing else.`
-              }
-            ]
-          }]
-        })
+        body: JSON.stringify({ image: base64, mediaType }),
       });
 
-      const data = await response.json();
-      const text = data.content?.[0]?.text || '[]';
-      const jsonStart = text.indexOf('['); const jsonEnd = text.lastIndexOf(']'); const clean = jsonStart !== -1 && jsonEnd !== -1 ? text.slice(jsonStart, jsonEnd+1) : text.trim();
-      const positions = JSON.parse(clean);
+      const data = await r.json();
 
-      if (!Array.isArray(positions)) throw new Error('Invalid response from AI');
+      if (!r.ok || data.error) {
+        throw new Error(data.error || 'Analysis failed');
+      }
+
+      const positions = data.positions || [];
+      if (!Array.isArray(positions)) throw new Error('Unexpected response format');
       setScreenshotResult(positions);
     } catch(e) {
-      setScreenshotError('Could not analyze screenshot: ' + e.message);
+      setScreenshotError('Could not analyze: ' + e.message);
     } finally {
       setScreenshotAnalyzing(false);
     }
