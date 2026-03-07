@@ -2090,7 +2090,7 @@ Respond ONLY with valid JSON:
 
   // Auto-load option chain on mount so PCR calculates immediately
   useEffect(() => {
-    if (currentUser) fetchOptionChain();
+    if (currentUser) generateLiveOptionChain(selectedUnderlying);
   }, [currentUser]);
 
   // Calculate PCR from option chain data
