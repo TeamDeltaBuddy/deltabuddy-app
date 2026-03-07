@@ -1086,15 +1086,9 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   });
 
   // EVENTS CALENDAR
-  const [events, setEvents] = useState([
-    { date: '2026-02-19', type: 'earnings', company: 'Reliance', title: 'Q3 Results', impact: 'high' },
-    { date: '2026-02-20', type: 'economy', title: 'RBI Policy Decision', impact: 'high' },
-    { date: '2026-02-21', type: 'expiry', title: 'Weekly Options Expiry', impact: 'medium' },
-    { date: '2026-02-25', type: 'earnings', company: 'TCS', title: 'Q3 Results', impact: 'high' },
-    { date: '2026-02-26', type: 'economy', title: 'GDP Data Release', impact: 'high' },
-    { date: '2026-02-27', type: 'expiry', title: 'Monthly Options Expiry', impact: 'high' },
-    { date: '2026-03-01', type: 'economy', title: 'Auto Sales Data', impact: 'medium' },
-  ]);
+  const [events, setEvents] = useState([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventsError, setEventsError] = useState('');
   const [businessNews, setBusinessNews] = useState([]);
   const [isLoadingBusinessNews, setIsLoadingBusinessNews] = useState(false);
 
@@ -1103,36 +1097,20 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [chartTimeframe, setChartTimeframe] = useState('15m');
   const [candlestickType, setCandlestickType] = useState('candlestick');
   const [chartIndicators, setChartIndicators] = useState(['EMA20', 'RSI']);
-  const [lastChartUpdate, setLastChartUpdate] = useState(new Date()); // SMA, EMA, RSI, MACD, BB
+  const [lastChartUpdate, setLastChartUpdate] = useState(new Date());
   const [candlestickData, setCandlestickData] = useState([]);
 
   // CUSTOM SCANNER FILTERS
   const [customFilters, setCustomFilters] = useState([]);
 
-  // INSTITUTIONAL ACTIVITY & BULK DEALS
-  const [institutionalActivity, setInstitutionalActivity] = useState({
-    fii: { buy: 2450, sell: 1890, net: 560 },
-    dii: { buy: 1850, sell: 2100, net: -250 },
-    lastUpdated: new Date()
-  });
-  
-  const [bulkDeals, setBulkDeals] = useState([
-    { date: '18-Feb-26', stock: 'RELIANCE', client: 'HDFC Mutual Fund', type: 'BUY', quantity: 125000, price: 2850.50, value: 35.63 },
-    { date: '18-Feb-26', stock: 'TCS', client: 'ICICI Prudential', type: 'SELL', quantity: 89000, price: 3920.20, value: 34.89 },
-    { date: '18-Feb-26', stock: 'HDFCBANK', client: 'SBI Mutual Fund', type: 'BUY', quantity: 200000, price: 1645.80, value: 32.92 },
-    { date: '17-Feb-26', stock: 'INFY', client: 'LIC of India', type: 'BUY', quantity: 150000, price: 1580.40, value: 23.71 },
-  ]);
-  
-  const [blockDeals, setBlockDeals] = useState([
-    { date: '18-Feb-26', stock: 'TATASTEEL', client: 'Morgan Stanley', type: 'SELL', quantity: 2500000, price: 142.60, value: 356.50 },
-    { date: '18-Feb-26', stock: 'WIPRO', client: 'Goldman Sachs', type: 'BUY', quantity: 1800000, price: 465.30, value: 83.75 },
-  ]);
-  
-  const [optionInstitutionalActivity, setOptionInstitutionalActivity] = useState([
-    { strike: 23400, type: 'CE', fiiOI: 45000, diiOI: 32000, fiiChange: '+12%', diiChange: '-5%' },
-    { strike: 23450, type: 'CE', fiiOI: 89000, diiOI: 56000, fiiChange: '+28%', diiChange: '+15%' },
-    { strike: 23500, type: 'PE', fiiOI: 125000, diiOI: 98000, fiiChange: '+45%', diiChange: '+38%' },
-  ]);
+  // INSTITUTIONAL ACTIVITY — fetched from NSE EOD
+  const [institutionalActivity, setInstitutionalActivity] = useState(null);
+  const [fiiDiiLoading, setFiiDiiLoading] = useState(false);
+  const [fiiDiiError, setFiiDiiError] = useState('');
+  const [bulkDeals, setBulkDeals] = useState([]);
+  const [blockDeals, setBlockDeals] = useState([]);
+  const [optionInstitutionalActivity, setOptionInstitutionalActivity] = useState([]);
+
   const [newFilter, setNewFilter] = useState({
     name: '',
     conditions: [{ metric: 'ceOI', operator: '>', value: 50000 }]
@@ -1140,16 +1118,8 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
 
   // PCR + MAX PAIN + FII/DII + OI STATE
   const [pcrData, setPcrData] = useState({ pcr: 1.05, signal: 'Neutral', totalCE: 0, totalPE: 0 });
-  const [maxPainData, setMaxPainData] = useState({ maxPain: 23500, currentSpot: 23450 });
-  const [fiiDiiData, setFiiDiiData] = useState([
-    { date: '17-Feb', fii: -1250, dii: 980 },
-    { date: '14-Feb', fii: 2100, dii: -450 },
-    { date: '13-Feb', fii: -890, dii: 1200 },
-    { date: '12-Feb', fii: 3400, dii: -200 },
-    { date: '11-Feb', fii: -500, dii: 750 },
-    { date: '10-Feb', fii: 1800, dii: 320 },
-    { date: '07-Feb', fii: -2200, dii: 1800 },
-  ]);
+  const [maxPainData, setMaxPainData] = useState({ maxPain: 0, currentSpot: 0 });
+  const [fiiDiiData, setFiiDiiData] = useState([]);
   const [oiChartData, setOiChartData] = useState([]);
   const [activeHomeTab, setActiveHomeTab] = useState('news');
   const [optionChainData, setOptionChainData] = useState([]);
@@ -1347,6 +1317,62 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     } catch(e) { setAdminMsg('Error: ' + e.message); }
   };
 
+  // ── FETCH FII/DII FROM NSE ──────────────────────────────────────────────────
+  const fetchFiiDii = async () => {
+    setFiiDiiLoading(true);
+    setFiiDiiError('');
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/nse/fii-dii`);
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      // Map to chart-friendly format { date, fii, dii }
+      const chartData = (d.data || []).map(row => ({
+        date : row.date,
+        fii  : row.fiiNet,
+        dii  : row.diiNet,
+      }));
+      setFiiDiiData(chartData);
+      if (d.latest) {
+        setInstitutionalActivity({
+          fii: d.latest.fii,
+          dii: d.latest.dii,
+          lastUpdated: new Date(d.fetchedAt),
+          stale: d.stale || false,
+        });
+      }
+    } catch(e) {
+      setFiiDiiError('Could not load FII/DII data: ' + e.message);
+    } finally {
+      setFiiDiiLoading(false);
+    }
+  };
+
+  // ── FETCH EVENTS FROM NSE ───────────────────────────────────────────────────
+  const fetchEvents = async () => {
+    setEventsLoading(true);
+    setEventsError('');
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/nse/events`);
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setEvents(d.events || []);
+    } catch(e) {
+      setEventsError('Could not load events: ' + e.message);
+    } finally {
+      setEventsLoading(false);
+    }
+  };
+
+
+  const fetchBulkDeals = async () => {
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/nse/bulk-deals`);
+      const d = await r.json();
+      if (d.error) return;
+      if (d.bulkDeals) setBulkDeals(d.bulkDeals);
+      if (d.blockDeals) setBlockDeals(d.blockDeals);
+    } catch(e) { console.warn("Bulk deals fetch error:", e.message); }
+  };
   const fetchExpiryData = async (sym) => {
     setExpiryLoading(true);
     try {
@@ -2145,8 +2171,19 @@ Respond ONLY with valid JSON:
     setOiChartData(chartData);
   }, [liveOptionChain]);
 
-  // Track prevOI snapshot for Unusual OI card  -  store first snapshot, compare on next update
+  // -- Auto-fetch Markets tab data when sub-tab is opened -------------------
   useEffect(() => {
+    if (activeTab !== 'markets') return;
+    if (activeMarketsTab === 'fii-dii') {
+      if (!fiiDiiData.length || fiiDiiData[0]?.date?.includes('Feb')) fetchFiiDii();
+    }
+    if (activeMarketsTab === 'events') {
+      if (!events.length || events[0]?.date?.includes('2026-02')) fetchEvents();
+    }
+    if (activeMarketsTab === 'fii-dii') {
+      fetchBulkDeals();
+    }
+  }, [activeMarketsTab, activeTab]); // eslint-disable-line
     if (liveOptionChain.length === 0) return;
     const snapshot = {};
     liveOptionChain.forEach(r => { snapshot[r.strike] = { ce: r.ce?.oi||0, pe: r.pe?.oi||0 }; });
@@ -4655,49 +4692,119 @@ Respond ONLY with valid JSON:
 
             {activeMarketsTab === 'fii-dii' && (
               <div className="panel">
-                <h2>🏦 FII / DII Activity</h2>
-                <p style={{color:'var(--text-dim)',marginBottom:'1rem',fontSize:'0.85rem'}}>Published by NSE after market close. Data in crores (INR).</p>
-                {fiiDiiData.length>0 ? (
-                  <div>{fiiDiiData.slice(0,10).map((row,i)=>(
-                    <div key={i} style={{display:'grid',gridTemplateColumns:'90px 1fr 1fr 1fr',gap:'0.5rem',padding:'0.5rem 0',borderBottom:'1px solid var(--border)',fontSize:'0.85rem',alignItems:'center'}}>
-                      <span style={{color:'var(--text-dim)'}}>{row.date}</span>
-                      <span style={{color:row.fii>=0?'#4ade80':'#f87171',fontWeight:600}}>FII: {row.fii>=0?'+':''}{(row.fii||0).toLocaleString()}</span>
-                      <span style={{color:row.dii>=0?'#60a5fa':'#f87171',fontWeight:600}}>DII: {row.dii>=0?'+':''}{(row.dii||0).toLocaleString()}</span>
-                      <span style={{color:((row.fii||0)+(row.dii||0))>=0?'#4ade80':'#f87171',fontWeight:700}}>Net: {((row.fii||0)+(row.dii||0))>=0?'+':''}{((row.fii||0)+(row.dii||0)).toLocaleString()}</span>
-                    </div>
-                  ))}</div>
-                ) : (
-                  <div style={{textAlign:'center',padding:'2rem',color:'var(--text-dim)'}}>
-                    <a href="https://www.nseindia.com/market-data/fii-dii-activity" target="_blank" rel="noreferrer" style={{color:'var(--accent)'}}>View FII/DII data on NSE →</a>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem',flexWrap:'wrap',gap:'0.5rem'}}>
+                  <div>
+                    <h2 style={{margin:0}}>🏦 FII / DII Activity</h2>
+                    <p style={{color:'var(--text-dim)',margin:'0.25rem 0 0',fontSize:'0.82rem'}}>
+                      NSE end-of-day data · Net flows in ₹ Crores
+                      {institutionalActivity?.stale && <span style={{color:'#f59e0b',marginLeft:'0.5rem'}}>· Cached</span>}
+                    </p>
                   </div>
+                  <button onClick={fetchFiiDii} disabled={fiiDiiLoading}
+                    style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
+                    {fiiDiiLoading ? '⏳ Loading...' : '🔄 Refresh'}
+                  </button>
+                </div>
+
+                {/* Latest day summary */}
+                {institutionalActivity && (
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'0.75rem',marginBottom:'1.25rem'}}>
+                    {[
+                      {label:'FII Net', val:institutionalActivity.fii?.net, color:institutionalActivity.fii?.net>=0?'#4ade80':'#f87171'},
+                      {label:'DII Net', val:institutionalActivity.dii?.net, color:institutionalActivity.dii?.net>=0?'#60a5fa':'#f87171'},
+                      {label:'Total Net', val:(institutionalActivity.fii?.net||0)+(institutionalActivity.dii?.net||0),
+                        color:((institutionalActivity.fii?.net||0)+(institutionalActivity.dii?.net||0))>=0?'#4ade80':'#f87171'},
+                    ].map((item,i)=>(
+                      <div key={i} style={{background:'var(--bg-dark)',borderRadius:'8px',padding:'0.75rem',textAlign:'center',border:'1px solid var(--border)'}}>
+                        <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginBottom:'0.25rem',textTransform:'uppercase',letterSpacing:'0.06em'}}>{item.label}</div>
+                        <div style={{fontSize:'1.1rem',fontWeight:800,color:item.color}}>
+                          {item.val >= 0 ? '+' : ''}{(item.val||0).toFixed(0)} Cr
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {fiiDiiError && <div style={{color:'#f87171',fontSize:'0.82rem',marginBottom:'1rem'}}>{fiiDiiError}</div>}
+
+                {fiiDiiData.length > 0 ? (
+                  <div>
+                    <div style={{display:'grid',gridTemplateColumns:'90px 1fr 1fr 1fr',gap:'0.5rem',padding:'0.4rem 0',borderBottom:'1px solid var(--border)',fontSize:'0.72rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.06em'}}>
+                      <span>Date</span><span>FII Net</span><span>DII Net</span><span>Combined</span>
+                    </div>
+                    {fiiDiiData.slice(0,10).map((row,i)=>(
+                      <div key={i} style={{display:'grid',gridTemplateColumns:'90px 1fr 1fr 1fr',gap:'0.5rem',padding:'0.5rem 0',borderBottom:'1px solid var(--border)',fontSize:'0.85rem',alignItems:'center'}}>
+                        <span style={{color:'var(--text-dim)',fontSize:'0.78rem'}}>{row.date}</span>
+                        <span style={{color:row.fii>=0?'#4ade80':'#f87171',fontWeight:600}}>{row.fii>=0?'+':''}{(row.fii||0).toFixed(0)} Cr</span>
+                        <span style={{color:row.dii>=0?'#60a5fa':'#f87171',fontWeight:600}}>{row.dii>=0?'+':''}{(row.dii||0).toFixed(0)} Cr</span>
+                        <span style={{color:((row.fii||0)+(row.dii||0))>=0?'#4ade80':'#f87171',fontWeight:700}}>
+                          {((row.fii||0)+(row.dii||0))>=0?'+':''}{((row.fii||0)+(row.dii||0)).toFixed(0)} Cr
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : !fiiDiiLoading && (
+                  <div style={{textAlign:'center',padding:'2.5rem',color:'var(--text-dim)'}}>
+                    <div style={{fontSize:'2rem',marginBottom:'0.75rem'}}>🏦</div>
+                    <div style={{marginBottom:'1rem',fontSize:'0.88rem'}}>Click Refresh to load NSE FII/DII data</div>
+                    <button onClick={fetchFiiDii}
+                      style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1.5rem',fontWeight:700,cursor:'pointer'}}>
+                      Load FII/DII Data
+                    </button>
+                  </div>
+                )}
+                {fiiDiiLoading && (
+                  <div style={{textAlign:'center',padding:'2rem',color:'var(--text-dim)'}}>⏳ Fetching from NSE...</div>
                 )}
               </div>
             )}
 
             {activeMarketsTab === 'events' && (
               <div className="panel">
-                <h2>📅 Key Market Events</h2>
-                <p style={{color:'var(--text-dim)',fontSize:'0.85rem',marginBottom:'1rem'}}>Upcoming events that could impact options premiums and volatility.</p>
-                {[
-                  {date:'28 Feb 2026',event:'NSE F&O Expiry',impact:'HIGH',type:'expiry'},
-                  {date:'06 Mar 2026',event:'RBI MPC Meeting',impact:'HIGH',type:'macro'},
-                  {date:'07 Mar 2026',event:'GDP Data Release',impact:'MEDIUM',type:'data'},
-                  {date:'13 Mar 2026',event:'NSE F&O Expiry',impact:'HIGH',type:'expiry'},
-                  {date:'18 Mar 2026',event:'US FOMC Meeting',impact:'HIGH',type:'global'},
-                  {date:'27 Mar 2026',event:'NSE Monthly Expiry',impact:'HIGH',type:'expiry'},
-                ].map((ev,i)=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:'1rem',padding:'0.75rem',marginBottom:'0.5rem',background:'var(--bg-dark)',borderRadius:'8px',border:'1px solid var(--border)'}}>
-                    <div style={{minWidth:'80px',fontSize:'0.78rem',color:'var(--text-dim)'}}>{ev.date}</div>
-                    <div style={{flex:1,fontWeight:600,fontSize:'0.88rem'}}>{ev.event}</div>
-                    <span style={{padding:'0.2rem 0.6rem',borderRadius:'4px',fontSize:'0.72rem',fontWeight:700,
-                      background:ev.impact==='HIGH'?'rgba(239,68,68,0.15)':'rgba(251,191,36,0.15)',
-                      color:ev.impact==='HIGH'?'#f87171':'#fbbf24'}}>
-                      {ev.impact}
-                    </span>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem',flexWrap:'wrap',gap:'0.5rem'}}>
+                  <div>
+                    <h2 style={{margin:0}}>📅 Corporate Events</h2>
+                    <p style={{color:'var(--text-dim)',margin:'0.25rem 0 0',fontSize:'0.82rem'}}>Results, dividends, AGM — next 30 days from NSE</p>
                   </div>
-                ))}
+                  <button onClick={fetchEvents} disabled={eventsLoading}
+                    style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
+                    {eventsLoading ? '⏳ Loading...' : '🔄 Refresh'}
+                  </button>
+                </div>
+
+                {eventsError && <div style={{color:'#f87171',fontSize:'0.82rem',marginBottom:'1rem'}}>{eventsError}</div>}
+
+                {events.length > 0 ? (
+                  <div>
+                    {events.map((ev,i)=>(
+                      <div key={i} style={{display:'flex',alignItems:'center',gap:'1rem',padding:'0.75rem',marginBottom:'0.5rem',background:'var(--bg-dark)',borderRadius:'8px',border:'1px solid var(--border)'}}>
+                        <div style={{minWidth:'88px',fontSize:'0.78rem',color:'var(--text-dim)',fontFamily:'monospace'}}>{ev.date}</div>
+                        {ev.company && <div style={{minWidth:'80px',fontSize:'0.8rem',fontWeight:700,color:'var(--accent)'}}>{ev.company}</div>}
+                        <div style={{flex:1,fontWeight:600,fontSize:'0.88rem'}}>{ev.title}</div>
+                        <span style={{padding:'0.2rem 0.6rem',borderRadius:'4px',fontSize:'0.72rem',fontWeight:700,flexShrink:0,
+                          background:ev.impact==='high'?'rgba(239,68,68,0.15)':'rgba(251,191,36,0.15)',
+                          color:ev.impact==='high'?'#f87171':'#fbbf24'}}>
+                          {ev.impact?.toUpperCase()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : !eventsLoading && (
+                  <div style={{textAlign:'center',padding:'2.5rem',color:'var(--text-dim)'}}>
+                    <div style={{fontSize:'2rem',marginBottom:'0.75rem'}}>📅</div>
+                    <div style={{marginBottom:'1rem',fontSize:'0.88rem'}}>Click Refresh to load upcoming corporate events from NSE</div>
+                    <button onClick={fetchEvents}
+                      style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1.5rem',fontWeight:700,cursor:'pointer'}}>
+                      Load Events
+                    </button>
+                  </div>
+                )}
+                {eventsLoading && (
+                  <div style={{textAlign:'center',padding:'2rem',color:'var(--text-dim)'}}>⏳ Fetching from NSE...</div>
+                )}
               </div>
             )}
+
 
             {activeMarketsTab === 'candlestick' && (() => {
               const TF_GROUPS = [
@@ -6494,8 +6601,20 @@ Respond ONLY with valid JSON:
               </button>
             </div>
             {gexError && (
-              <div style={{background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.3)',borderRadius:'10px',padding:'1rem',marginBottom:'1rem',color:'#f87171',fontSize:'0.85rem'}}>
-                {gexError}
+              <div style={{background:'rgba(248,113,113,0.08)',border:'1px solid rgba(248,113,113,0.25)',borderRadius:'10px',padding:'1.5rem',marginBottom:'1rem',textAlign:'center'}}>
+                <div style={{fontSize:'2rem',marginBottom:'0.5rem'}}>
+                  {gexError.toLowerCase().includes('closed') || gexError.toLowerCase().includes('empty') ? '🌙' : '⚠️'}
+                </div>
+                <div style={{fontWeight:700,color:'#f87171',marginBottom:'0.4rem'}}>
+                  {gexError.toLowerCase().includes('closed') || gexError.toLowerCase().includes('empty')
+                    ? 'Market is Closed'
+                    : 'GEX Load Failed'}
+                </div>
+                <div style={{fontSize:'0.82rem',color:'var(--text-dim)',lineHeight:1.6}}>
+                  {gexError.toLowerCase().includes('closed') || gexError.toLowerCase().includes('empty')
+                    ? 'NSE option chain data is only available during market hours — Monday to Friday, 9:15 AM to 3:30 PM IST.'
+                    : gexError}
+                </div>
               </div>
             )}
             {!gexData && !gexLoading && !gexError && (
