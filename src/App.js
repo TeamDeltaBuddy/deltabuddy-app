@@ -4779,7 +4779,7 @@ Respond ONLY with valid JSON:
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem',flexWrap:'wrap',gap:'0.5rem'}}>
                   <div>
                     <h2 style={{margin:0}}>📅 Market Events</h2>
-                    <p style={{color:'var(--text-dim)',margin:'0.25rem 0 0',fontSize:'0.82rem'}}>F&O expiries · F&O stock results · macro events — next 30 days</p>
+                    <p style={{color:'var(--text-dim)',margin:'0.25rem 0 0',fontSize:'0.82rem'}}>F&O expiries · Nifty 50 results · RBI &amp; global macro — next 45 days</p>
                   </div>
                   <button onClick={fetchEvents} disabled={eventsLoading}
                     style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
@@ -4789,47 +4789,60 @@ Respond ONLY with valid JSON:
 
                 {eventsError && <div style={{color:'#f87171',fontSize:'0.82rem',marginBottom:'1rem'}}>{eventsError}</div>}
 
-                {events.length > 0 ? (
+                {eventsLoading && (
+                  <div style={{textAlign:'center',padding:'2rem',color:'var(--text-dim)'}}>⏳ Fetching events...</div>
+                )}
+
+                {!eventsLoading && events.length > 0 && (
                   <div>
                     {events.map((ev,i)=>{
-                      const isMacro = ev.category === 'macro' || ev.type === 'expiry';
+                      const isMacro = ev.category === 'macro' || ev.type === 'expiry' || ev.type === 'rbi';
                       const typeIcon = ev.type === 'expiry' ? '⏰'
+                        : ev.type === 'rbi' ? '🏦'
+                        : ev.type === 'fed' ? '🇺🇸'
+                        : ev.type === 'gdp' ? '📈'
+                        : ev.type === 'inflation' ? '💹'
+                        : ev.type === 'jobs' ? '👷'
+                        : ev.type === 'pmi' ? '🏭'
                         : ev.type === 'earnings' ? '📊'
                         : ev.type === 'dividend' ? '💰'
-                        : ev.type === 'bonus' ? '🎁'
-                        : ev.type === 'split' ? '✂️'
-                        : ev.type === 'buyback' ? '🔁'
                         : '📌';
                       return (
                         <div key={i} style={{display:'flex',alignItems:'center',gap:'0.75rem',padding:'0.65rem 0.9rem',marginBottom:'0.4rem',background:'var(--bg-dark)',borderRadius:'8px',border:`1px solid ${isMacro ? 'rgba(99,102,241,0.3)' : 'var(--border)'}`}}>
-                          <div style={{fontSize:'1.1rem'}}>{typeIcon}</div>
-                          <div style={{minWidth:'88px',fontSize:'0.75rem',color:'var(--text-dim)',fontFamily:'monospace'}}>{ev.date}</div>
+                          <div style={{fontSize:'1.1rem',flexShrink:0}}>{typeIcon}</div>
+                          <div style={{minWidth:'90px',fontSize:'0.75rem',color:'var(--text-dim)',fontFamily:'monospace',flexShrink:0}}>{ev.date}</div>
                           {ev.company
-                            ? <div style={{minWidth:'90px',fontSize:'0.8rem',fontWeight:700,color:'var(--accent)'}}>{ev.company}</div>
-                            : <div style={{minWidth:'90px',fontSize:'0.72rem',fontWeight:700,color:'#818cf8',background:'rgba(99,102,241,0.12)',borderRadius:'4px',padding:'0.15rem 0.4rem',textAlign:'center'}}>MACRO</div>
+                            ? <div style={{minWidth:'90px',fontSize:'0.8rem',fontWeight:700,color:'var(--accent)',flexShrink:0}}>{ev.company}</div>
+                            : <div style={{minWidth:'70px',fontSize:'0.68rem',fontWeight:700,color:'#818cf8',background:'rgba(99,102,241,0.12)',borderRadius:'4px',padding:'0.15rem 0.4rem',textAlign:'center',flexShrink:0}}>{(ev.currency||'MACRO')}</div>
                           }
-                          <div style={{flex:1,fontWeight:600,fontSize:'0.85rem'}}>{ev.title}</div>
+                          <div style={{flex:1,fontWeight:600,fontSize:'0.85rem',minWidth:0}}>
+                            {ev.title}
+                            {(ev.forecast||ev.previous) && (
+                              <span style={{fontSize:'0.72rem',color:'var(--text-dim)',marginLeft:'0.5rem'}}>
+                                {ev.forecast && `F: ${ev.forecast}`}{ev.forecast && ev.previous && '  '}{ev.previous && `P: ${ev.previous}`}
+                              </span>
+                            )}
+                          </div>
                           <span style={{padding:'0.15rem 0.5rem',borderRadius:'4px',fontSize:'0.7rem',fontWeight:700,flexShrink:0,
                             background:ev.impact==='high'?'rgba(239,68,68,0.15)':'rgba(251,191,36,0.12)',
                             color:ev.impact==='high'?'#f87171':'#fbbf24'}}>
-                            {ev.impact?.toUpperCase()}
+                            {(ev.impact||'').toUpperCase()}
                           </span>
                         </div>
                       );
                     })}
                   </div>
-                ) : !eventsLoading && (
+                )}
+
+                {!eventsLoading && events.length === 0 && (
                   <div style={{textAlign:'center',padding:'2.5rem',color:'var(--text-dim)'}}>
                     <div style={{fontSize:'2rem',marginBottom:'0.75rem'}}>📅</div>
-                    <div style={{marginBottom:'1rem',fontSize:'0.88rem'}}>Click Refresh to load upcoming events from NSE</div>
+                    <div style={{marginBottom:'1rem',fontSize:'0.88rem'}}>Click Refresh to load upcoming events</div>
                     <button onClick={fetchEvents}
                       style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1.5rem',fontWeight:700,cursor:'pointer'}}>
                       Load Events
                     </button>
                   </div>
-                )}
-                {eventsLoading && (
-                  <div style={{textAlign:'center',padding:'2rem',color:'var(--text-dim)'}}>⏳ Fetching from NSE...</div>
                 )}
               </div>
             )}
