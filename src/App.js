@@ -1317,6 +1317,20 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     } catch(e) { setAdminMsg('Error: ' + e.message); }
   };
 
+  const setUserProWithNote = async (uid, note) => {
+    if (!isAdmin) return;
+    try {
+      await setDoc(doc(db, 'users', uid), {
+        subStatus: 'pro',
+        paidAt: new Date().toISOString(),
+        paymentNote: note || 'Manual activation',
+        paidAmount: 299,
+      }, { merge: true });
+      setAdminMsg('✅ User upgraded to Pro' + (note ? ` — ${note}` : ''));
+      fetchAllUsers();
+    } catch(e) { setAdminMsg('Error: ' + e.message); }
+  };
+
   // ── FETCH FII/DII FROM NSE ──────────────────────────────────────────────────
   const fetchFiiDii = async () => {
     setFiiDiiLoading(true);
@@ -6823,15 +6837,26 @@ Respond ONLY with valid JSON:
                               </td>
                               <td style={{padding:'0.6rem 0.75rem'}}>
                                 {isPro ? (
-                                  <button onClick={()=>setUserPro(u.id,false)}
-                                    style={{background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.3)',color:'#f87171',borderRadius:'6px',padding:'3px 10px',cursor:'pointer',fontSize:'0.75rem',fontWeight:700}}>
-                                    Remove Pro
-                                  </button>
+                                  <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
+                                    {u.paidAt && <div style={{fontSize:'0.68rem',color:'#6ee7b7'}}>Paid: {new Date(u.paidAt).toLocaleDateString('en-IN')}</div>}
+                                    {u.paymentNote && <div style={{fontSize:'0.68rem',color:'var(--text-dim)',maxWidth:'120px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.paymentNote}</div>}
+                                    <button onClick={()=>setUserPro(u.id,false)}
+                                      style={{background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.3)',color:'#f87171',borderRadius:'6px',padding:'3px 10px',cursor:'pointer',fontSize:'0.75rem',fontWeight:700}}>
+                                      Remove Pro
+                                    </button>
+                                  </div>
                                 ) : (
-                                  <button onClick={()=>setUserPro(u.id,true)}
-                                    style={{background:'rgba(249,115,22,0.15)',border:'1px solid rgba(249,115,22,0.4)',color:'#f97316',borderRadius:'6px',padding:'3px 10px',cursor:'pointer',fontSize:'0.75rem',fontWeight:700}}>
-                                    Make Pro
-                                  </button>
+                                  <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
+                                    <input
+                                      placeholder="Payment note (UPI/RZP ref)"
+                                      onKeyDown={e=>{ if(e.key==='Enter'){ setUserProWithNote(u.id, e.target.value); e.target.value=''; }}}
+                                      style={{background:'var(--bg-dark)',border:'1px solid var(--border)',borderRadius:'4px',padding:'2px 6px',color:'var(--text-main)',fontSize:'0.7rem',width:'140px'}}
+                                    />
+                                    <button onClick={e=>{ const inp=e.target.parentNode.querySelector('input'); setUserProWithNote(u.id, inp?.value||''); if(inp) inp.value=''; }}
+                                      style={{background:'rgba(249,115,22,0.15)',border:'1px solid rgba(249,115,22,0.4)',color:'#f97316',borderRadius:'6px',padding:'3px 10px',cursor:'pointer',fontSize:'0.75rem',fontWeight:700}}>
+                                      ✅ Make Pro
+                                    </button>
+                                  </div>
                                 )}
                               </td>
                             </tr>
@@ -7092,15 +7117,7 @@ Respond ONLY with valid JSON:
           </button>
         )}
 
-        {/* Tooltip label for screenshot button */}
-        <div style={{
-          position:'fixed', bottom:'100px', right:'90px', zIndex:9998,
-          background:'rgba(0,0,0,0.75)', color:'#fff',
-          fontSize:'0.72rem', fontWeight:600, padding:'4px 10px',
-          borderRadius:'6px', pointerEvents:'none', whiteSpace:'nowrap',
-        }}>
-          Import from screenshot
-        </div>
+        {/* Tooltip label hidden — shows on hover via title attribute only */}
 
         <a
           href="https://wa.me/917506218502?text=Hi%20DeltaBuddy%20Team%2C%20I%20need%20help%20with..."
