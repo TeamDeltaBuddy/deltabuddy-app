@@ -2184,6 +2184,9 @@ Respond ONLY with valid JSON:
       fetchBulkDeals();
     }
   }, [activeMarketsTab, activeTab]); // eslint-disable-line
+
+  // Track prevOI snapshot for Unusual OI card
+  useEffect(() => {
     if (liveOptionChain.length === 0) return;
     const snapshot = {};
     liveOptionChain.forEach(r => { snapshot[r.strike] = { ce: r.ce?.oi||0, pe: r.pe?.oi||0 }; });
