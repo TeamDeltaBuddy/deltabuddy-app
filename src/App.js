@@ -4740,7 +4740,7 @@ Respond ONLY with valid JSON:
                   </div>
                 )}
 
-                {fiiDiiError && <div style={{color:'#f87171',fontSize:'0.82rem',marginBottom:'1rem'}}>{fiiDiiError}</div>}
+                {fiiDiiError && !institutionalActivity && <div style={{color:'#f87171',fontSize:'0.82rem',marginBottom:'1rem'}}>{fiiDiiError}</div>}
 
                 {fiiDiiData.length > 0 ? (
                   <div>
@@ -4787,7 +4787,7 @@ Respond ONLY with valid JSON:
                   </button>
                 </div>
 
-                {eventsError && <div style={{color:'#f87171',fontSize:'0.82rem',marginBottom:'1rem'}}>{eventsError}</div>}
+                {eventsError && events.length === 0 && <div style={{color:'#f87171',fontSize:'0.82rem',marginBottom:'1rem'}}>{eventsError}</div>}
 
                 {eventsLoading && (
                   <div style={{textAlign:'center',padding:'2rem',color:'var(--text-dim)'}}>⏳ Fetching events...</div>
