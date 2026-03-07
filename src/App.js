@@ -2189,13 +2189,11 @@ Respond ONLY with valid JSON:
   useEffect(() => {
     if (activeTab !== 'markets') return;
     if (activeMarketsTab === 'fii-dii') {
-      if (!fiiDiiData.length || fiiDiiData[0]?.date?.includes('Feb')) fetchFiiDii();
+      fetchFiiDii();
+      fetchBulkDeals();
     }
     if (activeMarketsTab === 'events') {
-      if (!events.length || events[0]?.date?.includes('2026-02')) fetchEvents();
-    }
-    if (activeMarketsTab === 'fii-dii') {
-      fetchBulkDeals();
+      fetchEvents();
     }
   }, [activeMarketsTab, activeTab]); // eslint-disable-line
 
