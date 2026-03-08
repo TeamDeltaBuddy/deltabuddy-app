@@ -343,91 +343,164 @@ const calculateBlackScholes = (spot, strike, timeToExpiry, volatility, riskFreeR
 };
 
 const STRATEGY_TEMPLATES = {
+  // ── BULLISH ──────────────────────────────────────────────────────────────
+  'long-call': {
+    name:'Long Call', view:'bullish', risk:'Defined',
+    description:'Buy ATM/OTM call. Unlimited upside, premium is max loss.',
+    legs:[{ position:'buy', optionType:'call', strikeOffset:0, premiumPercent:1.0 }]
+  },
   'bull-call-spread': {
-    name: 'Bull Call Spread',
-    description: 'Buy lower strike call, sell higher strike call. Limited risk, limited profit.',
-    legs: [
-      { position: 'buy', optionType: 'call', strikeOffset: 0, premiumPercent: 1.0 },
-      { position: 'sell', optionType: 'call', strikeOffset: 200, premiumPercent: 0.5 }
+    name:'Bull Call Spread', view:'bullish', risk:'Defined',
+    description:'Buy lower call, sell higher call. Cheap directional bet.',
+    legs:[
+      { position:'buy',  optionType:'call', strikeOffset:0,   premiumPercent:1.0 },
+      { position:'sell', optionType:'call', strikeOffset:100, premiumPercent:0.5 }
     ]
   },
-  'bear-put-spread': {
-    name: 'Bear Put Spread',
-    description: 'Buy higher strike put, sell lower strike put. Limited risk, limited profit.',
-    legs: [
-      { position: 'buy', optionType: 'put', strikeOffset: 200, premiumPercent: 1.0 },
-      { position: 'sell', optionType: 'put', strikeOffset: 0, premiumPercent: 0.5 }
-    ]
-  },
-  'iron-condor': {
-    name: 'Iron Condor',
-    description: 'Sell OTM put spread + sell OTM call spread. Profit from low volatility.',
-    legs: [
-      { position: 'buy', optionType: 'put', strikeOffset: -400, premiumPercent: 0.3 },
-      { position: 'sell', optionType: 'put', strikeOffset: -200, premiumPercent: 0.6 },
-      { position: 'sell', optionType: 'call', strikeOffset: 200, premiumPercent: 0.6 },
-      { position: 'buy', optionType: 'call', strikeOffset: 400, premiumPercent: 0.3 }
-    ]
-  },
-  'long-straddle': {
-    name: 'Long Straddle',
-    description: 'Buy ATM call + ATM put. Profit from big moves in either direction.',
-    legs: [
-      { position: 'buy', optionType: 'call', strikeOffset: 0, premiumPercent: 1.0 },
-      { position: 'buy', optionType: 'put', strikeOffset: 0, premiumPercent: 1.0 }
-    ]
-  },
-  'short-straddle': {
-    name: 'Short Straddle',
-    description: 'Sell ATM call + ATM put. Profit from low volatility, unlimited risk.',
-    legs: [
-      { position: 'sell', optionType: 'call', strikeOffset: 0, premiumPercent: 1.0 },
-      { position: 'sell', optionType: 'put', strikeOffset: 0, premiumPercent: 1.0 }
-    ]
-  },
-  'long-strangle': {
-    name: 'Long Strangle',
-    description: 'Buy OTM call + OTM put. Cheaper than straddle, needs bigger move.',
-    legs: [
-      { position: 'buy', optionType: 'call', strikeOffset: 200, premiumPercent: 0.7 },
-      { position: 'buy', optionType: 'put', strikeOffset: -200, premiumPercent: 0.7 }
-    ]
-  },
-  'butterfly-spread': {
-    name: 'Butterfly Spread',
-    description: 'Buy 1 lower, sell 2 middle, buy 1 higher. Low risk, profit if stays at middle.',
-    legs: [
-      { position: 'buy', optionType: 'call', strikeOffset: -200, premiumPercent: 1.2 },
-      { position: 'sell', optionType: 'call', strikeOffset: 0, premiumPercent: 0.8, quantity: 2 },
-      { position: 'buy', optionType: 'call', strikeOffset: 200, premiumPercent: 0.5 }
-    ]
-  },
-  'iron-butterfly': {
-    name: 'Iron Butterfly',
-    description: 'Sell ATM straddle + buy OTM strangle. Tighter profit zone than Iron Condor.',
-    legs: [
-      { position: 'buy', optionType: 'put', strikeOffset: -300, premiumPercent: 0.4 },
-      { position: 'sell', optionType: 'put', strikeOffset: 0, premiumPercent: 1.0 },
-      { position: 'sell', optionType: 'call', strikeOffset: 0, premiumPercent: 1.0 },
-      { position: 'buy', optionType: 'call', strikeOffset: 300, premiumPercent: 0.4 }
+  'bull-put-spread': {
+    name:'Bull Put Spread', view:'bullish', risk:'Defined',
+    description:'Sell higher put, buy lower put. Credit received upfront.',
+    legs:[
+      { position:'sell', optionType:'put', strikeOffset:0,    premiumPercent:1.0 },
+      { position:'buy',  optionType:'put', strikeOffset:-100, premiumPercent:0.5 }
     ]
   },
   'synthetic-long': {
-    name: 'Synthetic Long',
-    description: 'Buy call + sell put at same strike. Replicates long stock position.',
-    legs: [
-      { position: 'buy', optionType: 'call', strikeOffset: 0, premiumPercent: 1.0 },
-      { position: 'sell', optionType: 'put', strikeOffset: 0, premiumPercent: 1.0 }
+    name:'Synthetic Long', view:'bullish', risk:'Unlimited',
+    description:'Buy call + sell put at same strike. Replicates futures position.',
+    legs:[
+      { position:'buy',  optionType:'call', strikeOffset:0, premiumPercent:1.0 },
+      { position:'sell', optionType:'put',  strikeOffset:0, premiumPercent:1.0 }
+    ]
+  },
+  'call-ratio-backspread': {
+    name:'Call Ratio Backspread', view:'bullish', risk:'Defined',
+    description:'Sell 1 lower call, buy 2 higher calls. Profits from big rally.',
+    legs:[
+      { position:'sell', optionType:'call', strikeOffset:0,   premiumPercent:1.0, quantity:1 },
+      { position:'buy',  optionType:'call', strikeOffset:100, premiumPercent:0.5, quantity:2 }
+    ]
+  },
+  // ── BEARISH ──────────────────────────────────────────────────────────────
+  'long-put': {
+    name:'Long Put', view:'bearish', risk:'Defined',
+    description:'Buy ATM/OTM put. Profits from fall, premium is max loss.',
+    legs:[{ position:'buy', optionType:'put', strikeOffset:0, premiumPercent:1.0 }]
+  },
+  'bear-put-spread': {
+    name:'Bear Put Spread', view:'bearish', risk:'Defined',
+    description:'Buy higher put, sell lower put. Limited cost bearish trade.',
+    legs:[
+      { position:'buy',  optionType:'put', strikeOffset:0,    premiumPercent:1.0 },
+      { position:'sell', optionType:'put', strikeOffset:-100, premiumPercent:0.5 }
+    ]
+  },
+  'bear-call-spread': {
+    name:'Bear Call Spread', view:'bearish', risk:'Defined',
+    description:'Sell lower call, buy higher call. Credit received, bearish view.',
+    legs:[
+      { position:'sell', optionType:'call', strikeOffset:0,   premiumPercent:1.0 },
+      { position:'buy',  optionType:'call', strikeOffset:100, premiumPercent:0.5 }
     ]
   },
   'synthetic-short': {
-    name: 'Synthetic Short',
-    description: 'Sell call + buy put at same strike. Replicates short stock position.',
-    legs: [
-      { position: 'sell', optionType: 'call', strikeOffset: 0, premiumPercent: 1.0 },
-      { position: 'buy', optionType: 'put', strikeOffset: 0, premiumPercent: 1.0 }
+    name:'Synthetic Short', view:'bearish', risk:'Unlimited',
+    description:'Sell call + buy put at same strike. Replicates short futures.',
+    legs:[
+      { position:'sell', optionType:'call', strikeOffset:0, premiumPercent:1.0 },
+      { position:'buy',  optionType:'put',  strikeOffset:0, premiumPercent:1.0 }
     ]
-  }
+  },
+  'put-ratio-backspread': {
+    name:'Put Ratio Backspread', view:'bearish', risk:'Defined',
+    description:'Sell 1 higher put, buy 2 lower puts. Profits from big crash.',
+    legs:[
+      { position:'sell', optionType:'put', strikeOffset:0,    premiumPercent:1.0, quantity:1 },
+      { position:'buy',  optionType:'put', strikeOffset:-100, premiumPercent:0.5, quantity:2 }
+    ]
+  },
+  // ── SIDEWAYS ─────────────────────────────────────────────────────────────
+  'short-straddle': {
+    name:'Short Straddle', view:'sideways', risk:'Unlimited',
+    description:'Sell ATM call + put. Max profit if market stays flat.',
+    legs:[
+      { position:'sell', optionType:'call', strikeOffset:0, premiumPercent:1.0 },
+      { position:'sell', optionType:'put',  strikeOffset:0, premiumPercent:1.0 }
+    ]
+  },
+  'short-strangle': {
+    name:'Short Strangle', view:'sideways', risk:'Unlimited',
+    description:'Sell OTM call + OTM put. Wider range than straddle, lower credit.',
+    legs:[
+      { position:'sell', optionType:'call', strikeOffset:100, premiumPercent:0.7 },
+      { position:'sell', optionType:'put',  strikeOffset:-100,premiumPercent:0.7 }
+    ]
+  },
+  'iron-condor': {
+    name:'Iron Condor', view:'sideways', risk:'Defined',
+    description:'Sell OTM strangle + buy wings. Best strategy for range-bound markets.',
+    legs:[
+      { position:'buy',  optionType:'put',  strikeOffset:-200, premiumPercent:0.3 },
+      { position:'sell', optionType:'put',  strikeOffset:-100, premiumPercent:0.6 },
+      { position:'sell', optionType:'call', strikeOffset:100,  premiumPercent:0.6 },
+      { position:'buy',  optionType:'call', strikeOffset:200,  premiumPercent:0.3 }
+    ]
+  },
+  'iron-butterfly': {
+    name:'Iron Butterfly', view:'sideways', risk:'Defined',
+    description:'Sell ATM straddle + buy OTM wings. Higher credit than condor.',
+    legs:[
+      { position:'buy',  optionType:'put',  strikeOffset:-200, premiumPercent:0.4 },
+      { position:'sell', optionType:'put',  strikeOffset:0,    premiumPercent:1.0 },
+      { position:'sell', optionType:'call', strikeOffset:0,    premiumPercent:1.0 },
+      { position:'buy',  optionType:'call', strikeOffset:200,  premiumPercent:0.4 }
+    ]
+  },
+  'jade-lizard': {
+    name:'Jade Lizard', view:'sideways', risk:'Defined',
+    description:'Sell OTM put + sell OTM call spread. No upside risk.',
+    legs:[
+      { position:'sell', optionType:'put',  strikeOffset:-100, premiumPercent:0.7 },
+      { position:'sell', optionType:'call', strikeOffset:100,  premiumPercent:0.6 },
+      { position:'buy',  optionType:'call', strikeOffset:200,  premiumPercent:0.3 }
+    ]
+  },
+  // ── VOLATILE ─────────────────────────────────────────────────────────────
+  'long-straddle': {
+    name:'Long Straddle', view:'volatile', risk:'Defined',
+    description:'Buy ATM call + put. Profits from any big move. Best before events.',
+    legs:[
+      { position:'buy', optionType:'call', strikeOffset:0, premiumPercent:1.0 },
+      { position:'buy', optionType:'put',  strikeOffset:0, premiumPercent:1.0 }
+    ]
+  },
+  'long-strangle': {
+    name:'Long Strangle', view:'volatile', risk:'Defined',
+    description:'Buy OTM call + OTM put. Cheaper than straddle, needs bigger move.',
+    legs:[
+      { position:'buy', optionType:'call', strikeOffset:100,  premiumPercent:0.7 },
+      { position:'buy', optionType:'put',  strikeOffset:-100, premiumPercent:0.7 }
+    ]
+  },
+  'butterfly-spread': {
+    name:'Butterfly Spread', view:'volatile', risk:'Defined',
+    description:'Buy wings, sell 2 ATM calls. Profits if market stays near center.',
+    legs:[
+      { position:'buy',  optionType:'call', strikeOffset:-100, premiumPercent:1.2, quantity:1 },
+      { position:'sell', optionType:'call', strikeOffset:0,    premiumPercent:0.8, quantity:2 },
+      { position:'buy',  optionType:'call', strikeOffset:100,  premiumPercent:0.5, quantity:1 }
+    ]
+  },
+  'reverse-iron-condor': {
+    name:'Reverse Iron Condor', view:'volatile', risk:'Defined',
+    description:'Buy OTM strangle + sell wings. Profits from big move either way.',
+    legs:[
+      { position:'sell', optionType:'put',  strikeOffset:-200, premiumPercent:0.3 },
+      { position:'buy',  optionType:'put',  strikeOffset:-100, premiumPercent:0.6 },
+      { position:'buy',  optionType:'call', strikeOffset:100,  premiumPercent:0.6 },
+      { position:'sell', optionType:'call', strikeOffset:200,  premiumPercent:0.3 }
+    ]
+  },
 };
 
 
@@ -667,7 +740,9 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     const tfMap  = { '1D':'1d','1W':'1wk','1M':'1mo' };
     const rangeMap = { '3m':'3mo','6m':'6mo','1y':'1y','2y':'2y','5y':'5y' };
     const interval = tfMap[btTimeframe]||'1d';
-    const range    = rangeMap[btPeriod]||'1y';
+    // Weekly needs more history to generate enough signals
+    const effectivePeriod = btTimeframe === '1W' && btPeriod === '1y' ? '3y' : btPeriod;
+    const range    = rangeMap[effectivePeriod]||'1y';
 
     let candles = [];
     try {
@@ -759,10 +834,33 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
         const day = new Date(c.time).getDay();
         if(day===1 && !position) signal='SELL_STRADDLE';
         if(day===4 && position)  signal='EXIT_STRADDLE';
+      } else if (btStrategy === 'straddle_buy') {
+        // Buy same-strike straddle: enter on Monday, exit on big move (>1.5%) or Thursday
+        const day = new Date(c.time).getDay();
+        if(day===1 && !position) signal='BUY_STRADDLE';
+        if(position && position.type==='BUY_STRADDLE') {
+          const move = Math.abs(S - position.entrySpot) / position.entrySpot;
+          if(move > 0.015 || day===4) signal='EXIT_BUY_STRADDLE';
+        }
+      } else if (btStrategy === 'synthetic_future') {
+        // Synthetic future: Buy CE + Sell PE at same ATM strike
+        // Enter on MA crossover signal, exit on reverse
+        const curF=fastSMA[i], curS=slowSMA[i], prvF=fastSMA[i-1], prvS=slowSMA[i-1];
+        if(curF&&curS&&prvF&&prvS){
+          if(prvF<=prvS && curF>curS) signal='SYNTH_LONG';
+          if(prvF>=prvS && curF<curS) signal='SYNTH_EXIT';
+        }
+      } else if (btStrategy === 'futures' || btStrategy === 'futures_ma') {
+        // Pure futures: buy/sell at spot, P&L = (exit-entry)*lot. Margin ~10%.
+        const curF=fastSMA[i], curS=slowSMA[i], prvF=fastSMA[i-1], prvS=slowSMA[i-1];
+        if(curF&&curS&&prvF&&prvS){
+          if(prvF<=prvS && curF>curS) signal='FUT_LONG';
+          if(prvF>=prvS && curF<curS) signal='FUT_SHORT';
+        }
       }
 
       // -- EXIT open position --
-      if (position && signal && signal !== 'SELL_STRADDLE') {
+      if (position && signal && signal !== 'SELL_STRADDLE' && signal !== 'BUY_STRADDLE' && signal !== 'SYNTH_LONG') {
         let pnl = 0;
         if (btStrategy === 'ma_crossover' || btStrategy === 'rsi' || btStrategy === 'breakout') {
           if (position.optionType === 'CE') {
@@ -780,25 +878,88 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
         position = null;
       }
 
-      // -- EXIT straddle --
+      // -- EXIT straddle sell --
       if (position && signal === 'EXIT_STRADDLE') {
-        const daysLeft = 0;
-        const cePx = bsPrice(S, position.strike, daysLeft/365, 0.065, position.ceIV||0.16, 'CE');
-        const pePx = bsPrice(S, position.strike, daysLeft/365, 0.065, position.peIV||0.16, 'PE');
+        const cePx = bsPrice(S, position.strike, 0, 0.065, position.ceIV||0.16, 'CE');
+        const pePx = bsPrice(S, position.strike, 0, 0.065, position.peIV||0.16, 'PE');
         const pnl  = (position.cePx + position.pePx - cePx - pePx) * lot;
         cash += pnl;
-        trades.push({ date:c.date, type:'EXIT', side:'STRADDLE', strike:position.strike, entryDate:position.entryDate, pnl:Math.round(pnl), capital:Math.round(cash) });
+        trades.push({ date:c.date, type:'EXIT', side:'STRADDLE_SELL', strike:position.strike, entryDate:position.entryDate, pnl:Math.round(pnl), capital:Math.round(cash) });
+        position = null;
+      }
+
+      // -- EXIT straddle buy --
+      if (position && signal === 'EXIT_BUY_STRADDLE') {
+        const cePx = bsPrice(S, position.strike, 0, 0.065, 0.16, 'CE');
+        const pePx = bsPrice(S, position.strike, 0, 0.065, 0.16, 'PE');
+        const pnl  = (cePx + pePx - position.cePx - position.pePx) * lot;
+        cash += pnl;
+        trades.push({ date:c.date, type:'EXIT', side:'STRADDLE_BUY', strike:position.strike, entryDate:position.entryDate, pnl:Math.round(pnl), capital:Math.round(cash) });
+        position = null;
+      }
+
+      // -- EXIT synthetic future --
+      if (position && signal === 'SYNTH_EXIT') {
+        const daysLeft = Math.max(0, position.daysToExpiry - (i - position.entryBar));
+        const cePx = bsPrice(S, position.strike, daysLeft/365, 0.065, 0.16, 'CE');
+        const pePx = bsPrice(S, position.strike, daysLeft/365, 0.065, 0.16, 'PE');
+        // Long synthetic = Long CE + Short PE
+        const pnl  = ((cePx - position.cePx) - (pePx - position.pePx)) * lot;
+        cash += pnl;
+        trades.push({ date:c.date, type:'EXIT', side:'SYNTH_FUTURE', strike:position.strike, entryDate:position.entryDate, pnl:Math.round(pnl), capital:Math.round(cash) });
+        position = null;
+      }
+
+      // -- EXIT futures --
+      if (position && (signal==='FUT_LONG'||signal==='FUT_SHORT') && position.type==='FUT_LONG' && signal==='FUT_SHORT') {
+        const pnl = (S - position.entrySpot) * lot;
+        cash += pnl + position.margin; // return margin
+        trades.push({ date:c.date, type:'EXIT', side:'FUT_LONG', entryDate:position.entryDate, entryPx:position.entrySpot.toFixed(0), exitPx:S.toFixed(0), pnl:Math.round(pnl), capital:Math.round(cash) });
+        position = null;
+      }
+      if (position && (signal==='FUT_LONG'||signal==='FUT_SHORT') && position.type==='FUT_SHORT' && signal==='FUT_LONG') {
+        const pnl = (position.entrySpot - S) * lot;
+        cash += pnl + position.margin;
+        trades.push({ date:c.date, type:'EXIT', side:'FUT_SHORT', entryDate:position.entryDate, entryPx:position.entrySpot.toFixed(0), exitPx:S.toFixed(0), pnl:Math.round(pnl), capital:Math.round(cash) });
         position = null;
       }
 
       // -- ENTER new position --
-      if (!position && signal && signal !== 'EXIT_STRADDLE') {
+      if (!position && signal && signal !== 'EXIT_STRADDLE' && signal !== 'EXIT_BUY_STRADDLE' && signal !== 'SYNTH_EXIT') {
         if (signal === 'SELL_STRADDLE') {
           const strike = Math.round(S/50)*50;
           const cePx   = bsPrice(S, strike, 4/365, 0.065, 0.16, 'CE');
           const pePx   = bsPrice(S, strike, 4/365, 0.065, 0.16, 'PE');
           position = { type:'SELL_STRADDLE', entryDate:c.date, entryBar:i, strike, cePx, pePx, ceIV:0.16, peIV:0.16 };
           trades.push({ date:c.date, type:'ENTRY', side:'STRADDLE_SELL', strike, entryPx:(cePx+pePx).toFixed(2), capital:Math.round(cash) });
+        } else if (signal === 'BUY_STRADDLE') {
+          const strikeMul = btSymbol.includes('BANK') ? 100 : 50;
+          const strike = Math.round(S/strikeMul)*strikeMul;
+          const cePx   = bsPrice(S, strike, 4/365, 0.065, 0.16, 'CE');
+          const pePx   = bsPrice(S, strike, 4/365, 0.065, 0.16, 'PE');
+          const cost   = (cePx + pePx) * lot;
+          if (cost > cash * 0.4) { equity.push({ date:c.date, value:Math.round(cash) }); continue; }
+          cash -= cost;
+          position = { type:'BUY_STRADDLE', entryDate:c.date, entryBar:i, strike, cePx, pePx, entrySpot:S };
+          trades.push({ date:c.date, type:'ENTRY', side:'STRADDLE_BUY', strike, entryPx:(cePx+pePx).toFixed(2), capital:Math.round(cash) });
+        } else if (signal === 'SYNTH_LONG') {
+          const strikeMul = btSymbol.includes('BANK') ? 100 : 50;
+          const strike = Math.round(S/strikeMul)*strikeMul;
+          const cePx   = bsPrice(S, strike, 7/365, 0.065, 0.16, 'CE');
+          const pePx   = bsPrice(S, strike, 7/365, 0.065, 0.16, 'PE');
+          // Synthetic long: buy CE (pay), sell PE (receive) — net cost much lower than outright
+          const netCost = Math.max(0, cePx - pePx) * lot;
+          if (netCost > cash * 0.4) { equity.push({ date:c.date, value:Math.round(cash) }); continue; }
+          cash -= netCost;
+          position = { type:'SYNTH_LONG', entryDate:c.date, entryBar:i, strike, cePx, pePx, daysToExpiry:7 };
+          trades.push({ date:c.date, type:'ENTRY', side:'SYNTH_FUTURE', strike, entryPx:(cePx-pePx).toFixed(2), capital:Math.round(cash) });
+        } else if (signal === 'FUT_LONG' || signal === 'FUT_SHORT') {
+          // Futures: block 10% of spot as margin, trade full lot
+          const margin = S * lot * 0.10;
+          if (margin > cash * 0.5) { equity.push({ date:c.date, value:Math.round(cash) }); continue; }
+          cash -= margin;
+          position = { type: signal, entryDate:c.date, entryBar:i, entrySpot:S, lot, margin };
+          trades.push({ date:c.date, type:'ENTRY', side:signal, entryPx:S.toFixed(0), capital:Math.round(cash) });
         } else {
           const optType  = signal === 'LONG' ? 'CE' : 'PE';
           const strikeMul = btSymbol.includes('BANK') ? 100 : 50;
@@ -806,7 +967,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
           const daysToExp = 7;
           const entryPx  = bsPrice(S, strike, daysToExp/365, 0.065, 0.16, optType);
           const cost     = entryPx * lot;
-          if (cost > cash * 0.15) { equity.push({ date:c.date, value:Math.round(cash) }); continue; } // risk check
+          if (cost > cash * 0.4) { equity.push({ date:c.date, value:Math.round(cash) }); continue; } // risk check: max 40% per trade
           cash -= cost;
           position = { type:signal, optionType:optType, entryDate:c.date, entryBar:i, strike, entryPx, daysToExpiry:daysToExp };
           trades.push({ date:c.date, type:'ENTRY', side:optType, strike, entryPx:entryPx.toFixed(2), capital:Math.round(cash) });
@@ -819,10 +980,32 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     // -- Close any open position at end --
     if (position) {
       const S = candles[candles.length-1].close;
-      const exitPx = bsPrice(S, position.strike, 0, 0.065, 0.16, position.optionType||'CE');
-      const pnl    = position.optionType ? (exitPx - position.entryPx) * lot : 0;
+      let pnl = 0;
+      if (position.type === 'SELL_STRADDLE') {
+        const cePx = bsPrice(S, position.strike, 0, 0.065, 0.16, 'CE');
+        const pePx = bsPrice(S, position.strike, 0, 0.065, 0.16, 'PE');
+        pnl = (position.cePx + position.pePx - cePx - pePx) * lot;
+      } else if (position.type === 'BUY_STRADDLE') {
+        const cePx = bsPrice(S, position.strike, 0, 0.065, 0.16, 'CE');
+        const pePx = bsPrice(S, position.strike, 0, 0.065, 0.16, 'PE');
+        pnl = (cePx + pePx - position.cePx - position.pePx) * lot;
+      } else if (position.type === 'SYNTH_LONG') {
+        const daysLeft = Math.max(0, position.daysToExpiry - (candles.length - 1 - position.entryBar));
+        const cePx = bsPrice(S, position.strike, daysLeft/365, 0.065, 0.16, 'CE');
+        const pePx = bsPrice(S, position.strike, daysLeft/365, 0.065, 0.16, 'PE');
+        pnl = ((cePx - position.cePx) - (pePx - position.pePx)) * lot;
+      } else if (position.type === 'FUT_LONG') {
+        pnl = (S - position.entrySpot) * position.lot;
+        cash += position.margin;
+      } else if (position.type === 'FUT_SHORT') {
+        pnl = (position.entrySpot - S) * position.lot;
+        cash += position.margin;
+      } else if (position.optionType) {
+        const exitPx = bsPrice(S, position.strike, 0, 0.065, 0.16, position.optionType);
+        pnl = (exitPx - position.entryPx) * lot;
+      }
       cash += pnl;
-      trades.push({ date:candles[candles.length-1].date, type:'EXIT(End)', side:position.optionType||'STRADDLE', pnl:Math.round(pnl), capital:Math.round(cash) });
+      trades.push({ date:candles[candles.length-1].date, type:'EXIT(End)', side:position.type||position.optionType||'STRADDLE', pnl:Math.round(pnl), capital:Math.round(cash) });
     }
 
     // -- Stats --
@@ -1126,6 +1309,12 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [alerts, setAlerts] = useState([]);
   const [scannerIV, setScannerIV] = useState(20);
   const [scannerExpiry, setScannerExpiry] = useState('');
+  const [selectedFilters, setSelectedFilters] = useState(['iv_crush','gamma_squeeze','pcr_extreme']);
+  const [stratView, setStratView] = useState('all');
+  const [stratHoverIdx, setStratHoverIdx] = useState(null);
+  const [scanResults, setScanResults] = useState([]);
+  const [scanRunning, setScanRunning] = useState(false);
+  const [lastScanTime, setLastScanTime] = useState(null);
   const [expiryData, setExpiryData]         = useState(null);
   const [portfolio, setPortfolio]           = useState(null);
   const [portfolioLoading, setPortfolioLoading] = useState(false);
@@ -2037,32 +2226,235 @@ Respond ONLY with valid JSON:
 
   // SCANNER FUNCTIONS
   const runScan = () => {
-    const newAlerts = [];
-    const atmStrike = optionChainData.find(d => Math.abs(d.strike - spot) < 200);
-    if (atmStrike && atmStrike.ceOpen === atmStrike.ceHigh && atmStrike.pePremium > 150) {
-      newAlerts.push({ type: 'crash', title: '⚠️ Market Crash Warning', description: `${atmStrike.strike} CE rejected at highs + PE premium spiking`, recommendation: 'Bear Put Spread', severity: 'high' });
+    const chain = liveOptionChain;
+    if (!chain.length) {
+      setScanResults([{ type:'error', title:'No Data', description:'Load the option chain first from the Markets tab.', severity:'low', action:'' }]);
+      return;
     }
-    optionChainData.forEach(data => {
-      if (Math.abs(data.cePremium - data.pePremium) < 10) {
-        newAlerts.push({ type: 'synthetic', title: '💰 Synthetic Opportunity', description: `Strike ${data.strike}: CE ≈ PE (Cost advantage: ₹${Math.abs(data.cePremium - data.pePremium)})`, recommendation: 'Synthetic Long/Short', severity: 'medium' });
+    setScanRunning(true);
+    const results = [];
+    const S = spot;
+
+    // ATM strike
+    const atmRow = chain.reduce((a,b) => Math.abs(b.strike-S) < Math.abs(a.strike-S) ? b : a);
+    const atm = atmRow.strike;
+
+    // Total OI
+    const totalCE = chain.reduce((s,r) => s + (r.ce?.oi||0), 0);
+    const totalPE = chain.reduce((s,r) => s + (r.pe?.oi||0), 0);
+    const pcr = totalCE > 0 ? totalPE / totalCE : 1;
+
+    // ── 1. MARKET CRASH WARNING — CE O=H + PE under VWAP ─────────────────
+    // CE O=H: option opened at high and rejected downward (sellers in control)
+    // PE under VWAP at same strike: PE not yet priced in the fall → cheap entry
+    if (selectedFilters.includes('crash_warning')) {
+      // Scan all strikes near ATM (±300)
+      const nearATM = chain.filter(r => Math.abs(r.strike - atm) <= 300);
+      nearATM.forEach(row => {
+        const ceLtp  = parseFloat(row.ce?.ltp  || 0);
+        const ceBid  = parseFloat(row.ce?.bid  || 0);
+        const ceAsk  = parseFloat(row.ce?.ask  || 0);
+        const ceChg  = parseFloat(row.ce?.pChange || 0);
+        const peLtp  = parseFloat(row.pe?.ltp  || 0);
+        const peBid  = parseFloat(row.pe?.bid  || 0);
+        const peAsk  = parseFloat(row.pe?.ask  || 0);
+
+        if (ceLtp < 5 || peLtp < 5 || ceBid <= 0 || peAsk <= 0) return;
+
+        // O=H for CE: LTP at/near bid (sellers hitting) + fallen from prev close
+        const ceAtBid   = ceLtp <= ceBid * 1.03;
+        const ceNegChg  = ceChg < -3;
+        // PE under VWAP: LTP below mid-price (not priced in yet — cheap)
+        const peMid      = (peBid + peAsk) / 2;
+        const peUnderVWAP = peLtp < peMid * 0.98;
+
+        if (ceAtBid && ceNegChg && peUnderVWAP) {
+          results.push({
+            type:'crash_warning', icon:'🔴', severity:'high',
+            title:`Market Crash Setup — Strike ${row.strike}`,
+            description:`CE O=H: LTP ₹${ceLtp} at bid (${ceChg.toFixed(1)}% change) — sellers in control. PE ₹${peLtp} trading below VWAP mid ₹${peMid.toFixed(0)} — not priced in yet. Strong crash setup.`,
+            metric:`CE bid: ₹${ceBid} | PE mid: ₹${peMid.toFixed(0)} | PE LTP: ₹${peLtp}`,
+            action:`Buy ${row.strike} PE — crash not priced in`,
+            strategy:'long-put',
+          });
+        }
+      });
+    }
+
+    // ── 2. MARKET BLAST — PE O=L + CE under VWAP (exact opposite) ─────────
+    // PE O=L: PE opened at its low and bounced (put writers defending)
+    // CE under VWAP at same strike: CE not yet priced in the rally → cheap entry
+    if (selectedFilters.includes('blast_warning')) {
+      const nearATM = chain.filter(r => Math.abs(r.strike - atm) <= 300);
+      nearATM.forEach(row => {
+        const ceLtp  = parseFloat(row.ce?.ltp  || 0);
+        const ceBid  = parseFloat(row.ce?.bid  || 0);
+        const ceAsk  = parseFloat(row.ce?.ask  || 0);
+        const peChg  = parseFloat(row.pe?.pChange || 0);
+        const peLtp  = parseFloat(row.pe?.ltp  || 0);
+        const peBid  = parseFloat(row.pe?.bid  || 0);
+
+        if (ceLtp < 5 || peLtp < 5 || peBid <= 0 || ceAsk <= 0) return;
+
+        // O=L for PE: PE LTP at/near bid (sellers hitting puts) + fallen from prev close
+        const peAtBid    = peLtp <= peBid * 1.03;
+        const peNegChg   = peChg < -3;
+        // CE under VWAP: CE LTP below mid-price — CE not priced in the rally yet
+        const ceMid      = (ceBid + ceAsk) / 2;
+        const ceUnderVWAP = ceLtp < ceMid * 0.98;
+
+        if (peAtBid && peNegChg && ceUnderVWAP) {
+          results.push({
+            type:'blast_warning', icon:'🟢', severity:'high',
+            title:`Market Blast Setup — Strike ${row.strike}`,
+            description:`PE O=L: LTP ₹${peLtp} at bid (${peChg.toFixed(1)}% change) — put writers defending. CE ₹${ceLtp} trading below VWAP mid ₹${ceMid.toFixed(0)} — rally not priced in. Strong blast setup.`,
+            metric:`PE bid: ₹${peBid} | CE mid: ₹${ceMid.toFixed(0)} | CE LTP: ₹${ceLtp}`,
+            action:`Buy ${row.strike} CE — rally not priced in`,
+            strategy:'long-call',
+          });
+        }
+      });
+    }
+
+    // ── 3. SYNTHETIC FUTURE — Put-Call Parity Detector ────────────────────
+    // Synthetic Long = Buy CE + Sell PE at same strike → tracks underlying tick-for-tick (delta ≈ 1)
+    // Put-call parity: CE - PE ≈ Spot - Strike (at fair value)
+    // If actual (CE - PE) deviates from (Spot - Strike), there is a mispricing → arb/entry opportunity
+    if (selectedFilters.includes('synthetic')) {
+      chain.forEach(row => {
+        const ce  = parseFloat(row.ce?.ltp || 0);
+        const pe  = parseFloat(row.pe?.ltp || 0);
+        if (ce < 5 || pe < 5) return;
+
+        const actualDiff    = ce - pe;               // What market says: CE - PE
+        const theoreticalDiff = S - row.strike;       // Put-call parity: Spot - Strike
+        const deviation     = actualDiff - theoreticalDiff;  // Mispricing
+        const netCost       = Math.abs(actualDiff);   // Net premium to enter
+
+        // At ATM: theoretical diff ≈ 0, so CE ≈ PE → synthetic costs near zero
+        // Best entry: |deviation| < 20 AND net cost is low relative to ATM CE
+        const atmCE = parseFloat(atmRow.ce?.ltp || 100);
+        if (Math.abs(deviation) < 25 && netCost < atmCE * 0.15) {
+          const direction = actualDiff >= 0 ? 'Long (Buy CE, Sell PE)' : 'Short (Sell CE, Buy PE)';
+          results.push({
+            type:'synthetic', icon:'⚖️', severity:'medium',
+            title:`Synthetic Future — Strike ${row.strike}`,
+            description:`CE ₹${ce.toFixed(0)} − PE ₹${pe.toFixed(0)} = ₹${actualDiff.toFixed(0)} vs theoretical ₹${theoreticalDiff.toFixed(0)}. Deviation: ₹${deviation.toFixed(0)}. This synthetic tracks NIFTY futures tick-for-tick. Net cost: ₹${(netCost * (row.strike < 25000 ? 75 : 75)).toFixed(0)}.`,
+            metric:`Net debit: ₹${netCost.toFixed(0)} | Deviation: ₹${deviation.toFixed(0)} | Delta ≈ 1.0`,
+            action:`Synthetic ${direction}`,
+            strategy: actualDiff >= 0 ? 'synthetic-long' : 'synthetic-short',
+          });
+        }
+      });
+    }
+
+    // ── 4. IV CRUSH SETUP ─────────────────────────────────────────────────
+    // High IV (>25%) near expiry (<5 DTE) = sell premium
+    if (selectedFilters.includes('iv_crush')) {
+      const dte = daysToExpiry;
+      chain.filter(r => Math.abs(r.strike-atm) <= 200).forEach(row => {
+        const ceIV = parseFloat(row.ce?.iv || 0);
+        const peIV = parseFloat(row.pe?.iv || 0);
+        const avgIV = (ceIV + peIV) / 2;
+        if (avgIV > 22 && dte <= 7) {
+          results.push({
+            type:'iv_crush', icon:'⚡', severity:'high',
+            title:`IV Crush Setup — ${row.strike} Strike`,
+            description:`IV at ${avgIV.toFixed(1)}% with ${dte} DTE. Post-event IV collapse likely. Sell premium now.`,
+            metric:`CE IV: ${ceIV}% | PE IV: ${peIV}% | DTE: ${dte}`,
+            action:'Sell Short Straddle / Iron Condor',
+            strategy:'iron-condor',
+          });
+        }
+      });
+    }
+
+    // ── 5. GAMMA SQUEEZE ZONE ────────────────────────────────────────────
+    // Maximum combined OI concentration near ATM = explosive move likely
+    if (selectedFilters.includes('gamma_squeeze')) {
+      const atmRange = chain.filter(r => Math.abs(r.strike-atm) <= 200);
+      const maxOIRow = atmRange.reduce((a,b) => ((b.ce?.oi||0)+(b.pe?.oi||0)) > ((a.ce?.oi||0)+(a.pe?.oi||0)) ? b : a, atmRange[0]);
+      if (maxOIRow) {
+        const totalOI = (maxOIRow.ce?.oi||0) + (maxOIRow.pe?.oi||0);
+        const chainMax = Math.max(...chain.map(r=>(r.ce?.oi||0)+(r.pe?.oi||0)));
+        const concentration = totalOI / (chain.reduce((s,r)=>s+(r.ce?.oi||0)+(r.pe?.oi||0),0)||1) * 100;
+        if (concentration > 15) {
+          results.push({
+            type:'gamma_squeeze', icon:'🔥', severity:'high',
+            title:`Gamma Squeeze — ${maxOIRow.strike} is Max Pain`,
+            description:`${concentration.toFixed(0)}% of total OI concentrated at ${maxOIRow.strike}. Market gravitates here into expiry. Big move if breached.`,
+            metric:`CE OI: ${((maxOIRow.ce?.oi||0)/1000).toFixed(0)}K | PE OI: ${((maxOIRow.pe?.oi||0)/1000).toFixed(0)}K`,
+            action:`Watch ${maxOIRow.strike} ± 100 for breakout entry`,
+            strategy:'long-straddle',
+          });
+        }
       }
-    });
-    if (scannerIV > 25 && scannerExpiry < 5) {
-      newAlerts.push({ type: 'iv-crush', title: '⚡ IV Crush Imminent', description: `High IV (${scannerIV}%) + Expiry in ${scannerExpiry} days`, recommendation: 'Sell Iron Condor / Straddle', severity: 'high' });
     }
-    const maxOIStrike = optionChainData.reduce((max, d) => (d.ceOI + d.peOI) > (max.ceOI + max.peOI) ? d : max);
-    if (maxOIStrike && (maxOIStrike.ceOI + maxOIStrike.peOI) > 100000) {
-      newAlerts.push({ type: 'gamma', title: '🔥 Gamma Squeeze Zone', description: `Max OI at ${maxOIStrike.strike} (${((maxOIStrike.ceOI + maxOIStrike.peOI)/1000).toFixed(0)}K contracts)`, recommendation: 'Straddle / Strangle', severity: 'medium' });
+
+    // ── 6. PCR EXTREME ───────────────────────────────────────────────────
+    if (selectedFilters.includes('pcr_extreme')) {
+      if (pcr > 1.5) {
+        results.push({
+          type:'pcr_extreme', icon:'📊', severity:'high',
+          title:'Extreme Bullish PCR — Reversal Risk',
+          description:`PCR = ${pcr.toFixed(2)}. Extreme put buying = over-hedged market. Contrarian: market likely to squeeze upward.`,
+          metric:`Total CE OI: ${(totalCE/100000).toFixed(1)}L | PE OI: ${(totalPE/100000).toFixed(1)}L`,
+          action:'Bull Call Spread or Long Call',
+          strategy:'bull-call-spread',
+        });
+      } else if (pcr < 0.6) {
+        results.push({
+          type:'pcr_extreme', icon:'📊', severity:'high',
+          title:'Extreme Bearish PCR — Reversal Risk',
+          description:`PCR = ${pcr.toFixed(2)}. Extreme call buying = euphoric market. Contrarian: correction likely.`,
+          metric:`Total CE OI: ${(totalCE/100000).toFixed(1)}L | PE OI: ${(totalPE/100000).toFixed(1)}L`,
+          action:'Bear Put Spread or Short Straddle',
+          strategy:'short-straddle',
+        });
+      }
     }
-    const totalCE = optionChainData.reduce((sum, d) => sum + d.ceOI, 0);
-    const totalPE = optionChainData.reduce((sum, d) => sum + d.peOI, 0);
-    const pcr = totalPE / totalCE;
-    if (pcr > 1.5) {
-      newAlerts.push({ type: 'pcr', title: '📈 Bullish PCR Signal', description: `PCR = ${pcr.toFixed(2)} (Very High - Market Bullish)`, recommendation: 'Bull Call Spread', severity: 'medium' });
-    } else if (pcr < 0.7) {
-      newAlerts.push({ type: 'pcr', title: '📉 Bearish PCR Signal', description: `PCR = ${pcr.toFixed(2)} (Very Low - Market Bearish)`, recommendation: 'Bear Put Spread', severity: 'medium' });
+
+    // ── 7. OI BUILDUP ────────────────────────────────────────────────────
+    if (selectedFilters.includes('oi_buildup')) {
+      // Fresh CE OI adding = resistance building
+      const topCEBuildup = [...chain].sort((a,b)=>(b.ce?.oiChg||0)-(a.ce?.oiChg||0)).slice(0,1)[0];
+      const topPEBuildup = [...chain].sort((a,b)=>(b.pe?.oiChg||0)-(a.pe?.oiChg||0)).slice(0,1)[0];
+      if (topCEBuildup && (topCEBuildup.ce?.oiChg||0) > 50000) {
+        results.push({
+          type:'oi_buildup', icon:'📈', severity:'medium',
+          title:`Fresh CE OI Build — Resistance at ${topCEBuildup.strike}`,
+          description:`+${((topCEBuildup.ce?.oiChg||0)/1000).toFixed(0)}K CE OI added at ${topCEBuildup.strike}. Writers building resistance. Watch for rejection.`,
+          metric:`New CE OI: +${((topCEBuildup.ce?.oiChg||0)/1000).toFixed(0)}K`,
+          action:'Short CE or Bear Call Spread at this strike',
+          strategy:'bear-call-spread',
+        });
+      }
+      if (topPEBuildup && (topPEBuildup.pe?.oiChg||0) > 50000) {
+        results.push({
+          type:'oi_buildup', icon:'📉', severity:'medium',
+          title:`Fresh PE OI Build — Support at ${topPEBuildup.strike}`,
+          description:`+${((topPEBuildup.pe?.oiChg||0)/1000).toFixed(0)}K PE OI added at ${topPEBuildup.strike}. Writers building support. Watch for bounce.`,
+          metric:`New PE OI: +${((topPEBuildup.pe?.oiChg||0)/1000).toFixed(0)}K`,
+          action:'Short PE or Bull Put Spread at this strike',
+          strategy:'bull-put-spread',
+        });
+      }
     }
-    setAlerts(newAlerts);
+
+    if (results.length === 0) {
+      results.push({
+        type:'clear', icon:'✅', severity:'low',
+        title:'No Signals Detected',
+        description:'Market is calm. No extreme conditions found in selected filters. Check back when VIX spikes or near expiry.',
+        metric:`PCR: ${pcr.toFixed(2)} | ATM: ${atm} | Chain: ${chain.length} strikes`,
+        action:'',
+      });
+    }
+
+    setScanResults(results);
+    setAlerts(results);
+    setLastScanTime(new Date());
+    setScanRunning(false);
   };
 
   // Auto-refresh news and prices - LIVE MODE
@@ -4038,346 +4430,402 @@ Respond ONLY with valid JSON:
             </div>
           </>
         ) : activeTab === 'strategy' ? (
-          <>
-            <div className="page-header">
-              <h1>Multi-Leg Strategies</h1>
-              <p className="subtitle">Build complex options strategies with multiple legs</p>
-              <div className="header-actions">
-                <button className="btn-action" onClick={() => setShowSaveModal(true)}>
-                  💾 Save
-                </button>
-                <button className="btn-action" onClick={() => setShowPositionSizing(!showPositionSizing)}>
-                  📏 Position Size
-                </button>
-              </div>
-            </div>
+          (() => {
+            // ── Strategy helper: find closest actual strike from chain ──────
+            const atmStrike = liveOptionChain.length > 0
+              ? liveOptionChain.reduce((a,b) => Math.abs(b.strike-spot)<Math.abs(a.strike-spot)?b:a).strike
+              : Math.round(spot/50)*50;
+            const strikeMul = selectedUnderlying.includes('BANK') ? 100 : 50;
 
-            {showPositionSizing && (
-              <div className="panel position-sizing-panel">
-                <h2>Position Sizing Calculator</h2>
-                <div className="position-sizing-inputs">
-                  <div className="input-group">
-                    <label>Account Size (₹)</label>
-                    <input 
-                      type="number"
-                      value={accountSize}
-                      onChange={(e) => setAccountSize(Number(e.target.value))}
-                      className="input-field"
-                    />
-                  </div>
-                  <div className="input-group">
-                    <label>Risk Per Trade (%)</label>
-                    <input 
-                      type="number"
-                      value={riskPercent}
-                      onChange={(e) => setRiskPercent(Number(e.target.value))}
-                      className="input-field"
-                      step="0.1"
-                      min="0.1"
-                      max="10"
-                    />
-                  </div>
-                </div>
-                <div className="position-sizing-results">
-                  <div className="sizing-item">
-                    <span className="label">Risk Amount</span>
-                    <span className="value">₹{positionSize.riskAmount.toLocaleString()}</span>
-                  </div>
-                  <div className="sizing-item">
-                    <span className="label">Recommended Lots</span>
-                    <span className="value accent">{positionSize.lots}</span>
-                  </div>
-                  <div className="sizing-item">
-                    <span className="label">Capital Required</span>
-                    <span className="value">₹{positionSize.capitalRequired.toLocaleString()}</span>
-                  </div>
-                  <div className="sizing-item">
-                    <span className="label">Risk %</span>
-                    <span className="value">{((positionSize.capitalRequired / accountSize) * 100).toFixed(2)}%</span>
-                  </div>
-                </div>
-              </div>
-            )}
+            const resolveStrike = (offset) => {
+              if (liveOptionChain.length === 0) return atmStrike + offset;
+              const target = atmStrike + offset;
+              return liveOptionChain.reduce((a,b) => Math.abs(b.strike-target)<Math.abs(a.strike-target)?b:a).strike;
+            };
 
-            <div className="panel strategy-templates">
-              <h2>Quick Select Strategy</h2>
-              <div className="strategy-grid">
-                {Object.entries(STRATEGY_TEMPLATES).map(([key, strategy]) => (
-                  <button
-                    key={key}
-                    className={`strategy-card ${selectedStrategy === key ? 'active' : ''}`}
-                    onClick={() => loadStrategyTemplate(key)}
-                  >
-                    <div className="strategy-name">{strategy.name}</div>
-                    <div className="strategy-desc">{strategy.description}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
+            const getLivePremium = (strike, type) => {
+              const row = liveOptionChain.find(r => r.strike === strike);
+              if (!row) return null;
+              return type === 'call' ? parseFloat(row.ce?.ltp||0) : parseFloat(row.pe?.ltp||0);
+            };
 
-            <div className="panel">
-              <h2>Market Parameters</h2>
-              <div className="global-settings">
-                <div className="input-group">
-                  <label>Current Spot Price</label>
-                  <input 
-                    type="number" 
-                    value={spot} 
-                    onChange={(e) => setSpot(Number(e.target.value))}
-                    className="input-field"
-                  />
-                </div>
-                <div className="input-group">
-                  <label>Lot Size</label>
-                  <input 
-                    type="number" 
-                    value={lotSize} 
-                    onChange={(e) => setLotSize(Number(e.target.value))}
-                    className="input-field"
-                  />
-                </div>
-                <div className="input-group">
-                  <label>Days to Expiry</label>
-                  <input 
-                    type="number" 
-                    value={daysToExpiry} 
-                    onChange={(e) => setDaysToExpiry(Number(e.target.value))}
-                    className="input-field"
-                  />
-                </div>
-                <div className="input-group">
-                  <label>IV (%)</label>
-                  <input 
-                    type="number" 
-                    value={volatility} 
-                    onChange={(e) => setVolatility(Number(e.target.value))}
-                    className="input-field"
-                    step="0.1"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="panel">
-              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem'}}>
-                <h2>Strategy Legs</h2>
-                <button className="add-leg-btn" onClick={addLeg}>+ Add Leg</button>
-              </div>
-              
-              {legs.map(leg => (
-                <div key={leg.id} className="leg-row">
-                  <div className="leg-number">Leg {leg.id}</div>
-                  
-                  <div className="leg-controls">
-                    <div className="button-group">
-                      <button 
-                        className={leg.position === 'buy' ? 'active buy' : ''}
-                        onClick={() => updateLeg(leg.id, 'position', 'buy')}
-                      >
-                        Buy
-                      </button>
-                      <button 
-                        className={leg.position === 'sell' ? 'active sell' : ''}
-                        onClick={() => updateLeg(leg.id, 'position', 'sell')}
-                      >
-                        Sell
-                      </button>
-                    </div>
-
-                    <div className="button-group">
-                      <button 
-                        className={leg.optionType === 'call' ? 'active' : ''}
-                        onClick={() => updateLeg(leg.id, 'optionType', 'call')}
-                      >
-                        Call
-                      </button>
-                      <button 
-                        className={leg.optionType === 'put' ? 'active' : ''}
-                        onClick={() => updateLeg(leg.id, 'optionType', 'put')}
-                      >
-                        Put
-                      </button>
-                    </div>
-
-                    <div className="leg-input-group">
-                      <label>Strike</label>
-                      <input 
-                        type="number" 
-                        value={leg.strike}
-                        onChange={(e) => updateLeg(leg.id, 'strike', Number(e.target.value))}
-                        className="input-field-small"
-                      />
-                    </div>
-
-                    <div className="leg-input-group">
-                      <label>Premium</label>
-                      <input 
-                        type="number" 
-                        value={leg.premium}
-                        onChange={(e) => updateLeg(leg.id, 'premium', Number(e.target.value))}
-                        className="input-field-small"
-                      />
-                    </div>
-
-                    <div className="leg-input-group">
-                      <label>Qty</label>
-                      <input 
-                        type="number" 
-                        value={leg.quantity}
-                        onChange={(e) => updateLeg(leg.id, 'quantity', Number(e.target.value))}
-                        className="input-field-small"
-                        min="1"
-                      />
-                    </div>
-
-                    {legs.length > 1 && (
-                      <button 
-                        className="remove-leg-btn"
-                        onClick={() => removeLeg(leg.id)}
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="panel">
-              <h2>Strategy Summary</h2>
-              <div className="summary-grid">
-                <div className="summary-item">
-                  <span className="label">Current P&L</span>
-                  <span className={`value ${currentMultiLegPL >= 0 ? 'positive' : 'negative'}`}>
-                    ₹{currentMultiLegPL.toLocaleString()}
-                  </span>
-                </div>
-                <div className="summary-item">
-                  <span className="label">Max Profit</span>
-                  <span className="value positive">{multiMaxProfit}</span>
-                </div>
-                <div className="summary-item">
-                  <span className="label">Max Loss</span>
-                  <span className="value negative">{multiMaxLoss}</span>
-                </div>
-                <div className="summary-item">
-                  <span className="label">Net Delta</span>
-                  <span className="value">{multiLegGreeks.delta.toFixed(3)}</span>
-                </div>
-              </div>
-              {breakEvenPoints.length > 0 && (
-                <div className="breakeven-display">
-                  <strong>Break-Even Points:</strong> {breakEvenPoints.map(be => be.toLocaleString()).join(', ')}
-                </div>
-              )}
-            </div>
-
-            <div className="panel">
-              <h2>Combined P&L at Expiry</h2>
-              <div className="chart-container">
-                <svg viewBox="0 0 600 300" className="pl-chart">
-                  <line x1="50" y1="150" x2="550" y2="150" stroke="#334155" strokeWidth="2" />
-                  
-                  {multiLegPLData.length > 0 && (
-                    <>
-                      <polyline
-                        points={multiLegPLData.map((d, i) => {
-                          const x = 50 + (i / multiLegPLData.length) * 500;
-                          const maxPL = Math.max(...multiLegPLData.map(p => Math.abs(p.pl)));
-                          const y = 150 - (d.pl / (maxPL || 1)) * 120;
-                          return `${x},${Math.max(20, Math.min(280, y))}`;
-                        }).join(' ')}
-                        fill="none"
-                        stroke="#10B981"
-                        strokeWidth="3"
-                      />
-                      
-                      {breakEvenPoints.map((bePoint, idx) => {
-                        const allStrikes = legs.map(l => l.strike);
-                        const minStrike = Math.min(...allStrikes);
-                        const maxStrike = Math.max(...allStrikes);
-                        const range = (maxStrike - minStrike) * 0.5 || spot * 0.15;
-                        const center = (minStrike + maxStrike) / 2;
-                        const x = 50 + ((bePoint - (center - range)) / (range * 2)) * 500;
-                        
-                        return (
-                          <g key={idx}>
-                            <line 
-                              x1={x} y1="20" 
-                              x2={x} y2="280" 
-                              stroke="#F59E0B" 
-                              strokeWidth="2" 
-                              strokeDasharray="5,5"
-                            />
-                            <text 
-                              x={x + 5} y="40" 
-                              fill="#F59E0B" 
-                              fontSize="10" 
-                              fontWeight="bold"
-                            >
-                              BE: {bePoint.toLocaleString()}
-                            </text>
-                          </g>
-                        );
-                      })}
-                    </>
-                  )}
-                  
-                  <rect x="50" y="20" width="500" height="130" fill="rgba(16, 185, 129, 0.1)" />
-                  <rect x="50" y="150" width="500" height="130" fill="rgba(239, 68, 68, 0.1)" />
-                  
-                  <text x="300" y="15" textAnchor="middle" fill="#10B981" fontSize="12" fontWeight="bold">
-                    Profit Zone
-                  </text>
-                  <text x="300" y="295" textAnchor="middle" fill="#EF4444" fontSize="12" fontWeight="bold">
-                    Loss Zone
-                  </text>
+            // Mini SVG payoff for strategy cards
+            const MiniPayoff = ({ legs: tLegs }) => {
+              const pts = [];
+              const s0 = atmStrike;
+              for (let i = 0; i <= 20; i++) {
+                const s = s0 - 300 + i * 30;
+                let pl = 0;
+                tLegs.forEach(l => {
+                  const k = s0 + (l.strikeOffset||0);
+                  const prem = l.premiumPercent * 80;
+                  const intrinsic = l.optionType==='call' ? Math.max(0,s-k) : Math.max(0,k-s);
+                  pl += l.position==='buy' ? (intrinsic-prem)*(l.quantity||1) : (prem-intrinsic)*(l.quantity||1);
+                });
+                pts.push(pl);
+              }
+              const mn = Math.min(...pts), mx = Math.max(...pts);
+              const range = mx - mn || 1;
+              const path = pts.map((p,i) => {
+                const x = 4 + i * 3.6;
+                const y = 28 - ((p-mn)/range) * 24;
+                return `${i===0?'M':'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+              }).join(' ');
+              return (
+                <svg viewBox="0 0 76 32" style={{width:76,height:32,display:'block'}}>
+                  <line x1="4" y1={28-((0-mn)/range)*24} x2="72" y2={28-((0-mn)/range)*24} stroke="rgba(100,116,139,0.4)" strokeWidth="0.5"/>
+                  <path d={path} fill="none" stroke={mx>0?'#4ade80':'#f87171'} strokeWidth="1.5"/>
                 </svg>
-              </div>
-            </div>
+              );
+            };
 
-            <div className="panel greeks-panel">
-              <h2>Combined Greeks</h2>
-              <div className="greeks-grid">
-                <div className="greek-item">
-                  <span className="greek-label">Net Delta (Δ)</span>
-                  <span className="greek-value">{multiLegGreeks.delta.toFixed(4)}</span>
-                  <span className="greek-desc">Directional exposure</span>
+            const views = [
+              { id:'all',      label:'All' },
+              { id:'bullish',  label:'📈 Bullish' },
+              { id:'bearish',  label:'📉 Bearish' },
+              { id:'sideways', label:'↔ Sideways' },
+              { id:'volatile', label:'⚡ Volatile' },
+            ];
+
+            const visibleStrategies = Object.entries(STRATEGY_TEMPLATES)
+              .filter(([,s]) => stratView==='all' || s.view===stratView);
+
+            // Strike options for dropdowns
+            const strikeOffsets = [-300,-200,-150,-100,-50,0,50,100,150,200,300];
+            const strikeOptions = strikeOffsets.map(off => ({
+              offset: off,
+              strike: resolveStrike(off),
+              label: off===0 ? 'ATM' : off>0 ? `ATM+${off}` : `ATM${off}`,
+            }));
+
+            const netPremium = legs.reduce((s,l) => {
+              const sign = l.position==='buy' ? -1 : 1;
+              return s + sign * l.premium * lotSize * (l.quantity||1);
+            }, 0);
+
+            return (
+              <>
+                {/* ── Top Bar ───────────────────────────────────────── */}
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'0.75rem',marginBottom:'1.25rem'}}>
+                  <div>
+                    <h1 style={{margin:0,fontSize:'1.25rem',fontWeight:800}}>⚙️ Strategy Builder</h1>
+                    <p style={{margin:0,fontSize:'0.8rem',color:'var(--text-dim)'}}>Build, analyse and simulate options strategies</p>
+                  </div>
+                  <div style={{display:'flex',gap:'0.5rem',alignItems:'center',flexWrap:'wrap'}}>
+                    <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.3rem 0.6rem',fontSize:'0.8rem',color:'var(--text-dim)'}}>
+                      <span style={{color:'var(--text-muted)'}}>Spot: </span>
+                      <span style={{fontWeight:700,color:'var(--text-main)'}}>{spot.toLocaleString()}</span>
+                    </div>
+                    <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.3rem 0.6rem',fontSize:'0.8rem',color:'var(--text-dim)'}}>
+                      <span style={{color:'var(--text-muted)'}}>ATM: </span>
+                      <span style={{fontWeight:700,color:'#f97316'}}>{atmStrike.toLocaleString()}</span>
+                    </div>
+                    <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.3rem 0.6rem',fontSize:'0.8rem',color:'var(--text-dim)'}}>
+                      <label style={{marginRight:'0.3rem',color:'var(--text-muted)'}}>DTE:</label>
+                      <input type="number" value={daysToExpiry} onChange={e=>setDaysToExpiry(parseInt(e.target.value)||7)}
+                        style={{width:36,background:'transparent',border:'none',color:'var(--accent)',fontWeight:700,fontSize:'0.8rem',outline:'none'}}/>
+                    </div>
+                    <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.3rem 0.6rem',fontSize:'0.8rem'}}>
+                      <label style={{marginRight:'0.3rem',color:'var(--text-muted)'}}>IV:</label>
+                      <input type="number" value={volatility} onChange={e=>setVolatility(parseFloat(e.target.value)||15)}
+                        style={{width:36,background:'transparent',border:'none',color:'#818cf8',fontWeight:700,fontSize:'0.8rem',outline:'none'}}/>
+                      <span style={{color:'var(--text-muted)'}}>%</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="greek-item">
-                  <span className="greek-label">Net Gamma (Γ)</span>
-                  <span className="greek-value">{multiLegGreeks.gamma.toFixed(4)}</span>
-                  <span className="greek-desc">Delta acceleration</span>
+
+                {/* ── Market View Tabs ──────────────────────────────── */}
+                <div style={{display:'flex',gap:'0.4rem',marginBottom:'1.25rem',flexWrap:'wrap'}}>
+                  {views.map(v => (
+                    <button key={v.id} onClick={()=>setStratView(v.id)}
+                      style={{padding:'0.4rem 1rem',borderRadius:'99px',border:'1px solid',fontSize:'0.8rem',fontWeight:600,cursor:'pointer',transition:'all 0.15s',
+                        borderColor: stratView===v.id ? 'var(--accent)' : 'var(--border)',
+                        background: stratView===v.id ? 'rgba(0,255,136,0.12)' : 'var(--bg-card)',
+                        color: stratView===v.id ? 'var(--accent)' : 'var(--text-dim)'}}>
+                      {v.label}
+                    </button>
+                  ))}
+                  <button onClick={()=>{ setLegs([{id:1,position:'buy',optionType:'call',strike:atmStrike,premium:getLivePremium(atmStrike,'call')||80,quantity:1}]); setSelectedStrategy('custom'); setStratView('all'); }}
+                    style={{padding:'0.4rem 1rem',borderRadius:'99px',border:'1px solid',fontSize:'0.8rem',fontWeight:600,cursor:'pointer',
+                      borderColor:'rgba(139,92,246,0.5)',background:selectedStrategy==='custom'?'rgba(139,92,246,0.12)':'var(--bg-card)',color:'#a78bfa'}}>
+                    ✏️ Custom
+                  </button>
                 </div>
-                <div className="greek-item">
-                  <span className="greek-label">Net Theta (Θ)</span>
-                  <span className={`greek-value ${multiLegGreeks.theta < 0 ? 'negative' : 'positive'}`}>
-                    {multiLegGreeks.theta.toFixed(2)}
-                  </span>
-                  <span className="greek-desc">Daily time decay</span>
+
+                {/* ── Strategy Cards ────────────────────────────────── */}
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:'0.75rem',marginBottom:'1.5rem'}}>
+                  {visibleStrategies.map(([key, s]) => (
+                    <div key={key} onClick={()=>loadStrategyTemplate(key)}
+                      style={{cursor:'pointer',borderRadius:'12px',padding:'0.9rem',
+                        border:`1.5px solid ${selectedStrategy===key?'var(--accent)':'var(--border)'}`,
+                        background:selectedStrategy===key?'rgba(0,255,136,0.06)':'var(--bg-card)',
+                        transition:'all 0.15s',position:'relative'}}>
+                      {/* Risk badge */}
+                      <div style={{position:'absolute',top:'0.6rem',right:'0.6rem',fontSize:'0.62rem',fontWeight:700,padding:'2px 6px',borderRadius:'99px',
+                        background:s.risk==='Defined'?'rgba(74,222,128,0.12)':'rgba(248,113,113,0.12)',
+                        color:s.risk==='Defined'?'#4ade80':'#f87171'}}>
+                        {s.risk}
+                      </div>
+                      {/* Mini payoff */}
+                      <div style={{marginBottom:'0.5rem'}}><MiniPayoff legs={s.legs}/></div>
+                      <div style={{fontWeight:700,fontSize:'0.85rem',color:selectedStrategy===key?'var(--accent)':'var(--text-main)',marginBottom:'0.2rem'}}>{s.name}</div>
+                      <div style={{fontSize:'0.72rem',color:'var(--text-dim)',lineHeight:1.3}}>{s.description}</div>
+                    </div>
+                  ))}
                 </div>
-                <div className="greek-item">
-                  <span className="greek-label">Net Vega (ν)</span>
-                  <span className="greek-value">{multiLegGreeks.vega.toFixed(2)}</span>
-                  <span className="greek-desc">IV sensitivity</span>
+
+                {/* ── Legs Editor ───────────────────────────────────── */}
+                <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1rem',marginBottom:'1.25rem'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.9rem'}}>
+                    <span style={{fontWeight:700,color:'var(--accent)',fontSize:'0.9rem'}}>Strategy Legs</span>
+                    <button onClick={addLeg}
+                      style={{background:'rgba(0,255,136,0.12)',color:'var(--accent)',border:'1px solid rgba(0,255,136,0.3)',borderRadius:'6px',padding:'0.3rem 0.8rem',fontWeight:700,fontSize:'0.8rem',cursor:'pointer'}}>
+                      + Add Leg
+                    </button>
+                  </div>
+
+                  {/* Header row */}
+                  <div style={{display:'grid',gridTemplateColumns:'90px 80px 60px 140px 80px 60px 32px',gap:'0.4rem',padding:'0.3rem 0.4rem',borderBottom:'1px solid var(--border)',fontSize:'0.68rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'0.35rem'}}>
+                    <span>Action</span><span>Type</span><span>Lots</span><span>Strike</span><span>Premium</span><span>IV%</span><span></span>
+                  </div>
+
+                  {legs.map((leg, idx) => {
+                    const livePrem = getLivePremium(leg.strike, leg.optionType);
+                    const closestOffset = strikeOptions.reduce((a,b) => Math.abs(b.strike-leg.strike)<Math.abs(a.strike-leg.strike)?b:a);
+                    return (
+                      <div key={leg.id} style={{display:'grid',gridTemplateColumns:'90px 80px 60px 140px 80px 60px 32px',gap:'0.4rem',alignItems:'center',padding:'0.35rem 0.4rem',borderRadius:'6px',marginBottom:'0.25rem',background:idx%2===0?'rgba(255,255,255,0.02)':'transparent'}}>
+
+                        {/* Buy / Sell */}
+                        <div style={{display:'flex',gap:'3px'}}>
+                          {['buy','sell'].map(p => (
+                            <button key={p} onClick={()=>updateLeg(leg.id,'position',p)}
+                              style={{flex:1,padding:'0.3rem 0',borderRadius:'4px',border:'1px solid',fontSize:'0.72rem',fontWeight:700,cursor:'pointer',
+                                borderColor:leg.position===p?(p==='buy'?'#4ade80':'#f87171'):'var(--border)',
+                                background:leg.position===p?(p==='buy'?'rgba(74,222,128,0.15)':'rgba(248,113,113,0.15)'):'transparent',
+                                color:leg.position===p?(p==='buy'?'#4ade80':'#f87171'):'var(--text-muted)'}}>
+                              {p.toUpperCase()}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* CE / PE */}
+                        <div style={{display:'flex',gap:'3px'}}>
+                          {['call','put'].map(t => (
+                            <button key={t} onClick={()=>{
+                              const lp = getLivePremium(leg.strike, t);
+                              updateLeg(leg.id,'optionType',t);
+                              if (lp) updateLeg(leg.id,'premium',lp);
+                            }}
+                              style={{flex:1,padding:'0.3rem 0',borderRadius:'4px',border:'1px solid',fontSize:'0.72rem',fontWeight:700,cursor:'pointer',
+                                borderColor:leg.optionType===t?'var(--accent)':'var(--border)',
+                                background:leg.optionType===t?'rgba(0,255,136,0.1)':'transparent',
+                                color:leg.optionType===t?'var(--accent)':'var(--text-muted)'}}>
+                              {t==='call'?'CE':'PE'}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Lots */}
+                        <input type="number" min="1" value={leg.quantity||1} onChange={e=>updateLeg(leg.id,'quantity',parseInt(e.target.value)||1)}
+                          style={{background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.3rem 0.4rem',fontSize:'0.78rem',width:'100%',boxSizing:'border-box',textAlign:'center'}}/>
+
+                        {/* Strike dropdown */}
+                        <select value={closestOffset.offset}
+                          onChange={e=>{
+                            const opt = strikeOptions.find(o=>o.offset===parseInt(e.target.value));
+                            if (!opt) return;
+                            updateLeg(leg.id,'strike',opt.strike);
+                            const lp = getLivePremium(opt.strike, leg.optionType);
+                            if (lp) updateLeg(leg.id,'premium',lp);
+                          }}
+                          style={{background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.3rem 0.3rem',fontSize:'0.75rem',width:'100%'}}>
+                          {strikeOptions.map(o=>(
+                            <option key={o.offset} value={o.offset}>{o.label} ({o.strike.toLocaleString()})</option>
+                          ))}
+                        </select>
+
+                        {/* Premium */}
+                        <div style={{position:'relative'}}>
+                          <input type="number" value={leg.premium} step="0.5"
+                            onChange={e=>updateLeg(leg.id,'premium',parseFloat(e.target.value)||0)}
+                            style={{background:'var(--bg-dark)',color:'var(--text-main)',border:`1px solid ${livePrem&&Math.abs(livePrem-leg.premium)<5?'rgba(0,255,136,0.4)':'var(--border)'}`,borderRadius:'6px',padding:'0.3rem 0.4rem',fontSize:'0.78rem',width:'100%',boxSizing:'border-box'}}/>
+                          {livePrem && Math.abs(livePrem-leg.premium)<2 && (
+                            <span style={{position:'absolute',top:-8,right:2,fontSize:'0.55rem',color:'#4ade80',fontWeight:700}}>LIVE</span>
+                          )}
+                        </div>
+
+                        {/* IV */}
+                        <div style={{fontSize:'0.75rem',color:'#818cf8',textAlign:'center',fontWeight:600}}>
+                          {liveOptionChain.find(r=>r.strike===leg.strike)?.[leg.optionType==='call'?'ce':'pe']?.iv || volatility}
+                        </div>
+
+                        {/* Remove */}
+                        {legs.length > 1 ? (
+                          <button onClick={()=>removeLeg(leg.id)}
+                            style={{background:'transparent',border:'none',color:'#f87171',cursor:'pointer',fontSize:'1rem',padding:0,lineHeight:1}}>×</button>
+                        ) : <span/>}
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
-              
-              <div className="greek-explanation">
-                <p>
-                  <strong>Net Delta:</strong> {Math.abs(multiLegGreeks.delta * lotSize).toFixed(2)} rupees per point move
-                </p>
-                <p>
-                  <strong>Net Theta:</strong> {multiLegGreeks.theta < 0 ? 'Losing' : 'Gaining'} ₹{Math.abs(multiLegGreeks.theta * lotSize).toFixed(2)} per day
-                </p>
-                <p>
-                  <strong>Strategy Type:</strong> {Math.abs(multiLegGreeks.delta) < 0.2 ? 'Delta Neutral' : multiLegGreeks.delta > 0 ? 'Bullish' : 'Bearish'}
-                  {' | '}
-                  {multiLegGreeks.theta > 0 ? 'Positive Theta' : 'Negative Theta'}
-                </p>
-              </div>
-            </div>
-          </>
+
+                {/* ── Summary Bar ──────────────────────────────────── */}
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:'0.6rem',marginBottom:'1.25rem'}}>
+                  {[
+                    { label:'Max Profit',  val: multiMaxProfit,  color:'#4ade80' },
+                    { label:'Max Loss',    val: multiMaxLoss,    color:'#f87171' },
+                    { label:'Net Premium', val: netPremium>=0?`+₹${Math.round(netPremium).toLocaleString()}`:`-₹${Math.round(Math.abs(netPremium)).toLocaleString()}`, color:netPremium>=0?'#4ade80':'#f87171' },
+                    { label:'Theta/Day',   val: `₹${Math.abs(Math.round(multiLegGreeks.theta*lotSize))}`, color:multiLegGreeks.theta>0?'#4ade80':'#f87171' },
+                    { label:'Net Delta',   val: multiLegGreeks.delta.toFixed(2), color: Math.abs(multiLegGreeks.delta)<0.1?'#fbbf24':multiLegGreeks.delta>0?'#4ade80':'#f87171' },
+                  ].map((item,i) => (
+                    <div key={i} style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',padding:'0.75rem',textAlign:'center'}}>
+                      <div style={{fontSize:'0.68rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'0.3rem'}}>{item.label}</div>
+                      <div style={{fontSize:'1rem',fontWeight:800,color:item.color}}>{item.val}</div>
+                    </div>
+                  ))}
+                  {breakEvenPoints.length > 0 && (
+                    <div style={{background:'var(--bg-card)',border:'1px solid rgba(251,191,36,0.3)',borderRadius:'10px',padding:'0.75rem',textAlign:'center',gridColumn:'span 2'}}>
+                      <div style={{fontSize:'0.68rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'0.3rem'}}>Breakeven{breakEvenPoints.length>1?'s':''}</div>
+                      <div style={{fontSize:'0.88rem',fontWeight:700,color:'#fbbf24'}}>{breakEvenPoints.map(b=>b.toLocaleString()).join('  |  ')}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Payoff Chart ──────────────────────────────────── */}
+                {multiLegPLData.length > 0 && (() => {
+                  const W=600, H=260, PL=50, PR=20, PT=20, PB=30;
+                  const cW=W-PL-PR, cH=H-PT-PB;
+                  const spots = multiLegPLData.map(d=>d.spot);
+                  const pls   = multiLegPLData.map(d=>d.pl);
+                  const minS=Math.min(...spots), maxS=Math.max(...spots);
+                  const minPL=Math.min(...pls), maxPL=Math.max(...pls);
+                  const plRange = maxPL-minPL||1;
+                  const toX = s => PL + ((s-minS)/(maxS-minS||1))*cW;
+                  const toY = p => PT + ((maxPL-p)/plRange)*cH;
+                  const zeroY = toY(0);
+
+                  // Build profit and loss paths separately for fill
+                  const profitPath = multiLegPLData.map((d,i)=>{
+                    const x=toX(d.spot), y=Math.min(toY(d.pl),zeroY);
+                    return `${i===0?'M':'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+                  }).join(' ') + ` L${toX(maxS).toFixed(1)},${zeroY.toFixed(1)} L${toX(minS).toFixed(1)},${zeroY.toFixed(1)} Z`;
+
+                  const lossPath = multiLegPLData.map((d,i)=>{
+                    const x=toX(d.spot), y=Math.max(toY(d.pl),zeroY);
+                    return `${i===0?'M':'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+                  }).join(' ') + ` L${toX(maxS).toFixed(1)},${zeroY.toFixed(1)} L${toX(minS).toFixed(1)},${zeroY.toFixed(1)} Z`;
+
+                  const linePath = multiLegPLData.map((d,i) =>
+                    `${i===0?'M':'L'}${toX(d.spot).toFixed(1)},${toY(d.pl).toFixed(1)}`
+                  ).join(' ');
+
+                  // X-axis labels — 5 evenly spaced
+                  const xLabels = [0,1,2,3,4].map(i => Math.round(minS + i*(maxS-minS)/4));
+                  // Y-axis labels — 3
+                  const yLabels = [maxPL, 0, minPL].filter((v,i,a)=>a.indexOf(v)===i);
+
+                  // Hover logic
+                  const hoverData = stratHoverIdx !== null ? multiLegPLData[stratHoverIdx] : null;
+                  const hoverX = hoverData ? toX(hoverData.spot) : null;
+                  const hoverY = hoverData ? toY(hoverData.pl)   : null;
+
+                  return (
+                    <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1rem',marginBottom:'1.25rem'}}>
+                      <div style={{fontWeight:700,color:'var(--accent)',fontSize:'0.88rem',marginBottom:'0.75rem'}}>📊 Payoff at Expiry</div>
+                      <div style={{overflowX:'auto'}}>
+                        <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',maxWidth:W,display:'block',cursor:'crosshair'}}
+                          onMouseMove={e=>{
+                            const rect=e.currentTarget.getBoundingClientRect();
+                            const mx=(e.clientX-rect.left)/(rect.width/W);
+                            const spotAtX=minS+(mx-PL)/cW*(maxS-minS);
+                            const idx=multiLegPLData.reduce((bi,d,i)=>Math.abs(d.spot-spotAtX)<Math.abs(multiLegPLData[bi].spot-spotAtX)?i:bi,0);
+                            setStratHoverIdx(idx);
+                          }}
+                          onMouseLeave={()=>setStratHoverIdx(null)}>
+
+                          {/* Filled profit zone */}
+                          <path d={profitPath} fill="rgba(74,222,128,0.12)"/>
+                          {/* Filled loss zone */}
+                          <path d={lossPath} fill="rgba(248,113,113,0.10)"/>
+                          {/* Zero line */}
+                          <line x1={PL} y1={zeroY} x2={W-PR} y2={zeroY} stroke="rgba(100,116,139,0.5)" strokeWidth="1" strokeDasharray="4,3"/>
+                          {/* P&L line */}
+                          <path d={linePath} fill="none" stroke="#00ff88" strokeWidth="2.5"/>
+
+                          {/* Current spot line */}
+                          {(() => {
+                            const sx = toX(spot);
+                            return (<>
+                              <line x1={sx} y1={PT} x2={sx} y2={H-PB} stroke="#f97316" strokeWidth="1.5" strokeDasharray="3,3"/>
+                              <text x={sx+4} y={PT+12} fill="#f97316" fontSize="9" fontWeight="bold">SPOT</text>
+                            </>);
+                          })()}
+
+                          {/* Breakeven lines */}
+                          {breakEvenPoints.map((be,i)=>{
+                            const bx=toX(be);
+                            return (<g key={i}>
+                              <line x1={bx} y1={PT} x2={bx} y2={H-PB} stroke="#fbbf24" strokeWidth="1" strokeDasharray="4,3"/>
+                              <text x={bx+3} y={H-PB-4} fill="#fbbf24" fontSize="8" fontWeight="bold">BE:{be.toLocaleString()}</text>
+                            </g>);
+                          })}
+
+                          {/* Hover crosshair */}
+                          {hoverData && (<>
+                            <line x1={hoverX} y1={PT} x2={hoverX} y2={H-PB} stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+                            <circle cx={hoverX} cy={hoverY} r="4" fill={hoverData.pl>=0?'#4ade80':'#f87171'} stroke="#fff" strokeWidth="1.5"/>
+                            <rect x={hoverX>W/2?hoverX-115:hoverX+8} y={Math.min(hoverY-10,H-PB-40)} width="108" height="36" rx="6" fill="rgba(15,23,42,0.92)" stroke="rgba(100,116,139,0.4)"/>
+                            <text x={hoverX>W/2?hoverX-108:hoverX+14} y={Math.min(hoverY-10,H-PB-40)+14} fill="#cbd5e1" fontSize="9">Spot: {hoverData.spot.toLocaleString()}</text>
+                            <text x={hoverX>W/2?hoverX-108:hoverX+14} y={Math.min(hoverY-10,H-PB-40)+26} fill={hoverData.pl>=0?'#4ade80':'#f87171'} fontSize="9" fontWeight="bold">
+                              P&L: {hoverData.pl>=0?'+':''}{Math.round(hoverData.pl).toLocaleString()}
+                            </text>
+                          </>)}
+
+                          {/* X-axis labels */}
+                          {xLabels.map((v,i)=>(
+                            <text key={i} x={toX(v)} y={H-4} textAnchor="middle" fill="#64748b" fontSize="8">{v.toLocaleString()}</text>
+                          ))}
+
+                          {/* Y-axis labels */}
+                          {yLabels.map((v,i)=>(
+                            <text key={i} x={PL-4} y={toY(v)+3} textAnchor="end" fill={v>0?'#4ade80':v<0?'#f87171':'#64748b'} fontSize="8">
+                              {v>=0?'+':''}{Math.round(v/1000)}K
+                            </text>
+                          ))}
+                        </svg>
+                      </div>
+                      {hoverData && (
+                        <div style={{textAlign:'center',fontSize:'0.78rem',color:'var(--text-dim)',marginTop:'0.4rem'}}>
+                          Spot <strong style={{color:'var(--text-main)'}}>{hoverData.spot.toLocaleString()}</strong> →
+                          P&L <strong style={{color:hoverData.pl>=0?'#4ade80':'#f87171'}}>{hoverData.pl>=0?'+':''}{Math.round(hoverData.pl).toLocaleString()}</strong>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* ── Greeks Panel ─────────────────────────────────── */}
+                <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1rem'}}>
+                  <div style={{fontWeight:700,color:'var(--accent)',fontSize:'0.88rem',marginBottom:'0.75rem'}}>Greeks Summary</div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'0.6rem'}}>
+                    {[
+                      { label:'Δ Delta',   val:multiLegGreeks.delta.toFixed(3),  desc:'₹'+(Math.abs(multiLegGreeks.delta*lotSize)).toFixed(0)+'/pt' },
+                      { label:'Γ Gamma',   val:multiLegGreeks.gamma.toFixed(4),  desc:'Delta accel' },
+                      { label:'Θ Theta',   val:multiLegGreeks.theta.toFixed(2),  desc:'₹'+(Math.abs(multiLegGreeks.theta*lotSize)).toFixed(0)+'/day', col:multiLegGreeks.theta>0?'#4ade80':'#f87171' },
+                      { label:'ν Vega',    val:multiLegGreeks.vega.toFixed(2),   desc:'IV sensitivity' },
+                    ].map((g,i)=>(
+                      <div key={i} style={{background:'var(--bg-dark)',borderRadius:'8px',padding:'0.65rem',textAlign:'center'}}>
+                        <div style={{fontSize:'0.68rem',color:'var(--text-muted)',marginBottom:'0.2rem',textTransform:'uppercase',letterSpacing:'0.05em'}}>{g.label}</div>
+                        <div style={{fontSize:'1rem',fontWeight:800,color:g.col||'var(--text-main)'}}>{g.val}</div>
+                        <div style={{fontSize:'0.65rem',color:'var(--text-dim)',marginTop:'0.15rem'}}>{g.desc}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            );
+          })()
+        ) : activeTab === 'markets' ? (
         ) : activeTab === 'markets' ? (
           <div>
             {/* -- STOCK DEEP DIVE -- */}
@@ -5149,10 +5597,14 @@ Respond ONLY with valid JSON:
                 <div style={{fontWeight:600,marginBottom:'0.75rem',fontSize:'0.88rem',color:'var(--accent)'}}>Strategy</div>
                 <div style={{display:'flex',flexDirection:'column',gap:'0.5rem'}}>
                   {[
-                    ['ma_crossover',  '📊 MA Crossover',       'Buy CE on fast MA crossing above slow MA. Buy PE on cross below.'],
-                    ['rsi',           '⚡ RSI Reversal',        'Buy CE when RSI crosses above oversold. Buy PE when crosses below overbought.'],
-                    ['breakout',      '🚀 Breakout Momentum',  'Buy CE on N-bar high breakout. Buy PE on N-bar low breakdown.'],
-                    ['straddle_sell', '💰 Sell Weekly Straddle','Sell ATM straddle every Monday, buy back on Thursday close.'],
+                    ['ma_crossover',    '📊 MA Crossover (Options)',    'Buy CE on fast MA cross above. Buy PE on cross below. 7-day expiry options.'],
+                    ['rsi',             '⚡ RSI Reversal (Options)',    'Buy CE when RSI recrosses above oversold. Buy PE on overbought cross.'],
+                    ['breakout',        '🚀 Breakout (Options)',        'Buy CE on N-bar high breakout. Buy PE on N-bar low breakdown.'],
+                    ['straddle_sell',   '💰 Sell Weekly Straddle',      'Sell ATM CE+PE every Monday, buy back Thursday close.'],
+                    ['straddle_buy',    '🎯 Same-Strike Straddle Buy',  'Buy ATM CE + PE (same strike) on Monday. Exit on 1.5% move or Thursday.'],
+                    ['synthetic_future','⚖️ Synthetic Future (Options)','Buy CE + Sell PE at same ATM strike — tracks futures, less capital.'],
+                    ['futures',         '📈 Futures (Spot-based)',      'Buy/Sell futures directly. Uses spot price moves, no options pricing. Most accurate directional test.'],
+                    ['futures_ma',      '📊 Futures MA Crossover',      'Futures version of MA crossover — pure directional P&L, no theta/IV noise.'],
                   ].map(([v, label, desc])=>(
                     <div key={v} onClick={()=>setBtStrategy(v)}
                       style={{cursor:'pointer',padding:'0.6rem 0.75rem',borderRadius:'8px',border:`1px solid ${btStrategy===v?'var(--accent)':'var(--border)'}`,background:btStrategy===v?'rgba(0,255,136,0.07)':'transparent',transition:'all 0.15s'}}>
@@ -5502,220 +5954,115 @@ Respond ONLY with valid JSON:
             description="Real-time scanner for IV Crush, PCR Extremes, Gamma Squeeze, unusual OI buildup and more. Catches setups as they form — before retail traders notice.">
           <>
             <div className="page-header">
-              <h1>📊 Options Scanner</h1>
-              <p className="subtitle">Detect market setups and opportunities</p>
-              <button className="btn-action" onClick={runScan}>
-                🔍 Run Scan
+              <h1>🔍 DeltaBuddy Scanner</h1>
+              <p className="subtitle">Real-time F&O signal detection — {selectedUnderlying} · Spot {spot.toLocaleString()}</p>
+              <button className="btn-action" onClick={runScan} disabled={scanRunning}>
+                {scanRunning ? '⏳ Scanning...' : '▶ Run Scan'}
               </button>
             </div>
 
-            <div className="panel live-sync-notice">
-              <div className="sync-header">
-                <h3>✅ Connected to Live Option Chain</h3>
-                <span className="sync-badge">AUTO-SYNC</span>
-              </div>
-              <p style={{color: 'var(--text-dim)', marginBottom: '1rem'}}>
-                Scanner uses real-time data from Live Option Chain tab. Updates automatically every 10 seconds.
-              </p>
-              <div className="sync-stats-grid">
-                <div className="sync-stat-card">
-                  <span className="stat-label">Underlying</span>
-                  <span className="stat-value">{selectedUnderlying}</span>
-                </div>
-                <div className="sync-stat-card">
-                  <span className="stat-label">Strikes</span>
-                  <span className="stat-value">{liveOptionChain.length}</span>
-                </div>
-                <div className="sync-stat-card">
-                  <span className="stat-label">Updates</span>
-                  <span className="stat-value">Every 10s</span>
-                </div>
-                <div className="sync-stat-card">
-                  <span className="stat-label">Last Update</span>
-                  <span className="stat-value">{lastUpdateTime.toLocaleTimeString()}</span>
-                </div>
-              </div>
+            {/* Chain status */}
+            <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',padding:'0.75rem 1rem',marginBottom:'1rem',display:'flex',gap:'1.5rem',flexWrap:'wrap',alignItems:'center',fontSize:'0.82rem'}}>
+              <span style={{color: liveOptionChain.length > 0 ? '#4ade80' : '#f87171', fontWeight:700}}>
+                {liveOptionChain.length > 0 ? '● Live Chain' : '○ No Chain Data'}
+              </span>
+              <span style={{color:'var(--text-dim)'}}>Strikes: <strong style={{color:'var(--text-main)'}}>{liveOptionChain.length}</strong></span>
+              <span style={{color:'var(--text-dim)'}}>ATM: <strong style={{color:'#f97316'}}>{liveOptionChain.length ? liveOptionChain.reduce((a,b)=>Math.abs(b.strike-spot)<Math.abs(a.strike-spot)?b:a).strike : '-'}</strong></span>
+              <span style={{color:'var(--text-dim)'}}>PCR: <strong style={{color:'var(--accent)'}}>{liveOptionChain.length ? (liveOptionChain.reduce((s,r)=>s+(r.pe?.oi||0),0)/liveOptionChain.reduce((s,r)=>s+(r.ce?.oi||0),1)).toFixed(2) : '-'}</strong></span>
+              <span style={{color:'var(--text-dim)'}}>Updated: <strong style={{color:'var(--text-main)'}}>{lastUpdateTime.toLocaleTimeString()}</strong></span>
+              {lastScanTime && <span style={{color:'var(--text-dim)'}}>Last scan: <strong style={{color:'var(--accent)'}}>{lastScanTime.toLocaleTimeString()}</strong></span>}
             </div>
 
-            <div className="panel">ssName="panel">
-              <h2>📋 Available Filters</h2>
-              <div className="filters-grid">
-                <div className="filter-card">
-                  <h3>⚠️ Market Crash Warning</h3>
-                  <p>Detects: CE Open = High + PE spiking</p>
-                  <span className="filter-status">Active</span>
-                </div>
-                <div className="filter-card">
-                  <h3>💰 Synthetic Finder</h3>
-                  <p>Detects: CE Premium ≈ PE Premium</p>
-                  <span className="filter-status">Active</span>
-                </div>
-                <div className="filter-card">
-                  <h3>⚡ IV Crush Setup</h3>
-                  <p>Detects: High IV + Expiry {'<'} 5 days</p>
-                  <span className="filter-status">Active</span>
-                </div>
-                <div className="filter-card">
-                  <h3>🔥 Gamma Squeeze</h3>
-                  <p>Detects: Max OI concentration</p>
-                  <span className="filter-status">Active</span>
-                </div>
-                <div className="filter-card">
-                  <h3>📊 PCR Extreme</h3>
-                  <p>Detects: PCR {'>'} 1.5 or {'<'} 0.7</p>
-                  <span className="filter-status">Active</span>
-                </div>
-                <div className="filter-card disabled">
-                  <h3>🔧 Custom Filter</h3>
-                  <p>Build your own (Coming soon)</p>
-                  <span className="filter-status disabled">Soon</span>
-                </div>
-              </div>
-            </div>
-
-            {/* CUSTOM FILTER BUILDER */}
             <div className="panel">
-              <h2>🔧 Custom Filter Builder</h2>
-              <p style={{color: 'var(--text-dim)', marginBottom: '1.5rem'}}>
-                Create your own custom filters with multiple conditions
-              </p>
-              
-              <div className="filter-builder">
-                <div className="filter-name-input">
-                  <label>Filter Name</label>
-                  <input
-                    type="text"
-                    value={newFilter.name}
-                    onChange={(e) => setNewFilter({...newFilter, name: e.target.value})}
-                    placeholder="e.g., High OI Breakout"
-                    className="input-field"
-                  />
-                </div>
-                
-                <div className="filter-conditions">
-                  <h3>Conditions</h3>
-                  {newFilter.conditions.map((condition, idx) => (
-                    <div key={idx} className="condition-row">
-                      <select 
-                        value={condition.metric}
-                        onChange={(e) => {
-                          const updated = [...newFilter.conditions];
-                          updated[idx].metric = e.target.value;
-                          setNewFilter({...newFilter, conditions: updated});
-                        }}
-                        className="condition-select"
-                      >
-                        <option value="ceOI">CE OI</option>
-                        <option value="peOI">PE OI</option>
-                        <option value="cePremium">CE Premium</option>
-                        <option value="pePremium">PE Premium</option>
-                        <option value="ceVolume">CE Volume</option>
-                        <option value="peVolume">PE Volume</option>
-                      </select>
-                      
-                      <select
-                        value={condition.operator}
-                        onChange={(e) => {
-                          const updated = [...newFilter.conditions];
-                          updated[idx].operator = e.target.value;
-                          setNewFilter({...newFilter, conditions: updated});
-                        }}
-                        className="condition-select"
-                      >
-                        <option value=">">Greater than</option>
-                        <option value="<">Less than</option>
-                        <option value="=">Equals</option>
-                      </select>
-                      
-                      <input
-                        type="number"
-                        value={condition.value}
-                        onChange={(e) => {
-                          const updated = [...newFilter.conditions];
-                          updated[idx].value = Number(e.target.value);
-                          setNewFilter({...newFilter, conditions: updated});
-                        }}
-                        className="condition-input"
-                        placeholder="Value"
-                      />
-                      
-                      {newFilter.conditions.length > 1 && (
-                        <button
-                          className="remove-condition-btn"
-                          onClick={() => {
-                            const updated = newFilter.conditions.filter((_, i) => i !== idx);
-                            setNewFilter({...newFilter, conditions: updated});
-                          }}
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  
-                  <button
-                    className="add-condition-btn"
-                    onClick={() => {
-                      setNewFilter({
-                        ...newFilter,
-                        conditions: [...newFilter.conditions, { metric: 'ceOI', operator: '>', value: 0 }]
-                      });
-                    }}
-                  >
-                    + Add Condition
-                  </button>
-                </div>
-                
-                <button
-                  className="btn-primary"
-                  onClick={() => {
-                    if (newFilter.name.trim()) {
-                      setCustomFilters([...customFilters, {...newFilter}]);
-                      setNewFilter({ name: '', conditions: [{ metric: 'ceOI', operator: '>', value: 50000 }] });
-                      alert('Custom filter saved!');
-                    }
-                  }}
-                  style={{marginTop: '1rem'}}
-                >
-                  Save Custom Filter
-                </button>
-              </div>
-              
-              {/* SAVED CUSTOM FILTERS */}
-              {customFilters.length > 0 && (
-                <div className="saved-filters">
-                  <h3>Your Custom Filters ({customFilters.length})</h3>
-                  <div className="custom-filters-grid">
-                    {customFilters.map((filter, idx) => (
-                      <div key={idx} className="custom-filter-card">
-                        <div className="custom-filter-header">
-                          <h4>{filter.name}</h4>
-                          <button
-                            className="delete-filter-btn"
-                            onClick={() => setCustomFilters(customFilters.filter((_, i) => i !== idx))}
-                          >
-                            🗑️
-                          </button>
-                        </div>
-                        <div className="custom-filter-conditions">
-                          {filter.conditions.map((c, i) => (
-                            <div key={i} className="condition-badge">
-                              {c.metric} {c.operator} {c.value}
-                            </div>
-                          ))}
-                        </div>
-                        <button
-                          className="run-filter-btn"
-                          onClick={() => runCustomFilter(filter)}
-                        >
-                          ▶ Run Filter
-                        </button>
+              <h2>📋 Scanner Filters</h2>
+              <p style={{color:'var(--text-dim)',fontSize:'0.82rem',marginBottom:'1rem'}}>Click to toggle filters. Selected filters run when you click Scan.</p>
+              <div className="filters-grid">
+                {[
+                  { id:'crash_warning',   icon:'🔴', title:'Market Crash — CE O=H',    desc:'CE LTP at bid (O=H rejection) + PE at same strike trading under VWAP. Crash not priced in → buy PE.' },
+                  { id:'blast_warning',   icon:'🟢', title:'Market Blast — PE O=L',    desc:'PE LTP at bid (O=L bounce) + CE at same strike trading under VWAP. Rally not priced in → buy CE.' },
+                  { id:'synthetic',       icon:'⚖️', title:'Synthetic Future',          desc:'CE − PE ≈ Spot − Strike (put-call parity). Delta ≈ 1, tracks underlying tick-for-tick at near-zero net cost.' },
+                  { id:'iv_crush',        icon:'⚡', title:'IV Crush Setup',            desc:'High IV (>22%) near expiry (<7 DTE) — sell premium before IV collapses.' },
+                  { id:'gamma_squeeze',   icon:'🔥', title:'Gamma Squeeze',             desc:'15%+ of total OI concentrated at one strike — explosive move if breached.' },
+                  { id:'pcr_extreme',     icon:'📊', title:'PCR Extreme',               desc:'PCR >1.5 or <0.6 — sentiment at extreme, contrarian reversal setup.' },
+                  { id:'oi_buildup',      icon:'📈', title:'OI Buildup',                desc:'Large fresh OI being added — institutions building positions at a strike.' },
+                ].map(f => {
+                  const active = selectedFilters.includes(f.id);
+                  return (
+                    <div key={f.id} onClick={()=>setSelectedFilters(prev => active ? prev.filter(x=>x!==f.id) : [...prev, f.id])}
+                      style={{cursor:'pointer',padding:'0.9rem',borderRadius:'10px',
+                        border:`1.5px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                        background: active ? 'rgba(0,255,136,0.07)' : 'var(--bg-dark)',
+                        transition:'all 0.15s'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.35rem'}}>
+                        <span style={{fontWeight:700,fontSize:'0.88rem',color: active ? 'var(--accent)' : 'var(--text-main)'}}>{f.icon} {f.title}</span>
+                        <span style={{fontSize:'0.68rem',fontWeight:700,padding:'2px 8px',borderRadius:'99px',
+                          background: active ? 'rgba(0,255,136,0.18)' : 'rgba(100,116,139,0.15)',
+                          color: active ? 'var(--accent)' : 'var(--text-muted)'}}>
+                          {active ? '✓ ON' : 'OFF'}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                      <p style={{margin:0,fontSize:'0.75rem',color:'var(--text-dim)'}}>{f.desc}</p>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
+
+            {/* Scan Results */}
+            {scanResults.length > 0 && (
+              <div style={{marginBottom:'1.5rem'}}>
+                <div style={{fontWeight:700,fontSize:'0.9rem',color:'var(--accent)',marginBottom:'0.75rem'}}>
+                  📋 Scan Results — {scanResults.length} signal{scanResults.length>1?'s':''} found
+                </div>
+                {scanResults.map((r,i) => (
+                  <div key={i} style={{
+                    background:'var(--bg-card)',borderRadius:'12px',padding:'1rem 1.25rem',marginBottom:'0.75rem',
+                    border:`1.5px solid ${r.severity==='high'?'rgba(248,113,113,0.4)':r.severity==='medium'?'rgba(251,191,36,0.3)':'rgba(74,222,128,0.2)'}`,
+                    borderLeft:`4px solid ${r.severity==='high'?'#f87171':r.severity==='medium'?'#fbbf24':'#4ade80'}`,
+                  }}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'0.5rem',flexWrap:'wrap'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:'0.6rem'}}>
+                        <span style={{fontSize:'1.2rem'}}>{r.icon}</span>
+                        <div>
+                          <div style={{fontWeight:700,fontSize:'0.92rem',color:'var(--text-main)'}}>{r.title}</div>
+                          <div style={{fontSize:'0.78rem',color:'var(--text-dim)',marginTop:'0.2rem'}}>{r.description}</div>
+                        </div>
+                      </div>
+                      <span style={{fontSize:'0.68rem',fontWeight:700,padding:'3px 10px',borderRadius:'99px',flexShrink:0,
+                        background:r.severity==='high'?'rgba(248,113,113,0.15)':r.severity==='medium'?'rgba(251,191,36,0.12)':'rgba(74,222,128,0.1)',
+                        color:r.severity==='high'?'#f87171':r.severity==='medium'?'#fbbf24':'#4ade80'}}>
+                        {(r.severity||'').toUpperCase()}
+                      </span>
+                    </div>
+                    {r.metric && (
+                      <div style={{marginTop:'0.6rem',fontSize:'0.75rem',color:'#818cf8',background:'rgba(99,102,241,0.08)',borderRadius:'6px',padding:'0.3rem 0.6rem',display:'inline-block',fontFamily:'monospace'}}>
+                        {r.metric}
+                      </div>
+                    )}
+                    {r.action && (
+                      <div style={{marginTop:'0.5rem',display:'flex',alignItems:'center',gap:'0.5rem',flexWrap:'wrap'}}>
+                        <span style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>Suggested:</span>
+                        <span style={{fontSize:'0.78rem',fontWeight:700,color:'var(--accent)'}}>{r.action}</span>
+                        {r.strategy && (
+                          <button onClick={()=>{ loadStrategyTemplate(r.strategy); setActiveTab('strategy'); }}
+                            style={{background:'rgba(0,255,136,0.12)',color:'var(--accent)',border:'1px solid rgba(0,255,136,0.3)',borderRadius:'6px',padding:'0.2rem 0.6rem',fontSize:'0.72rem',fontWeight:700,cursor:'pointer'}}>
+                            Open in Builder →
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {scanResults.length === 0 && (
+              <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'2rem',textAlign:'center',color:'var(--text-dim)',marginBottom:'1.5rem'}}>
+                <div style={{fontSize:'2rem',marginBottom:'0.5rem'}}>🔍</div>
+                <div style={{fontSize:'0.88rem'}}>Select filters above and click <strong style={{color:'var(--accent)'}}>Run Scan</strong> to detect live setups</div>
+                <div style={{fontSize:'0.78rem',marginTop:'0.5rem',color:'var(--text-muted)'}}>Requires live option chain data. Best used during market hours.</div>
+              </div>
+            )}
           </>
           </ProGate>
         ) : activeTab === 'journal' ? (
