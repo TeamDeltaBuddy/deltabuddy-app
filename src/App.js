@@ -1285,6 +1285,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
 
   // CUSTOM SCANNER FILTERS
   const [customFilters, setCustomFilters] = useState([]);
+  const [activeScannerTab, setActiveScannerTab] = useState('preset');
 
   // INSTITUTIONAL ACTIVITY — fetched from NSE EOD
   const [institutionalActivity, setInstitutionalActivity] = useState(null);
@@ -4048,7 +4049,7 @@ Respond ONLY with valid JSON:
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',padding:'2rem'}}>
             <div style={{fontSize:'3.5rem',marginBottom:'1rem'}}>🔐</div>
             <h2 style={{marginBottom:'0.5rem'}}>Sign in to continue</h2>
-            <p style={{color:'var(--text-dim)',marginBottom:'1.5rem',maxWidth:'360px'}}>Create a free account to access all DeltaBuddy features  -  3 months free, no card needed.</p>
+            <p style={{color:'var(--text-dim)',marginBottom:'1.5rem',maxWidth:'360px'}}>Create a free account to access all DeltaBuddy features. No card needed.</p>
             <button onClick={()=>setShowAuthModal(true)}
               style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'10px',padding:'0.85rem 2rem',fontWeight:800,fontSize:'1rem',cursor:'pointer'}}>
               Sign In Free →
@@ -5952,116 +5953,299 @@ Respond ONLY with valid JSON:
             feature="Live F&O Scanner"
             description="Real-time scanner for IV Crush, PCR Extremes, Gamma Squeeze, unusual OI buildup and more. Catches setups as they form — before retail traders notice.">
           <>
-            <div className="page-header">
-              <h1>🔍 DeltaBuddy Scanner</h1>
-              <p className="subtitle">Real-time F&O signal detection — {selectedUnderlying} · Spot {spot.toLocaleString()}</p>
-              <button className="btn-action" onClick={runScan} disabled={scanRunning}>
-                {scanRunning ? '⏳ Scanning...' : '▶ Run Scan'}
-              </button>
+            {/* Header */}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'1rem',flexWrap:'wrap',gap:'0.75rem'}}>
+              <div>
+                <h1 style={{margin:0,fontSize:'1.25rem',fontWeight:800}}>🔍 DeltaBuddy Scanner</h1>
+                <p style={{margin:'0.2rem 0 0',fontSize:'0.8rem',color:'var(--text-dim)'}}>{selectedUnderlying} · Spot {spot.toLocaleString()} · {liveOptionChain.length} strikes loaded</p>
+              </div>
+              <div style={{display:'flex',gap:'0.5rem',alignItems:'center'}}>
+                <span style={{fontSize:'0.75rem',fontWeight:700,color:liveOptionChain.length>0?'#4ade80':'#f87171'}}>
+                  {liveOptionChain.length>0?'● Live':'○ No Data'}
+                </span>
+                {lastScanTime && <span style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>Scanned {lastScanTime.toLocaleTimeString()}</span>}
+              </div>
             </div>
 
-            {/* Chain status */}
-            <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',padding:'0.75rem 1rem',marginBottom:'1rem',display:'flex',gap:'1.5rem',flexWrap:'wrap',alignItems:'center',fontSize:'0.82rem'}}>
-              <span style={{color: liveOptionChain.length > 0 ? '#4ade80' : '#f87171', fontWeight:700}}>
-                {liveOptionChain.length > 0 ? '● Live Chain' : '○ No Chain Data'}
-              </span>
-              <span style={{color:'var(--text-dim)'}}>Strikes: <strong style={{color:'var(--text-main)'}}>{liveOptionChain.length}</strong></span>
-              <span style={{color:'var(--text-dim)'}}>ATM: <strong style={{color:'#f97316'}}>{liveOptionChain.length ? liveOptionChain.reduce((a,b)=>Math.abs(b.strike-spot)<Math.abs(a.strike-spot)?b:a).strike : '-'}</strong></span>
-              <span style={{color:'var(--text-dim)'}}>PCR: <strong style={{color:'var(--accent)'}}>{liveOptionChain.length ? (liveOptionChain.reduce((s,r)=>s+(r.pe?.oi||0),0)/liveOptionChain.reduce((s,r)=>s+(r.ce?.oi||0),1)).toFixed(2) : '-'}</strong></span>
-              <span style={{color:'var(--text-dim)'}}>Updated: <strong style={{color:'var(--text-main)'}}>{lastUpdateTime.toLocaleTimeString()}</strong></span>
-              {lastScanTime && <span style={{color:'var(--text-dim)'}}>Last scan: <strong style={{color:'var(--accent)'}}>{lastScanTime.toLocaleTimeString()}</strong></span>}
+            {/* Sub-tabs */}
+            <div style={{display:'flex',gap:'0.35rem',marginBottom:'1.25rem',borderBottom:'1px solid var(--border)',paddingBottom:'0'}}>
+              {[['preset','🎯 Preset Signals'],['custom','✏️ Custom Filter']].map(([id,label])=>(
+                <button key={id} onClick={()=>setActiveScannerTab(id)}
+                  style={{padding:'0.5rem 1.1rem',borderRadius:'8px 8px 0 0',border:'1px solid',borderBottom:'none',fontWeight:700,fontSize:'0.82rem',cursor:'pointer',
+                    borderColor: activeScannerTab===id ? 'var(--accent)' : 'var(--border)',
+                    background: activeScannerTab===id ? 'rgba(0,255,136,0.09)' : 'transparent',
+                    color: activeScannerTab===id ? 'var(--accent)' : 'var(--text-dim)',
+                    marginBottom:'-1px'}}>
+                  {label}
+                </button>
+              ))}
             </div>
 
-            <div className="panel">
-              <h2>📋 Scanner Filters</h2>
-              <p style={{color:'var(--text-dim)',fontSize:'0.82rem',marginBottom:'1rem'}}>Click to toggle filters. Selected filters run when you click Scan.</p>
-              <div className="filters-grid">
-                {[
-                  { id:'crash_warning',   icon:'🔴', title:'Market Crash — CE O=H',    desc:'CE LTP at bid (O=H rejection) + PE at same strike trading under VWAP. Crash not priced in → buy PE.' },
-                  { id:'blast_warning',   icon:'🟢', title:'Market Blast — PE O=L',    desc:'PE LTP at bid (O=L bounce) + CE at same strike trading under VWAP. Rally not priced in → buy CE.' },
-                  { id:'synthetic',       icon:'⚖️', title:'Synthetic Future',          desc:'CE − PE ≈ Spot − Strike (put-call parity). Delta ≈ 1, tracks underlying tick-for-tick at near-zero net cost.' },
-                  { id:'iv_crush',        icon:'⚡', title:'IV Crush Setup',            desc:'High IV (>22%) near expiry (<7 DTE) — sell premium before IV collapses.' },
-                  { id:'gamma_squeeze',   icon:'🔥', title:'Gamma Squeeze',             desc:'15%+ of total OI concentrated at one strike — explosive move if breached.' },
-                  { id:'pcr_extreme',     icon:'📊', title:'PCR Extreme',               desc:'PCR >1.5 or <0.6 — sentiment at extreme, contrarian reversal setup.' },
-                  { id:'oi_buildup',      icon:'📈', title:'OI Buildup',                desc:'Large fresh OI being added — institutions building positions at a strike.' },
-                ].map(f => {
-                  const active = selectedFilters.includes(f.id);
-                  return (
-                    <div key={f.id} onClick={()=>setSelectedFilters(prev => active ? prev.filter(x=>x!==f.id) : [...prev, f.id])}
-                      style={{cursor:'pointer',padding:'0.9rem',borderRadius:'10px',
-                        border:`1.5px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                        background: active ? 'rgba(0,255,136,0.07)' : 'var(--bg-dark)',
-                        transition:'all 0.15s'}}>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.35rem'}}>
-                        <span style={{fontWeight:700,fontSize:'0.88rem',color: active ? 'var(--accent)' : 'var(--text-main)'}}>{f.icon} {f.title}</span>
-                        <span style={{fontSize:'0.68rem',fontWeight:700,padding:'2px 8px',borderRadius:'99px',
-                          background: active ? 'rgba(0,255,136,0.18)' : 'rgba(100,116,139,0.15)',
-                          color: active ? 'var(--accent)' : 'var(--text-muted)'}}>
-                          {active ? '✓ ON' : 'OFF'}
+            {/* ── PRESET SIGNALS TAB ───────────────────────────────────────── */}
+            {activeScannerTab === 'preset' && (<>
+              <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1rem',marginBottom:'1.25rem'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.9rem'}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:'0.88rem'}}>Signal Filters</div>
+                    <div style={{fontSize:'0.73rem',color:'var(--text-dim)',marginTop:'2px'}}>Toggle ON/OFF — then click Run Scan</div>
+                  </div>
+                  <button onClick={runScan} disabled={scanRunning}
+                    style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.45rem 1.2rem',fontWeight:800,fontSize:'0.82rem',cursor:'pointer',opacity:scanRunning?0.6:1}}>
+                    {scanRunning ? '⏳ Scanning...' : '▶ Run Scan'}
+                  </button>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:'0.6rem'}}>
+                  {[
+                    { id:'crash_warning', icon:'🔴', title:'Market Crash — CE O=H',  desc:'CE at bid (O=H) + same-strike PE under VWAP → buy PE' },
+                    { id:'blast_warning', icon:'🟢', title:'Market Blast — PE O=L',  desc:'PE at bid (O=L) + same-strike CE under VWAP → buy CE' },
+                    { id:'synthetic',     icon:'⚖️', title:'Synthetic Future',        desc:'CE−PE ≈ Spot−Strike (parity) → delta≈1, tracks futures free' },
+                    { id:'iv_crush',      icon:'⚡', title:'IV Crush Setup',          desc:'IV>22% with DTE≤7 → sell premium before crush' },
+                    { id:'gamma_squeeze', icon:'🔥', title:'Gamma Squeeze',           desc:'15%+ OI at one strike → explosive move if breached' },
+                    { id:'pcr_extreme',   icon:'📊', title:'PCR Extreme',             desc:'PCR>1.5 or <0.6 → contrarian reversal' },
+                    { id:'oi_buildup',    icon:'📈', title:'OI Buildup',              desc:'Fresh OI>50K → institutions positioning' },
+                  ].map(f => {
+                    const active = selectedFilters.includes(f.id);
+                    return (
+                      <div key={f.id} onClick={()=>setSelectedFilters(p=>active?p.filter(x=>x!==f.id):[...p,f.id])}
+                        style={{cursor:'pointer',padding:'0.7rem 0.85rem',borderRadius:'9px',transition:'all 0.15s',
+                          border:`1.5px solid ${active?'var(--accent)':'var(--border)'}`,
+                          background:active?'rgba(0,255,136,0.07)':'var(--bg-dark)'}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.25rem'}}>
+                          <span style={{fontWeight:700,fontSize:'0.82rem',color:active?'var(--accent)':'var(--text-main)'}}>{f.icon} {f.title}</span>
+                          <span style={{fontSize:'0.62rem',fontWeight:700,padding:'2px 6px',borderRadius:'99px',
+                            background:active?'rgba(0,255,136,0.18)':'rgba(100,116,139,0.12)',
+                            color:active?'var(--accent)':'var(--text-muted)'}}>
+                            {active?'ON':'OFF'}
+                          </span>
+                        </div>
+                        <p style={{margin:0,fontSize:'0.71rem',color:'var(--text-dim)',lineHeight:1.35}}>{f.desc}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Results */}
+              {scanResults.length > 0 ? (
+                <div>
+                  <div style={{fontWeight:700,fontSize:'0.88rem',color:'var(--accent)',marginBottom:'0.75rem'}}>
+                    📋 {scanResults.length} signal{scanResults.length>1?'s':''} found
+                  </div>
+                  {scanResults.map((r,i) => (
+                    <div key={i} style={{background:'var(--bg-card)',borderRadius:'12px',padding:'1rem 1.25rem',marginBottom:'0.65rem',
+                      border:`1.5px solid ${r.severity==='high'?'rgba(248,113,113,0.35)':r.severity==='medium'?'rgba(251,191,36,0.25)':'rgba(74,222,128,0.2)'}`,
+                      borderLeft:`4px solid ${r.severity==='high'?'#f87171':r.severity==='medium'?'#fbbf24':'#4ade80'}`}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'0.5rem',flexWrap:'wrap'}}>
+                        <div style={{display:'flex',gap:'0.6rem',alignItems:'flex-start'}}>
+                          <span style={{fontSize:'1.2rem',flexShrink:0}}>{r.icon}</span>
+                          <div>
+                            <div style={{fontWeight:700,fontSize:'0.9rem',color:'var(--text-main)'}}>{r.title}</div>
+                            <div style={{fontSize:'0.76rem',color:'var(--text-dim)',marginTop:'0.2rem',lineHeight:1.4}}>{r.description}</div>
+                          </div>
+                        </div>
+                        <span style={{fontSize:'0.65rem',fontWeight:700,padding:'2px 8px',borderRadius:'99px',flexShrink:0,
+                          background:r.severity==='high'?'rgba(248,113,113,0.12)':r.severity==='medium'?'rgba(251,191,36,0.1)':'rgba(74,222,128,0.08)',
+                          color:r.severity==='high'?'#f87171':r.severity==='medium'?'#fbbf24':'#4ade80'}}>
+                          {(r.severity||'').toUpperCase()}
                         </span>
                       </div>
-                      <p style={{margin:0,fontSize:'0.75rem',color:'var(--text-dim)'}}>{f.desc}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Scan Results */}
-            {scanResults.length > 0 && (
-              <div style={{marginBottom:'1.5rem'}}>
-                <div style={{fontWeight:700,fontSize:'0.9rem',color:'var(--accent)',marginBottom:'0.75rem'}}>
-                  📋 Scan Results — {scanResults.length} signal{scanResults.length>1?'s':''} found
-                </div>
-                {scanResults.map((r,i) => (
-                  <div key={i} style={{
-                    background:'var(--bg-card)',borderRadius:'12px',padding:'1rem 1.25rem',marginBottom:'0.75rem',
-                    border:`1.5px solid ${r.severity==='high'?'rgba(248,113,113,0.4)':r.severity==='medium'?'rgba(251,191,36,0.3)':'rgba(74,222,128,0.2)'}`,
-                    borderLeft:`4px solid ${r.severity==='high'?'#f87171':r.severity==='medium'?'#fbbf24':'#4ade80'}`,
-                  }}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'0.5rem',flexWrap:'wrap'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:'0.6rem'}}>
-                        <span style={{fontSize:'1.2rem'}}>{r.icon}</span>
-                        <div>
-                          <div style={{fontWeight:700,fontSize:'0.92rem',color:'var(--text-main)'}}>{r.title}</div>
-                          <div style={{fontSize:'0.78rem',color:'var(--text-dim)',marginTop:'0.2rem'}}>{r.description}</div>
+                      {r.metric && (
+                        <div style={{marginTop:'0.5rem',fontSize:'0.73rem',color:'#818cf8',background:'rgba(99,102,241,0.08)',borderRadius:'5px',padding:'0.25rem 0.5rem',display:'inline-block',fontFamily:'monospace'}}>
+                          {r.metric}
                         </div>
-                      </div>
-                      <span style={{fontSize:'0.68rem',fontWeight:700,padding:'3px 10px',borderRadius:'99px',flexShrink:0,
-                        background:r.severity==='high'?'rgba(248,113,113,0.15)':r.severity==='medium'?'rgba(251,191,36,0.12)':'rgba(74,222,128,0.1)',
-                        color:r.severity==='high'?'#f87171':r.severity==='medium'?'#fbbf24':'#4ade80'}}>
-                        {(r.severity||'').toUpperCase()}
-                      </span>
+                      )}
+                      {r.action && (
+                        <div style={{marginTop:'0.5rem',display:'flex',alignItems:'center',gap:'0.5rem',flexWrap:'wrap'}}>
+                          <span style={{fontSize:'0.7rem',color:'var(--text-muted)'}}>→</span>
+                          <span style={{fontSize:'0.78rem',fontWeight:700,color:'var(--accent)'}}>{r.action}</span>
+                          {r.strategy && (
+                            <button onClick={()=>{ loadStrategyTemplate(r.strategy); setActiveTab('strategy'); }}
+                              style={{background:'rgba(0,255,136,0.1)',color:'var(--accent)',border:'1px solid rgba(0,255,136,0.25)',borderRadius:'5px',padding:'2px 8px',fontSize:'0.7rem',fontWeight:700,cursor:'pointer'}}>
+                              Open in Builder →
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    {r.metric && (
-                      <div style={{marginTop:'0.6rem',fontSize:'0.75rem',color:'#818cf8',background:'rgba(99,102,241,0.08)',borderRadius:'6px',padding:'0.3rem 0.6rem',display:'inline-block',fontFamily:'monospace'}}>
-                        {r.metric}
-                      </div>
-                    )}
-                    {r.action && (
-                      <div style={{marginTop:'0.5rem',display:'flex',alignItems:'center',gap:'0.5rem',flexWrap:'wrap'}}>
-                        <span style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>Suggested:</span>
-                        <span style={{fontSize:'0.78rem',fontWeight:700,color:'var(--accent)'}}>{r.action}</span>
-                        {r.strategy && (
-                          <button onClick={()=>{ loadStrategyTemplate(r.strategy); setActiveTab('strategy'); }}
-                            style={{background:'rgba(0,255,136,0.12)',color:'var(--accent)',border:'1px solid rgba(0,255,136,0.3)',borderRadius:'6px',padding:'0.2rem 0.6rem',fontSize:'0.72rem',fontWeight:700,cursor:'pointer'}}>
-                            Open in Builder →
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              ) : (
+                <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'2.5rem',textAlign:'center',color:'var(--text-dim)'}}>
+                  <div style={{fontSize:'2.5rem',marginBottom:'0.75rem'}}>🔍</div>
+                  <div style={{fontSize:'0.88rem',marginBottom:'0.3rem'}}>Toggle filters above and click <strong style={{color:'var(--accent)'}}>Run Scan</strong></div>
+                  <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>Requires live chain. Best during market hours 9:15–3:30 IST.</div>
+                </div>
+              )}
+            </>)}
 
-            {scanResults.length === 0 && (
-              <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'2rem',textAlign:'center',color:'var(--text-dim)',marginBottom:'1.5rem'}}>
-                <div style={{fontSize:'2rem',marginBottom:'0.5rem'}}>🔍</div>
-                <div style={{fontSize:'0.88rem'}}>Select filters above and click <strong style={{color:'var(--accent)'}}>Run Scan</strong> to detect live setups</div>
-                <div style={{fontSize:'0.78rem',marginTop:'0.5rem',color:'var(--text-muted)'}}>Requires live option chain data. Best used during market hours.</div>
-              </div>
-            )}
+            {/* ── CUSTOM FILTER TAB ─────────────────────────────────────────── */}
+            {activeScannerTab === 'custom' && (() => {
+              const METRICS = [
+                { id:'ce_ltp',    label:'CE Premium (LTP)',   fn: r => parseFloat(r.ce?.ltp||0) },
+                { id:'pe_ltp',    label:'PE Premium (LTP)',   fn: r => parseFloat(r.pe?.ltp||0) },
+                { id:'ce_iv',     label:'CE IV %',            fn: r => parseFloat(r.ce?.iv||0)  },
+                { id:'pe_iv',     label:'PE IV %',            fn: r => parseFloat(r.pe?.iv||0)  },
+                { id:'ce_oi',     label:'CE OI (lots)',       fn: r => (r.ce?.oi||0)/75         },
+                { id:'pe_oi',     label:'PE OI (lots)',       fn: r => (r.pe?.oi||0)/75         },
+                { id:'ce_oichg',  label:'CE OI Change',       fn: r => (r.ce?.oiChg||0)/75      },
+                { id:'pe_oichg',  label:'PE OI Change',       fn: r => (r.pe?.oiChg||0)/75      },
+                { id:'ce_vol',    label:'CE Volume',          fn: r => r.ce?.volume||0          },
+                { id:'pe_vol',    label:'PE Volume',          fn: r => r.pe?.volume||0          },
+                { id:'ce_pchg',   label:'CE % Change',        fn: r => parseFloat(r.ce?.pChange||0) },
+                { id:'pe_pchg',   label:'PE % Change',        fn: r => parseFloat(r.pe?.pChange||0) },
+                { id:'pcr',       label:'Strike PCR (OI)',    fn: r => (r.ce?.oi||0)>0 ? ((r.pe?.oi||0)/(r.ce?.oi||1)) : 0 },
+                { id:'iv_skew',   label:'IV Skew (PE−CE)',    fn: r => parseFloat(r.pe?.iv||0)-parseFloat(r.ce?.iv||0) },
+                { id:'prem_ratio',label:'CE/PE Premium Ratio',fn: r => parseFloat(r.pe?.ltp||1)>0 ? parseFloat(r.ce?.ltp||0)/parseFloat(r.pe?.ltp||1) : 0 },
+              ];
+
+              const emptyCondition = () => ({ metric:'ce_ltp', op:'>', value:'' });
+              const [cfName,   setCfName]   = window.__cfState?.name   !== undefined ? [window.__cfState.name,   v=>{ window.__cfState.name=v;   forceUpdate(); }] : ['',()=>{}];
+              // Use React state via newFilter
+              const conds = newFilter.conditions || [emptyCondition()];
+
+              const runCustomScan = (filter) => {
+                const chain = liveOptionChain;
+                if (!chain.length) { alert('Load option chain first'); return; }
+                const results = [];
+                chain.forEach(row => {
+                  const pass = filter.conditions.every(cond => {
+                    const m = METRICS.find(x=>x.id===cond.metric);
+                    if (!m) return false;
+                    const val = m.fn(row);
+                    const tgt = parseFloat(cond.value);
+                    if (isNaN(tgt)) return false;
+                    if (cond.op==='>') return val > tgt;
+                    if (cond.op==='<') return val < tgt;
+                    if (cond.op==='>=') return val >= tgt;
+                    if (cond.op==='<=') return val <= tgt;
+                    if (cond.op==='=') return Math.abs(val-tgt)<0.01;
+                    return false;
+                  });
+                  if (pass) {
+                    results.push({
+                      type:'custom', icon:'🎯', severity:'medium',
+                      title:`${filter.name} — Strike ${row.strike}`,
+                      description: filter.conditions.map(c=>{
+                        const m=METRICS.find(x=>x.id===c.metric);
+                        const val=m?m.fn(row).toFixed(2):'?';
+                        return `${m?.label||c.metric} ${c.op} ${c.value} (actual: ${val})`;
+                      }).join(' AND '),
+                      metric: `CE ₹${parseFloat(row.ce?.ltp||0).toFixed(0)} | PE ₹${parseFloat(row.pe?.ltp||0).toFixed(0)} | IV CE:${row.ce?.iv||0}% PE:${row.pe?.iv||0}%`,
+                      action:'',
+                    });
+                  }
+                });
+                setScanResults(results.length ? results : [{ type:'clear', icon:'✅', severity:'low', title:'No Matches', description:`No strikes matched "${filter.name}" conditions.`, metric:`Scanned ${chain.length} strikes`, action:'' }]);
+                setLastScanTime(new Date());
+                setActiveScannerTab('preset'); // show results in preset tab
+              };
+
+              const saveFilter = () => {
+                if (!newFilter.name?.trim()) { alert('Give your filter a name'); return; }
+                const bad = newFilter.conditions.some(c=>c.value==='');
+                if (bad) { alert('Fill in all condition values'); return; }
+                setCustomFilters(prev=>[...prev, {...newFilter}]);
+                setNewFilter({ name:'', conditions:[emptyCondition()] });
+              };
+
+              return (
+                <div>
+                  {/* Builder */}
+                  <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1.1rem',marginBottom:'1.25rem'}}>
+                    <div style={{fontWeight:700,fontSize:'0.9rem',marginBottom:'0.9rem',color:'var(--accent)'}}>✏️ Build a Custom Scanner</div>
+
+                    {/* Filter name */}
+                    <div style={{marginBottom:'0.85rem'}}>
+                      <label style={{fontSize:'0.75rem',color:'var(--text-muted)',display:'block',marginBottom:'0.3rem'}}>Filter Name</label>
+                      <input value={newFilter.name||''} onChange={e=>setNewFilter(p=>({...p,name:e.target.value}))}
+                        placeholder="e.g. High IV Breakout, OI Spike Shorts"
+                        style={{width:'100%',boxSizing:'border-box',background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'7px',padding:'0.5rem 0.75rem',fontSize:'0.85rem'}}/>
+                    </div>
+
+                    {/* Conditions */}
+                    <div style={{marginBottom:'0.85rem'}}>
+                      <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginBottom:'0.5rem'}}>Conditions <span style={{color:'var(--text-dim)'}}>(ALL must match)</span></div>
+                      {conds.map((cond,idx) => (
+                        <div key={idx} style={{display:'grid',gridTemplateColumns:'1fr 70px 100px 32px',gap:'0.4rem',marginBottom:'0.4rem',alignItems:'center'}}>
+                          <select value={cond.metric} onChange={e=>setNewFilter(p=>{ const c=[...p.conditions]; c[idx]={...c[idx],metric:e.target.value}; return {...p,conditions:c}; })}
+                            style={{background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.4rem 0.5rem',fontSize:'0.78rem'}}>
+                            {METRICS.map(m=><option key={m.id} value={m.id}>{m.label}</option>)}
+                          </select>
+                          <select value={cond.op} onChange={e=>setNewFilter(p=>{ const c=[...p.conditions]; c[idx]={...c[idx],op:e.target.value}; return {...p,conditions:c}; })}
+                            style={{background:'var(--bg-dark)',color:'var(--accent)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.4rem 0.3rem',fontSize:'0.82rem',fontWeight:700,textAlign:'center'}}>
+                            {['>','<','>=','<=','='].map(o=><option key={o} value={o}>{o}</option>)}
+                          </select>
+                          <input type="number" value={cond.value} onChange={e=>setNewFilter(p=>{ const c=[...p.conditions]; c[idx]={...c[idx],value:e.target.value}; return {...p,conditions:c}; })}
+                            placeholder="Value"
+                            style={{background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.4rem 0.5rem',fontSize:'0.82rem',width:'100%',boxSizing:'border-box'}}/>
+                          {conds.length > 1 ? (
+                            <button onClick={()=>setNewFilter(p=>({...p,conditions:p.conditions.filter((_,i)=>i!==idx)}))}
+                              style={{background:'transparent',border:'none',color:'#f87171',cursor:'pointer',fontSize:'1.1rem',padding:0}}>×</button>
+                          ) : <span/>}
+                        </div>
+                      ))}
+                      <button onClick={()=>setNewFilter(p=>({...p,conditions:[...(p.conditions||[]),emptyCondition()]}))}
+                        style={{background:'rgba(99,102,241,0.1)',color:'#818cf8',border:'1px solid rgba(99,102,241,0.25)',borderRadius:'6px',padding:'0.35rem 0.85rem',fontSize:'0.78rem',fontWeight:700,cursor:'pointer',marginTop:'0.25rem'}}>
+                        + Add Condition
+                      </button>
+                    </div>
+
+                    <div style={{display:'flex',gap:'0.6rem',flexWrap:'wrap'}}>
+                      <button onClick={()=>runCustomScan(newFilter)}
+                        style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'7px',padding:'0.45rem 1.2rem',fontWeight:800,fontSize:'0.82rem',cursor:'pointer'}}>
+                        ▶ Run Now
+                      </button>
+                      <button onClick={saveFilter}
+                        style={{background:'rgba(0,255,136,0.1)',color:'var(--accent)',border:'1px solid rgba(0,255,136,0.3)',borderRadius:'7px',padding:'0.45rem 1.2rem',fontWeight:700,fontSize:'0.82rem',cursor:'pointer'}}>
+                        💾 Save Filter
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Saved filters */}
+                  {customFilters.length > 0 && (
+                    <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1.1rem'}}>
+                      <div style={{fontWeight:700,fontSize:'0.88rem',marginBottom:'0.85rem'}}>💾 Saved Filters ({customFilters.length})</div>
+                      <div style={{display:'flex',flexDirection:'column',gap:'0.6rem'}}>
+                        {customFilters.map((f,i) => (
+                          <div key={i} style={{background:'var(--bg-dark)',borderRadius:'9px',padding:'0.75rem 1rem',border:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'0.5rem'}}>
+                            <div>
+                              <div style={{fontWeight:700,fontSize:'0.88rem',marginBottom:'0.25rem'}}>{f.name}</div>
+                              <div style={{fontSize:'0.72rem',color:'var(--text-dim)'}}>
+                                {f.conditions.map((c,ci)=>{
+                                  const m=METRICS.find(x=>x.id===c.metric);
+                                  return `${m?.label||c.metric} ${c.op} ${c.value}`;
+                                }).join(' AND ')}
+                              </div>
+                            </div>
+                            <div style={{display:'flex',gap:'0.4rem'}}>
+                              <button onClick={()=>runCustomScan(f)}
+                                style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.35rem 0.85rem',fontWeight:700,fontSize:'0.78rem',cursor:'pointer'}}>
+                                ▶ Run
+                              </button>
+                              <button onClick={()=>setNewFilter({...f})}
+                                style={{background:'rgba(129,140,248,0.1)',color:'#818cf8',border:'1px solid rgba(129,140,248,0.25)',borderRadius:'6px',padding:'0.35rem 0.7rem',fontSize:'0.78rem',cursor:'pointer'}}>
+                                Edit
+                              </button>
+                              <button onClick={()=>setCustomFilters(p=>p.filter((_,j)=>j!==i))}
+                                style={{background:'rgba(248,113,113,0.08)',color:'#f87171',border:'1px solid rgba(248,113,113,0.2)',borderRadius:'6px',padding:'0.35rem 0.7rem',fontSize:'0.78rem',cursor:'pointer'}}>
+                                🗑
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {customFilters.length === 0 && (
+                    <div style={{textAlign:'center',padding:'1.5rem',color:'var(--text-dim)',fontSize:'0.82rem',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px'}}>
+                      No saved filters yet. Build one above and click <strong>Save Filter</strong>.
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </>
           </ProGate>
         ) : activeTab === 'journal' ? (
@@ -7262,7 +7446,7 @@ Respond ONLY with valid JSON:
                 <div style={{border:'1px solid var(--border)',borderRadius:'14px',padding:'1.5rem',background:'var(--bg-surface)'}}>
                   <div style={{fontSize:'0.75rem',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'0.5rem'}}>Free Trial</div>
                   <div style={{fontSize:'2.2rem',fontWeight:900,color:'var(--text-main)',marginBottom:'0.2rem'}}>FREE</div>
-                  <div style={{fontSize:'0.82rem',color:'var(--text-dim)',marginBottom:'1.25rem'}}>90 days, no card needed</div>
+                  <div style={{fontSize:'0.82rem',color:'var(--text-dim)',marginBottom:'1.25rem'}}>Pro: ₹299/quarter</div>
                   {subStatus === 'trial' && (
                     <div style={{background:'rgba(0,255,136,0.1)',border:'1px solid rgba(0,255,136,0.3)',borderRadius:'8px',padding:'0.5rem',textAlign:'center',fontSize:'0.82rem',color:'var(--accent)',fontWeight:700,marginBottom:'1rem'}}>
                       Active - {trialDaysLeft} days remaining
@@ -7298,7 +7482,7 @@ Respond ONLY with valid JSON:
                           🎉 You have full Pro access
                         </div>
                         <div style={{fontSize:'0.78rem',color:'var(--text-dim)',lineHeight:1.5}}>
-                          Your 90-day trial includes everything. Payment gateway is being set up — you will be notified on Telegram when ready.
+                          Pro is ₹299/quarter. Payment gateway is being set up — you will be notified on Telegram when ready.
                         </div>
                       </div>
                       <div style={{textAlign:'center',fontSize:'0.72rem',color:'var(--text-muted)'}}>
@@ -7316,7 +7500,7 @@ Respond ONLY with valid JSON:
               <div style={{background:'var(--bg-surface)',borderRadius:'12px',padding:'1.25rem',marginBottom:'1rem'}}>
                 <div style={{fontWeight:700,fontSize:'0.9rem',marginBottom:'1rem',color:'var(--text-main)'}}>Frequently Asked Questions</div>
                 {[
-                  ['Do I need a credit card for the trial?','No. 90 days completely free, no card required. We will email you before trial ends.'],
+                  ['Do I need a credit card for the trial?','No card needed. Pro is ₹299/quarter. We will notify you on Telegram when payment is live.'],
                   ['What happens after my trial ends?','The app continues to work. Your data is safe. Upgrade anytime to restore full access.'],
                   ['Can I cancel anytime?','Yes. Cancel from Account Settings anytime. You keep access until end of the quarter.'],
                   ['Is my payment secure?','Payments processed by Razorpay - same gateway used by Zerodha, Groww. We never store your card details.'],
@@ -7397,7 +7581,7 @@ Respond ONLY with valid JSON:
               ))}
 
               {showLegal==='refund' && [
-                ['1. Free Trial','All new users get 90 days free with full access. No payment required during trial. Cancel anytime at zero cost.'],
+                ['1. Free Trial','Free tier gives you option chain, scanner and basic tools. Pro is ₹299/quarter for AI, GEX, alerts and advanced features.'],
                 ['2. Paid Subscription','After the trial, continued access requires ₹299/quarter, billed via Razorpay. You will receive email reminders 7 days before the first charge.'],
                 ['3. Cancellation','Cancel anytime via Account Settings or by emailing legal@deltabuddy.com. You retain access until the end of the current billing period.'],
                 ['4. Refund Policy','Within 7 days of any charge: Full refund, no questions asked. After 7 days: No pro-rated refunds  -  you retain access until quarter end. Service outage >72 hours: Pro-rated credit for next cycle.'],
