@@ -6099,8 +6099,6 @@ Respond ONLY with valid JSON:
               ];
 
               const emptyCondition = () => ({ metric:'ce_ltp', op:'>', value:'' });
-              const [cfName,   setCfName]   = window.__cfState?.name   !== undefined ? [window.__cfState.name,   v=>{ window.__cfState.name=v;   forceUpdate(); }] : ['',()=>{}];
-              // Use React state via newFilter
               const conds = newFilter.conditions || [emptyCondition()];
 
               const runCustomScan = (filter) => {
