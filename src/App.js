@@ -859,22 +859,25 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
         }
       }
 
-      // -- EXIT open position --
-      if (position && signal && signal !== 'SELL_STRADDLE' && signal !== 'BUY_STRADDLE' && signal !== 'SYNTH_LONG') {
+      // -- EXIT open position — options (ma_crossover / rsi / breakout) --
+      if (position && signal && signal !== 'SELL_STRADDLE' && signal !== 'BUY_STRADDLE' && signal !== 'SYNTH_LONG' && signal !== 'SYNTH_EXIT' && signal !== 'EXIT_STRADDLE' && signal !== 'EXIT_BUY_STRADDLE' && signal !== 'FUT_LONG' && signal !== 'FUT_SHORT') {
         let pnl = 0;
-        if (btStrategy === 'ma_crossover' || btStrategy === 'rsi' || btStrategy === 'breakout') {
-          if (position.optionType === 'CE') {
-            const daysLeft = Math.max(0, position.daysToExpiry - (i - position.entryBar));
-            const exitPx   = bsPrice(S, position.strike, daysLeft/365, 0.065, 0.16, 'CE');
-            pnl = (exitPx - position.entryPx) * lot;
-          } else {
-            const daysLeft = Math.max(0, position.daysToExpiry - (i - position.entryBar));
-            const exitPx   = bsPrice(S, position.strike, daysLeft/365, 0.065, 0.16, 'PE');
-            pnl = (exitPx - position.entryPx) * lot;
-          }
+        if (position.optionType === 'CE' || position.optionType === 'PE') {
+          const daysLeft = Math.max(0, position.daysToExpiry - (i - position.entryBar));
+          const exitPx   = bsPrice(S, position.strike, daysLeft/365, 0.065, 0.16, position.optionType);
+          pnl = (exitPx - position.entryPx) * lot;
         }
         cash += pnl;
-        trades.push({ date:c.date, type:'EXIT', side:position.optionType, strike:position.strike, entryDate:position.entryDate, entryPx:position.entryPx, exitPx: (cash/lot).toFixed(2), pnl:Math.round(pnl), capital:Math.round(cash) });
+        trades.push({ date:c.date, type:'EXIT', side:position.optionType, strike:position.strike, entryDate:position.entryDate, entryPx:position.entryPx, exitPx:bsPrice(S, position.strike, 0, 0.065, 0.16, position.optionType).toFixed(2), pnl:Math.round(pnl), capital:Math.round(cash) });
+        position = null;
+      }
+
+      // -- EXIT futures --
+      if (position && (signal === 'FUT_SHORT' || signal === 'FUT_LONG') && (position.type === 'FUT_LONG' || position.type === 'FUT_SHORT')) {
+        const dir = position.type === 'FUT_LONG' ? 1 : -1;
+        const pnl = dir * (S - position.entrySpot) * lot;
+        cash += pnl + (position.margin || 0); // return margin
+        trades.push({ date:c.date, type:'EXIT', side:position.type, strike:position.entrySpot, entryDate:position.entryDate, entryPx:position.entrySpot.toFixed(0), exitPx:S.toFixed(0), pnl:Math.round(pnl), capital:Math.round(cash) });
         position = null;
       }
 
@@ -907,20 +910,6 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
         const pnl  = ((cePx - position.cePx) - (pePx - position.pePx)) * lot;
         cash += pnl;
         trades.push({ date:c.date, type:'EXIT', side:'SYNTH_FUTURE', strike:position.strike, entryDate:position.entryDate, pnl:Math.round(pnl), capital:Math.round(cash) });
-        position = null;
-      }
-
-      // -- EXIT futures --
-      if (position && (signal==='FUT_LONG'||signal==='FUT_SHORT') && position.type==='FUT_LONG' && signal==='FUT_SHORT') {
-        const pnl = (S - position.entrySpot) * lot;
-        cash += pnl + position.margin; // return margin
-        trades.push({ date:c.date, type:'EXIT', side:'FUT_LONG', entryDate:position.entryDate, entryPx:position.entrySpot.toFixed(0), exitPx:S.toFixed(0), pnl:Math.round(pnl), capital:Math.round(cash) });
-        position = null;
-      }
-      if (position && (signal==='FUT_LONG'||signal==='FUT_SHORT') && position.type==='FUT_SHORT' && signal==='FUT_LONG') {
-        const pnl = (position.entrySpot - S) * lot;
-        cash += pnl + position.margin;
-        trades.push({ date:c.date, type:'EXIT', side:'FUT_SHORT', entryDate:position.entryDate, entryPx:position.entrySpot.toFixed(0), exitPx:S.toFixed(0), pnl:Math.round(pnl), capital:Math.round(cash) });
         position = null;
       }
 
@@ -1311,7 +1300,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [scannerIV, setScannerIV] = useState(20);
   const [scannerExpiry, setScannerExpiry] = useState('');
   const [selectedFilters, setSelectedFilters] = useState(['iv_crush','gamma_squeeze','pcr_extreme']);
-  const [stratView, setStratView] = useState('all');
+  const [stratView, setStratView] = useState('bullish');
   const [stratHoverIdx, setStratHoverIdx] = useState(null);
   const [scanResults, setScanResults] = useState([]);
   const [scanRunning, setScanRunning] = useState(false);
@@ -2782,18 +2771,24 @@ Respond ONLY with valid JSON:
     let totalPL = 0;
     
     legs.forEach(leg => {
-      let intrinsicValue = 0;
-      if (leg.optionType === 'call') {
-        intrinsicValue = Math.max(0, currentSpot - leg.strike);
+      let legPL = 0;
+      if (leg.optionType === 'future') {
+        // Futures: P&L = (exit - entry) * lot * qty, no premium decay
+        const entryFut = leg.premium; // we store futures entry price as premium
+        legPL = leg.position === 'buy'
+          ? (currentSpot - entryFut) * lotSize * (leg.quantity||1)
+          : (entryFut - currentSpot) * lotSize * (leg.quantity||1);
       } else {
-        intrinsicValue = Math.max(0, leg.strike - currentSpot);
+        let intrinsicValue = 0;
+        if (leg.optionType === 'call') {
+          intrinsicValue = Math.max(0, currentSpot - leg.strike);
+        } else {
+          intrinsicValue = Math.max(0, leg.strike - currentSpot);
+        }
+        legPL = leg.position === 'buy'
+          ? (intrinsicValue - leg.premium) * lotSize * (leg.quantity||1)
+          : (leg.premium - intrinsicValue) * lotSize * (leg.quantity||1);
       }
-      
-      const valueAtExpiry = intrinsicValue;
-      const legPL = leg.position === 'buy'
-        ? (valueAtExpiry - leg.premium) * lotSize * leg.quantity
-        : (leg.premium - valueAtExpiry) * lotSize * leg.quantity;
-      
       totalPL += legPL;
     });
     
@@ -2802,18 +2797,18 @@ Respond ONLY with valid JSON:
 
   const generateMultiLegPLData = () => {
     const data = [];
-    const allStrikes = legs.map(l => l.strike);
-    const minStrike = Math.min(...allStrikes);
-    const maxStrike = Math.max(...allStrikes);
-    const range = (maxStrike - minStrike) * 0.5 || spot * 0.15;
+    const optionLegs = legs.filter(l => l.optionType !== 'future');
+    const futLegs    = legs.filter(l => l.optionType === 'future');
+    const allStrikes = optionLegs.length ? optionLegs.map(l => l.strike) : [spot];
+    const futPrices  = futLegs.map(l => l.premium);
+    const allPivots  = [...allStrikes, ...futPrices];
+    const minStrike = Math.min(...allPivots);
+    const maxStrike = Math.max(...allPivots);
+    const range = Math.max((maxStrike - minStrike) * 0.6, spot * 0.12);
     const center = (minStrike + maxStrike) / 2;
-    const step = range / 100;
-    
+    const step = range / 80;
     for (let price = center - range; price <= center + range; price += step) {
-      data.push({
-        spot: Math.round(price),
-        pl: calculateMultiLegPL(price)
-      });
+      data.push({ spot: Math.round(price), pl: calculateMultiLegPL(price) });
     }
     return data;
   };
@@ -2822,23 +2817,19 @@ Respond ONLY with valid JSON:
   const currentMultiLegPL = legs.length > 0 ? calculateMultiLegPL(spot) : 0;
 
   const calculateMultiLegGreeks = () => {
-    let totalDelta = 0;
-    let totalGamma = 0;
-    let totalTheta = 0;
-    let totalVega = 0;
-    
+    let totalDelta = 0, totalGamma = 0, totalTheta = 0, totalVega = 0;
     legs.forEach(leg => {
-      const legGreeks = calculateBlackScholes(
-        spot, leg.strike, timeToExpiry, volatility / 100, riskFreeRate, leg.optionType
-      );
-      
       const multiplier = leg.position === 'buy' ? 1 : -1;
-      totalDelta += legGreeks.delta * multiplier * leg.quantity;
-      totalGamma += legGreeks.gamma * multiplier * leg.quantity;
-      totalTheta += legGreeks.theta * multiplier * leg.quantity;
-      totalVega += legGreeks.vega * multiplier * leg.quantity;
+      if (leg.optionType === 'future') {
+        totalDelta += multiplier * (leg.quantity||1); // futures delta = 1 per lot
+      } else {
+        const legGreeks = calculateBlackScholes(spot, leg.strike, timeToExpiry, volatility/100, riskFreeRate, leg.optionType);
+        totalDelta += legGreeks.delta * multiplier * (leg.quantity||1);
+        totalGamma += legGreeks.gamma * multiplier * (leg.quantity||1);
+        totalTheta += legGreeks.theta * multiplier * (leg.quantity||1);
+        totalVega  += legGreeks.vega  * multiplier * (leg.quantity||1);
+      }
     });
-    
     return { delta: totalDelta, gamma: totalGamma, theta: totalTheta, vega: totalVega };
   };
 
@@ -4481,11 +4472,11 @@ Respond ONLY with valid JSON:
             };
 
             const views = [
-              { id:'all',      label:'All' },
               { id:'bullish',  label:'📈 Bullish' },
               { id:'bearish',  label:'📉 Bearish' },
               { id:'sideways', label:'↔ Sideways' },
               { id:'volatile', label:'⚡ Volatile' },
+              { id:'all',      label:'All' },
             ];
 
             const visibleStrategies = Object.entries(STRATEGY_TEMPLATES)
@@ -4546,34 +4537,52 @@ Respond ONLY with valid JSON:
                       {v.label}
                     </button>
                   ))}
-                  <button onClick={()=>{ setLegs([{id:1,position:'buy',optionType:'call',strike:atmStrike,premium:getLivePremium(atmStrike,'call')||80,quantity:1}]); setSelectedStrategy('custom'); setStratView('all'); }}
+                  <button onClick={()=>{ setLegs([{id:1,position:'buy',optionType:'call',strike:atmStrike,premium:getLivePremium(atmStrike,'call')||80,quantity:1}]); setSelectedStrategy('custom'); setStratView('custom'); }}
                     style={{padding:'0.4rem 1rem',borderRadius:'99px',border:'1px solid',fontSize:'0.8rem',fontWeight:600,cursor:'pointer',
-                      borderColor:'rgba(139,92,246,0.5)',background:selectedStrategy==='custom'?'rgba(139,92,246,0.12)':'var(--bg-card)',color:'#a78bfa'}}>
+                      borderColor: stratView==='custom' ? 'rgba(139,92,246,0.8)' : 'rgba(139,92,246,0.4)',
+                      background: stratView==='custom' ? 'rgba(139,92,246,0.15)' : 'var(--bg-card)',
+                      color:'#a78bfa'}}>
                     ✏️ Custom
                   </button>
                 </div>
 
-                {/* ── Strategy Cards ────────────────────────────────── */}
+                {/* ── Strategy Cards — hidden in custom mode ────────── */}
+                {stratView !== 'custom' && (
                 <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:'0.75rem',marginBottom:'1.5rem'}}>
                   {visibleStrategies.map(([key, s]) => (
-                    <div key={key} onClick={()=>loadStrategyTemplate(key)}
+                    <div key={key} onClick={()=>{ loadStrategyTemplate(key); setStratView(stratView); }}
                       style={{cursor:'pointer',borderRadius:'12px',padding:'0.9rem',
                         border:`1.5px solid ${selectedStrategy===key?'var(--accent)':'var(--border)'}`,
                         background:selectedStrategy===key?'rgba(0,255,136,0.06)':'var(--bg-card)',
                         transition:'all 0.15s',position:'relative'}}>
-                      {/* Risk badge */}
                       <div style={{position:'absolute',top:'0.6rem',right:'0.6rem',fontSize:'0.62rem',fontWeight:700,padding:'2px 6px',borderRadius:'99px',
                         background:s.risk==='Defined'?'rgba(74,222,128,0.12)':'rgba(248,113,113,0.12)',
                         color:s.risk==='Defined'?'#4ade80':'#f87171'}}>
                         {s.risk}
                       </div>
-                      {/* Mini payoff */}
                       <div style={{marginBottom:'0.5rem'}}><MiniPayoff legs={s.legs}/></div>
                       <div style={{fontWeight:700,fontSize:'0.85rem',color:selectedStrategy===key?'var(--accent)':'var(--text-main)',marginBottom:'0.2rem'}}>{s.name}</div>
                       <div style={{fontSize:'0.72rem',color:'var(--text-dim)',lineHeight:1.3}}>{s.description}</div>
                     </div>
                   ))}
                 </div>
+                )}
+
+                {/* ── Custom mode info bar ──────────────────────────── */}
+                {stratView === 'custom' && (
+                <div style={{background:'rgba(139,92,246,0.07)',border:'1px solid rgba(139,92,246,0.25)',borderRadius:'10px',padding:'0.75rem 1rem',marginBottom:'1.25rem',display:'flex',alignItems:'center',gap:'0.75rem',flexWrap:'wrap'}}>
+                  <span style={{fontSize:'1.1rem'}}>✏️</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:'0.85rem',color:'#a78bfa'}}>Custom Strategy Builder</div>
+                    <div style={{fontSize:'0.75rem',color:'var(--text-dim)',marginTop:'0.15rem'}}>
+                      Add CE/PE legs from live option chain · Add Futures legs (Current / Next 1 / Next 2 month) · Mix freely
+                    </div>
+                  </div>
+                  <div style={{fontSize:'0.78rem',color:'var(--text-dim)'}}>
+                    Spot <strong style={{color:'var(--text-main)'}}>{spot.toLocaleString()}</strong> · ATM <strong style={{color:'#f97316'}}>{atmStrike.toLocaleString()}</strong>
+                  </div>
+                </div>
+                )}
 
                 {/* ── Legs Editor ───────────────────────────────────── */}
                 <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1rem',marginBottom:'1.25rem'}}>
@@ -4586,15 +4595,21 @@ Respond ONLY with valid JSON:
                   </div>
 
                   {/* Header row */}
-                  <div style={{display:'grid',gridTemplateColumns:'90px 80px 60px 140px 80px 60px 32px',gap:'0.4rem',padding:'0.3rem 0.4rem',borderBottom:'1px solid var(--border)',fontSize:'0.68rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'0.35rem'}}>
-                    <span>Action</span><span>Type</span><span>Lots</span><span>Strike</span><span>Premium</span><span>IV%</span><span></span>
+                  <div style={{display:'grid',gridTemplateColumns:'90px 100px 60px 160px 90px 60px 32px',gap:'0.4rem',padding:'0.3rem 0.4rem',borderBottom:'1px solid var(--border)',fontSize:'0.68rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'0.35rem'}}>
+                    <span>Action</span><span>Type</span><span>Lots</span><span>Strike / Month</span><span>Price</span><span>IV%</span><span></span>
                   </div>
 
                   {legs.map((leg, idx) => {
-                    const livePrem = getLivePremium(leg.strike, leg.optionType);
-                    const closestOffset = strikeOptions.reduce((a,b) => Math.abs(b.strike-leg.strike)<Math.abs(a.strike-leg.strike)?b:a);
+                    const isFut = leg.optionType === 'future';
+                    const livePrem = isFut ? null : getLivePremium(leg.strike, leg.optionType);
+                    const closestOffset = isFut ? strikeOptions[Math.floor(strikeOptions.length/2)] : strikeOptions.reduce((a,b) => Math.abs(b.strike-leg.strike)<Math.abs(a.strike-leg.strike)?b:a);
+                    // Futures carry: CUR≈spot+50, NEXT≈spot+100, FAR≈spot+150
+                    const FUT_MONTHS = ['CUR','NEXT1','NEXT2'];
+                    const futCarry = { 'CUR': 50, 'NEXT1': 100, 'NEXT2': 150 };
+                    const futMonth = leg.futMonth || 'CUR';
+                    const futPrice = spot + (futCarry[futMonth] || 50);
                     return (
-                      <div key={leg.id} style={{display:'grid',gridTemplateColumns:'90px 80px 60px 140px 80px 60px 32px',gap:'0.4rem',alignItems:'center',padding:'0.35rem 0.4rem',borderRadius:'6px',marginBottom:'0.25rem',background:idx%2===0?'rgba(255,255,255,0.02)':'transparent'}}>
+                      <div key={leg.id} style={{display:'grid',gridTemplateColumns:'90px 100px 60px 160px 90px 60px 32px',gap:'0.4rem',alignItems:'center',padding:'0.35rem 0.4rem',borderRadius:'6px',marginBottom:'0.25rem',background:idx%2===0?'rgba(255,255,255,0.02)':'transparent'}}>
 
                         {/* Buy / Sell */}
                         <div style={{display:'flex',gap:'3px'}}>
@@ -4609,19 +4624,25 @@ Respond ONLY with valid JSON:
                           ))}
                         </div>
 
-                        {/* CE / PE */}
+                        {/* CE / PE / FUT */}
                         <div style={{display:'flex',gap:'3px'}}>
-                          {['call','put'].map(t => (
+                          {['call','put','future'].map(t => (
                             <button key={t} onClick={()=>{
-                              const lp = getLivePremium(leg.strike, t);
-                              updateLeg(leg.id,'optionType',t);
-                              if (lp) updateLeg(leg.id,'premium',lp);
+                              if (t === 'future') {
+                                updateLeg(leg.id,'optionType','future');
+                                updateLeg(leg.id,'premium', futPrice);
+                                updateLeg(leg.id,'futMonth','CUR');
+                              } else {
+                                const lp = getLivePremium(leg.strike, t);
+                                updateLeg(leg.id,'optionType',t);
+                                if (lp) updateLeg(leg.id,'premium',lp);
+                              }
                             }}
-                              style={{flex:1,padding:'0.3rem 0',borderRadius:'4px',border:'1px solid',fontSize:'0.72rem',fontWeight:700,cursor:'pointer',
-                                borderColor:leg.optionType===t?'var(--accent)':'var(--border)',
-                                background:leg.optionType===t?'rgba(0,255,136,0.1)':'transparent',
-                                color:leg.optionType===t?'var(--accent)':'var(--text-muted)'}}>
-                              {t==='call'?'CE':'PE'}
+                              style={{flex:1,padding:'0.25rem 0',borderRadius:'4px',border:'1px solid',fontSize:'0.68rem',fontWeight:700,cursor:'pointer',
+                                borderColor: leg.optionType===t ? (t==='future'?'rgba(251,191,36,0.7)':'var(--accent)') : 'var(--border)',
+                                background:  leg.optionType===t ? (t==='future'?'rgba(251,191,36,0.15)':'rgba(0,255,136,0.1)') : 'transparent',
+                                color:       leg.optionType===t ? (t==='future'?'#fbbf24':'var(--accent)') : 'var(--text-muted)'}}>
+                              {t==='call'?'CE':t==='put'?'PE':'FUT'}
                             </button>
                           ))}
                         </div>
@@ -4630,34 +4651,52 @@ Respond ONLY with valid JSON:
                         <input type="number" min="1" value={leg.quantity||1} onChange={e=>updateLeg(leg.id,'quantity',parseInt(e.target.value)||1)}
                           style={{background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.3rem 0.4rem',fontSize:'0.78rem',width:'100%',boxSizing:'border-box',textAlign:'center'}}/>
 
-                        {/* Strike dropdown */}
-                        <select value={closestOffset.offset}
-                          onChange={e=>{
-                            const opt = strikeOptions.find(o=>o.offset===parseInt(e.target.value));
-                            if (!opt) return;
-                            updateLeg(leg.id,'strike',opt.strike);
-                            const lp = getLivePremium(opt.strike, leg.optionType);
-                            if (lp) updateLeg(leg.id,'premium',lp);
+                        {/* Strike dropdown or Futures month */}
+                        {isFut ? (
+                          <select value={futMonth} onChange={e=>{
+                            const m=e.target.value;
+                            const fp = spot + (futCarry[m]||50);
+                            updateLeg(leg.id,'futMonth',m);
+                            updateLeg(leg.id,'premium',fp);
                           }}
-                          style={{background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.3rem 0.3rem',fontSize:'0.75rem',width:'100%'}}>
-                          {strikeOptions.map(o=>(
-                            <option key={o.offset} value={o.offset}>{o.label} ({o.strike.toLocaleString()})</option>
-                          ))}
-                        </select>
+                            style={{background:'var(--bg-dark)',color:'#fbbf24',border:'1px solid rgba(251,191,36,0.4)',borderRadius:'6px',padding:'0.3rem 0.4rem',fontSize:'0.78rem',fontWeight:700,width:'100%'}}>
+                            <option value="CUR">Current Month (~+50)</option>
+                            <option value="NEXT1">Next Month (~+100)</option>
+                            <option value="NEXT2">Far Month (~+150)</option>
+                          </select>
+                        ) : (
+                          <select value={closestOffset.offset}
+                            onChange={e=>{
+                              const opt = strikeOptions.find(o=>o.offset===parseInt(e.target.value));
+                              if (!opt) return;
+                              updateLeg(leg.id,'strike',opt.strike);
+                              const lp = getLivePremium(opt.strike, leg.optionType);
+                              if (lp) updateLeg(leg.id,'premium',lp);
+                            }}
+                            style={{background:'var(--bg-dark)',color:'var(--text-main)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.3rem 0.3rem',fontSize:'0.75rem',width:'100%'}}>
+                            {strikeOptions.map(o=>(
+                              <option key={o.offset} value={o.offset}>{o.label} ({o.strike.toLocaleString()})</option>
+                            ))}
+                          </select>
+                        )}
 
-                        {/* Premium */}
+                        {/* Price */}
                         <div style={{position:'relative'}}>
                           <input type="number" value={leg.premium} step="0.5"
                             onChange={e=>updateLeg(leg.id,'premium',parseFloat(e.target.value)||0)}
-                            style={{background:'var(--bg-dark)',color:'var(--text-main)',border:`1px solid ${livePrem&&Math.abs(livePrem-leg.premium)<5?'rgba(0,255,136,0.4)':'var(--border)'}`,borderRadius:'6px',padding:'0.3rem 0.4rem',fontSize:'0.78rem',width:'100%',boxSizing:'border-box'}}/>
-                          {livePrem && Math.abs(livePrem-leg.premium)<2 && (
+                            style={{background:'var(--bg-dark)',color:'var(--text-main)',border:`1px solid ${isFut?'rgba(251,191,36,0.4)':livePrem&&Math.abs(livePrem-leg.premium)<5?'rgba(0,255,136,0.4)':'var(--border)'}`,borderRadius:'6px',padding:'0.3rem 0.4rem',fontSize:'0.78rem',width:'100%',boxSizing:'border-box'}}/>
+                          {!isFut && livePrem && Math.abs(livePrem-leg.premium)<2 && (
                             <span style={{position:'absolute',top:-8,right:2,fontSize:'0.55rem',color:'#4ade80',fontWeight:700}}>LIVE</span>
                           )}
+                          {isFut && <span style={{position:'absolute',top:-8,right:2,fontSize:'0.55rem',color:'#fbbf24',fontWeight:700}}>EST</span>}
                         </div>
 
-                        {/* IV */}
-                        <div style={{fontSize:'0.75rem',color:'#818cf8',textAlign:'center',fontWeight:600}}>
-                          {liveOptionChain.find(r=>r.strike===leg.strike)?.[leg.optionType==='call'?'ce':'pe']?.iv || volatility}
+                        {/* IV or FUT label */}
+                        <div style={{fontSize:'0.75rem',textAlign:'center',fontWeight:600}}>
+                          {isFut
+                            ? <span style={{color:'#fbbf24',fontSize:'0.65rem'}}>Δ={leg.position==='buy'?'+1':'-1'}</span>
+                            : <span style={{color:'#818cf8'}}>{liveOptionChain.find(r=>r.strike===leg.strike)?.[leg.optionType==='call'?'ce':'pe']?.iv || volatility}</span>
+                          }
                         </div>
 
                         {/* Remove */}
