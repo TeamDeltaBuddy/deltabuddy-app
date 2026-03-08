@@ -1566,13 +1566,58 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
       if (d.blockDeals) setBlockDeals(d.blockDeals);
     } catch(e) { console.warn("Bulk deals fetch error:", e.message); }
   };
-  const fetchExpiryData = async (sym) => {
+  const fetchExpiryData = (sym) => {
+    // Compute entirely from liveOptionChain — no backend call needed,
+    // avoids NSE cookie/403 issues that plagued the backend endpoint.
+    const chain = liveOptionChain;
+    if (!chain || chain.length === 0) {
+      setExpiryData(null);
+      return;
+    }
     setExpiryLoading(true);
     try {
-      const r = await fetch(`${BACKEND_URL}/api/expiry-tools?symbol=${sym || expirySymbol}`);
-      const data = await r.json();
-      if (!data.error) setExpiryData(data);
-    } catch(e) { console.error('Expiry fetch error:', e); }
+      const S = spot;
+
+      // Max Pain — strike where total writer loss is minimum
+      let maxPainStrike = 0, minLoss = Infinity;
+      for (const test of chain) {
+        const T = test.strike;
+        let loss = 0;
+        for (const row of chain) {
+          if (T > row.strike) loss += (T - row.strike) * (row.ce?.oi || 0);
+          if (T < row.strike) loss += (row.strike - T) * (row.pe?.oi || 0);
+        }
+        if (loss < minLoss) { minLoss = loss; maxPainStrike = T; }
+      }
+
+      // PCR
+      const totalCeOI  = chain.reduce((s,r) => s + (r.ce?.oi  || 0), 0);
+      const totalPeOI  = chain.reduce((s,r) => s + (r.pe?.oi  || 0), 0);
+      const totalCeVol = chain.reduce((s,r) => s + (r.ce?.volume || 0), 0);
+      const totalPeVol = chain.reduce((s,r) => s + (r.pe?.volume || 0), 0);
+      const pcrOI  = totalCeOI  ? +(totalPeOI  / totalCeOI ).toFixed(2) : 0;
+      const pcrVol = totalCeVol ? +(totalPeVol / totalCeVol).toFixed(2) : 0;
+      const pcrBias = pcrOI > 1.2 ? 'Bullish' : pcrOI < 0.8 ? 'Bearish' : 'Neutral';
+
+      // ATM
+      const atmRow = chain.reduce((a, b) => Math.abs(b.strike - S) < Math.abs(a.strike - S) ? b : a);
+      const straddlePremium = parseFloat(atmRow.ce?.ltp || 0) + parseFloat(atmRow.pe?.ltp || 0);
+      const atmIV = (parseFloat(atmRow.ce?.iv || 0) + parseFloat(atmRow.pe?.iv || 0)) / 2;
+      const expectedMove = +(S * atmIV / 100 / Math.sqrt(365)).toFixed(0);
+
+      // OI chart — ±5% from spot
+      const oiChart = chain
+        .filter(r => Math.abs(r.strike - S) / S <= 0.05)
+        .map(r => ({ strike: r.strike, ceOI: r.ce?.oi || 0, peOI: r.pe?.oi || 0, ceLTP: parseFloat(r.ce?.ltp || 0), peLTP: parseFloat(r.pe?.ltp || 0) }));
+
+      // Resistance & Support
+      const resistance = [...chain].sort((a,b) => (b.ce?.oi||0) - (a.ce?.oi||0)).slice(0,3)
+        .map(r => ({ strike: r.strike, ceOI: r.ce?.oi||0, ceLTP: parseFloat(r.ce?.ltp||0) }));
+      const support = [...chain].sort((a,b) => (b.pe?.oi||0) - (a.pe?.oi||0)).slice(0,3)
+        .map(r => ({ strike: r.strike, peOI: r.pe?.oi||0, peLTP: parseFloat(r.pe?.ltp||0) }));
+
+      setExpiryData({ symbol: expirySymbol, spot: S, maxPain: maxPainStrike, pcrOI, pcrVol, pcrBias, straddlePremium: +straddlePremium.toFixed(2), atmIV: +atmIV.toFixed(1), expectedMove, oiChart, resistance, support });
+    } catch(e) { console.error('Expiry compute error:', e); }
     finally { setExpiryLoading(false); }
   };
 
@@ -2491,8 +2536,8 @@ Respond ONLY with valid JSON:
       // Portfolio: every 30 seconds
       const portfolioInterval = setInterval(fetchPortfolio, 30000);
 
-      // Expiry tools: every 60 seconds
-      const expiryInterval = setInterval(() => fetchExpiryData(expirySymbol), 60000);
+      // Expiry tools: recompute every 60s from live chain (no separate fetch needed)
+      const expiryInterval = setInterval(() => fetchExpiryData(), 60000);
 
       // VIX: every 60 seconds
       const vixInterval = setInterval(fetchVix, 60000);
@@ -2586,6 +2631,11 @@ Respond ONLY with valid JSON:
     liveOptionChain.forEach(r => { snapshot[r.strike] = { ce: r.ce?.oi||0, pe: r.pe?.oi||0 }; });
     setPrevOI(prev => Object.keys(prev).length === 0 ? snapshot : prev);
   }, [liveOptionChain]);
+
+  // Auto-recompute expiry tools whenever chain updates (client-side, no backend call)
+  useEffect(() => {
+    if (liveOptionChain.length > 0 && activeTab === 'expiry') fetchExpiryData();
+  }, [liveOptionChain, activeTab]);
 
 
   const saveStrategy = () => {
@@ -3051,37 +3101,56 @@ Respond ONLY with valid JSON:
         {/* -- PAYWALL MODAL -- */}
         {showTgSetup && (
           <div className="modal-overlay" onClick={()=>setShowTgSetup(false)}>
-            <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'440px',width:'95%'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem'}}>
-                <h2 style={{margin:0,fontSize:'1.15rem'}}>📱 Connect Telegram</h2>
+            <div className="modal-content" onClick={e=>e.stopPropagation()} style={{maxWidth:'480px',width:'95%'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
+                <h2 style={{margin:0,fontSize:'1.15rem'}}>📱 Connect Telegram Alerts</h2>
                 <button onClick={()=>setShowTgSetup(false)} style={{background:'none',border:'none',color:'var(--text-dim)',fontSize:'1.5rem',cursor:'pointer'}}>✕</button>
               </div>
 
-              <p style={{color:'var(--text-dim)',fontSize:'0.85rem',marginBottom:'1.25rem',lineHeight:1.6}}>
-                Get instant alerts for high-impact news and scanner signals  -  directly on Telegram. Free, takes 60 seconds.
+              <p style={{color:'var(--text-dim)',fontSize:'0.82rem',marginBottom:'1.1rem',lineHeight:1.5}}>
+                Get instant alerts for scanner signals and high-impact news directly on Telegram. Free. Takes 60 seconds.
               </p>
 
               {/* Steps */}
-              {[
-                ['1', 'Open Telegram', 'Search for our bot: ', '@DeltaBuddyAlertBot', 'https://t.me/DeltaBuddyAlertBot'],
-                ['2', 'Start the bot', 'Press the Start button or send /start to the bot', null, null],
-                ['3', 'Get your Chat ID', 'The bot will reply with your unique Chat ID number. Copy it.', null, null],
-              ].map(([num, title, desc, link, href])=>(
-                <div key={num} style={{display:'flex',gap:'0.75rem',marginBottom:'1rem',alignItems:'flex-start'}}>
-                  <div style={{width:'28px',height:'28px',borderRadius:'50%',background:'var(--accent)',color:'#000',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:'0.85rem',flexShrink:0}}>{num}</div>
-                  <div>
-                    <div style={{fontWeight:600,fontSize:'0.88rem',marginBottom:'2px'}}>{title}</div>
-                    <div style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>
-                      {desc}
-                      {link && <a href={href} target="_blank" rel="noreferrer" style={{color:'var(--accent)',fontWeight:600}}>{link}</a>}
+              <div style={{marginBottom:'1rem'}}>
+                {[
+                  { num:'1', title:'Open Telegram and find the bot', body: <span>Search for <a href="https://t.me/DeltaBuddyAlertBot" target="_blank" rel="noreferrer" style={{color:'var(--accent)',fontWeight:700}}>@DeltaBuddyAlertBot</a> and press <strong>Start</strong> or send <code style={{background:'rgba(0,255,136,0.1)',padding:'1px 5px',borderRadius:'3px',fontSize:'0.78rem'}}>/start</code></span> },
+                  { num:'2', title:'The bot sends your Chat ID', body: <span>The bot will immediately reply with your <strong>numeric Chat ID</strong> (e.g. <code style={{background:'rgba(0,255,136,0.1)',padding:'1px 5px',borderRadius:'3px',fontSize:'0.78rem'}}>6458200459</code>). Copy that number.</span> },
+                  { num:'3', title:"Can't find the bot or no reply?", body: (
+                    <div style={{fontSize:'0.78rem',color:'var(--text-dim)'}}>
+                      <div style={{marginBottom:'0.35rem'}}>Alternative: open <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" style={{color:'#60a5fa'}}>@userinfobot</a> → press Start → it shows your Chat ID instantly.</div>
+                      <div style={{marginBottom:'0.35rem'}}>⚠️ <strong style={{color:'var(--text-main)'}}>Phone number does NOT work</strong> — Telegram uses a numeric ID, not your phone.</div>
+                      <div>Your Chat ID looks like a plain number: <code style={{background:'rgba(0,255,136,0.1)',padding:'1px 5px',borderRadius:'3px'}}>6458200459</code> (positive) or <code style={{background:'rgba(0,255,136,0.1)',padding:'1px 5px',borderRadius:'3px'}}>-100123456789</code> (group).</div>
+                    </div>
+                  )},
+                ].map(({num,title,body})=>(
+                  <div key={num} style={{display:'flex',gap:'0.75rem',marginBottom:'0.9rem',alignItems:'flex-start'}}>
+                    <div style={{width:'26px',height:'26px',borderRadius:'50%',background:'var(--accent)',color:'#000',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:'0.82rem',flexShrink:0}}>{num}</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:'0.85rem',marginBottom:'3px',color:'var(--text-main)'}}>{title}</div>
+                      <div style={{fontSize:'0.79rem',color:'var(--text-dim)',lineHeight:1.5}}>{body}</div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+
+              {/* Quick-access buttons */}
+              <div style={{display:'flex',gap:'0.5rem',marginBottom:'1rem',flexWrap:'wrap'}}>
+                <a href="https://t.me/DeltaBuddyAlertBot" target="_blank" rel="noreferrer"
+                  style={{flex:1,background:'#229ED9',color:'white',border:'none',borderRadius:'7px',padding:'0.45rem 0.75rem',fontWeight:700,fontSize:'0.78rem',textDecoration:'none',textAlign:'center',display:'block'}}>
+                  🤖 Open @DeltaBuddyAlertBot
+                </a>
+                <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer"
+                  style={{flex:1,background:'rgba(99,102,241,0.15)',color:'#818cf8',border:'1px solid rgba(99,102,241,0.3)',borderRadius:'7px',padding:'0.45rem 0.75rem',fontWeight:700,fontSize:'0.78rem',textDecoration:'none',textAlign:'center',display:'block'}}>
+                  🪪 Get Chat ID via @userinfobot
+                </a>
+              </div>
 
               {/* Chat ID input */}
               <div style={{background:'var(--bg-dark)',borderRadius:'8px',padding:'0.75rem',marginBottom:'1rem'}}>
-                <label style={{fontSize:'0.78rem',color:'var(--text-dim)',display:'block',marginBottom:'0.4rem'}}>Paste your Chat ID here:</label>
+                <label style={{fontSize:'0.75rem',color:'var(--text-dim)',display:'block',marginBottom:'0.4rem'}}>
+                  Paste your Chat ID here <span style={{color:'var(--text-muted)'}}>(numbers only — not your phone number)</span>:
+                </label>
                 <input
                   type="text"
                   className="input-field"
@@ -3090,6 +3159,9 @@ Respond ONLY with valid JSON:
                   onChange={e=>setTgChatId(e.target.value.trim())}
                   style={{width:'100%',boxSizing:'border-box',fontSize:'1rem',letterSpacing:'0.05em'}}
                 />
+                {tgChatId && !/^-?\d+$/.test(tgChatId) && (
+                  <div style={{color:'#f87171',fontSize:'0.72rem',marginTop:'0.3rem'}}>⚠️ Chat ID should be numbers only. Phone numbers won't work.</div>
+                )}
               </div>
 
               <div style={{display:'flex',gap:'0.75rem'}}>
@@ -3099,7 +3171,6 @@ Respond ONLY with valid JSON:
                     if(currentUser) {
                       try { await setDoc(doc(db,'users',currentUser.uid),{tgChatId,updatedAt:serverTimestamp()},{merge:true}); } catch(e){}
                     }
-                    // Subscribe to backend alert engine for 24/7 alerts
                     if (tgChatId) {
                       try {
                         await fetch(`${BACKEND_URL}/api/alert-subscribe`, {
@@ -3122,7 +3193,7 @@ Respond ONLY with valid JSON:
                 )}
               </div>
               {tgStatus==='ok' && <p style={{color:'#22c55e',fontSize:'0.82rem',marginTop:'0.5rem',textAlign:'center'}}>✅ Connected! You'll now receive DeltaBuddy alerts on Telegram.</p>}
-              {tgStatus==='error' && <p style={{color:'#ef4444',fontSize:'0.82rem',marginTop:'0.5rem',textAlign:'center'}}>❌ Couldn't send. Make sure you've pressed Start on the bot first.</p>}
+              {tgStatus==='error' && <p style={{color:'#ef4444',fontSize:'0.82rem',marginTop:'0.5rem',textAlign:'center'}}>❌ Couldn't send. Make sure you pressed Start on the bot first, and the Chat ID is numeric.</p>}
             </div>
           </div>
         )}
@@ -4568,19 +4639,89 @@ Respond ONLY with valid JSON:
                 </div>
                 )}
 
-                {/* ── Custom mode info bar ──────────────────────────── */}
+                {/* ── Custom mode: live chain picker ────────────────── */}
                 {stratView === 'custom' && (
-                <div style={{background:'rgba(139,92,246,0.07)',border:'1px solid rgba(139,92,246,0.25)',borderRadius:'10px',padding:'0.75rem 1rem',marginBottom:'1.25rem',display:'flex',alignItems:'center',gap:'0.75rem',flexWrap:'wrap'}}>
-                  <span style={{fontSize:'1.1rem'}}>✏️</span>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:700,fontSize:'0.85rem',color:'#a78bfa'}}>Custom Strategy Builder</div>
-                    <div style={{fontSize:'0.75rem',color:'var(--text-dim)',marginTop:'0.15rem'}}>
-                      Add CE/PE legs from live option chain · Add Futures legs (Current / Next 1 / Next 2 month) · Mix freely
+                <div style={{background:'var(--bg-card)',border:'1px solid rgba(139,92,246,0.3)',borderRadius:'12px',padding:'1rem',marginBottom:'1.25rem'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem',flexWrap:'wrap',gap:'0.5rem'}}>
+                    <div>
+                      <span style={{fontWeight:700,fontSize:'0.88rem',color:'#a78bfa'}}>✏️ Custom Builder — Live Chain</span>
+                      <span style={{fontSize:'0.72rem',color:'var(--text-dim)',marginLeft:'0.6rem'}}>Click any row to add as leg · Spot {spot.toLocaleString()} · ATM {atmStrike.toLocaleString()}</span>
+                    </div>
+                    <div style={{display:'flex',gap:'0.4rem'}}>
+                      <button onClick={()=>{
+                        const fp = spot + 50;
+                        setLegs(prev=>[...prev,{id:Date.now(),position:'buy',optionType:'future',strike:atmStrike,premium:fp,quantity:1,futMonth:'CUR'}]);
+                      }} style={{background:'rgba(251,191,36,0.12)',color:'#fbbf24',border:'1px solid rgba(251,191,36,0.3)',borderRadius:'6px',padding:'0.3rem 0.75rem',fontWeight:700,fontSize:'0.75rem',cursor:'pointer'}}>
+                        + Buy Futures
+                      </button>
+                      <button onClick={()=>{
+                        const fp = spot + 50;
+                        setLegs(prev=>[...prev,{id:Date.now(),position:'sell',optionType:'future',strike:atmStrike,premium:fp,quantity:1,futMonth:'CUR'}]);
+                      }} style={{background:'rgba(248,113,113,0.1)',color:'#f87171',border:'1px solid rgba(248,113,113,0.25)',borderRadius:'6px',padding:'0.3rem 0.75rem',fontWeight:700,fontSize:'0.75rem',cursor:'pointer'}}>
+                        + Sell Futures
+                      </button>
                     </div>
                   </div>
-                  <div style={{fontSize:'0.78rem',color:'var(--text-dim)'}}>
-                    Spot <strong style={{color:'var(--text-main)'}}>{spot.toLocaleString()}</strong> · ATM <strong style={{color:'#f97316'}}>{atmStrike.toLocaleString()}</strong>
-                  </div>
+
+                  {/* Chain table */}
+                  {liveOptionChain.length === 0 ? (
+                    <div style={{textAlign:'center',padding:'1.5rem',color:'var(--text-dim)',fontSize:'0.82rem'}}>
+                      Loading option chain… switch to Option Chain tab first if not loaded.
+                    </div>
+                  ) : (
+                    <div style={{overflowX:'auto',maxHeight:'320px',overflowY:'auto'}}>
+                      {/* Table header */}
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 60px 80px 80px 80px 1fr',gap:'0.25rem',padding:'0.3rem 0.5rem',borderBottom:'1px solid var(--border)',fontSize:'0.65rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.06em',fontWeight:700,position:'sticky',top:0,background:'var(--bg-card)',zIndex:1}}>
+                        <span style={{textAlign:'right'}}>CE OI</span>
+                        <span style={{textAlign:'right'}}>CE IV%</span>
+                        <span style={{textAlign:'right',color:'#60a5fa',cursor:'pointer'}} onClick={()=>setLegs(prev=>[...prev,{id:Date.now(),position:'buy',optionType:'call',strike:atmStrike,premium:parseFloat(liveOptionChain.find(r=>r.strike===atmStrike)?.ce?.ltp||0),quantity:1}])}>+CE BUY</span>
+                        <span style={{textAlign:'right',color:'#f87171',cursor:'pointer'}} onClick={()=>setLegs(prev=>[...prev,{id:Date.now(),position:'sell',optionType:'call',strike:atmStrike,premium:parseFloat(liveOptionChain.find(r=>r.strike===atmStrike)?.ce?.ltp||0),quantity:1}])}>+CE SELL</span>
+                        <span style={{textAlign:'center',color:'var(--accent)',fontWeight:800}}>STRIKE</span>
+                        <span style={{textAlign:'left',color:'#4ade80',cursor:'pointer'}} onClick={()=>setLegs(prev=>[...prev,{id:Date.now(),position:'buy',optionType:'put',strike:atmStrike,premium:parseFloat(liveOptionChain.find(r=>r.strike===atmStrike)?.pe?.ltp||0),quantity:1}])}>+PE BUY</span>
+                        <span style={{textAlign:'left',color:'#f87171',cursor:'pointer'}} onClick={()=>setLegs(prev=>[...prev,{id:Date.now(),position:'sell',optionType:'put',strike:atmStrike,premium:parseFloat(liveOptionChain.find(r=>r.strike===atmStrike)?.pe?.ltp||0),quantity:1}])}>+PE SELL</span>
+                        <span style={{textAlign:'left'}}>PE IV%</span>
+                        <span>PE OI</span>
+                      </div>
+                      {liveOptionChain
+                        .filter(r => Math.abs(r.strike - spot) / spot <= 0.04)
+                        .map(row => {
+                          const isATM = row.strike === atmStrike;
+                          const ceLTP = parseFloat(row.ce?.ltp || 0);
+                          const peLTP = parseFloat(row.pe?.ltp || 0);
+                          return (
+                            <div key={row.strike} style={{display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 60px 80px 80px 80px 1fr',gap:'0.25rem',padding:'0.3rem 0.5rem',borderRadius:'4px',
+                              background:isATM?'rgba(0,255,136,0.06)':'transparent',
+                              border:isATM?'1px solid rgba(0,255,136,0.15)':'1px solid transparent',
+                              marginBottom:'1px',alignItems:'center'}}>
+                              {/* CE side */}
+                              <span style={{textAlign:'right',fontSize:'0.7rem',color:'var(--text-dim)'}}>{((row.ce?.oi||0)/100000).toFixed(1)}L</span>
+                              <span style={{textAlign:'right',fontSize:'0.72rem',color:'#818cf8'}}>{row.ce?.iv||'-'}%</span>
+                              <button onClick={()=>setLegs(prev=>[...prev,{id:Date.now(),position:'buy',optionType:'call',strike:row.strike,premium:ceLTP,quantity:1}])}
+                                style={{background:'rgba(96,165,250,0.12)',color:'#60a5fa',border:'1px solid rgba(96,165,250,0.25)',borderRadius:'4px',padding:'0.2rem 0.3rem',fontSize:'0.7rem',fontWeight:700,cursor:'pointer',textAlign:'center'}}>
+                                B ₹{ceLTP.toFixed(0)}
+                              </button>
+                              <button onClick={()=>setLegs(prev=>[...prev,{id:Date.now(),position:'sell',optionType:'call',strike:row.strike,premium:ceLTP,quantity:1}])}
+                                style={{background:'rgba(248,113,113,0.1)',color:'#f87171',border:'1px solid rgba(248,113,113,0.2)',borderRadius:'4px',padding:'0.2rem 0.3rem',fontSize:'0.7rem',fontWeight:700,cursor:'pointer',textAlign:'center'}}>
+                                S ₹{ceLTP.toFixed(0)}
+                              </button>
+                              {/* Strike */}
+                              <span style={{textAlign:'center',fontWeight:800,fontSize:isATM?'0.85rem':'0.78rem',color:isATM?'var(--accent)':'var(--text-main)'}}>{row.strike}{isATM?' ◄':''}</span>
+                              {/* PE side */}
+                              <button onClick={()=>setLegs(prev=>[...prev,{id:Date.now(),position:'buy',optionType:'put',strike:row.strike,premium:peLTP,quantity:1}])}
+                                style={{background:'rgba(74,222,128,0.1)',color:'#4ade80',border:'1px solid rgba(74,222,128,0.2)',borderRadius:'4px',padding:'0.2rem 0.3rem',fontSize:'0.7rem',fontWeight:700,cursor:'pointer',textAlign:'center'}}>
+                                B ₹{peLTP.toFixed(0)}
+                              </button>
+                              <button onClick={()=>setLegs(prev=>[...prev,{id:Date.now(),position:'sell',optionType:'put',strike:row.strike,premium:peLTP,quantity:1}])}
+                                style={{background:'rgba(248,113,113,0.1)',color:'#f87171',border:'1px solid rgba(248,113,113,0.2)',borderRadius:'4px',padding:'0.2rem 0.3rem',fontSize:'0.7rem',fontWeight:700,cursor:'pointer',textAlign:'center'}}>
+                                S ₹{peLTP.toFixed(0)}
+                              </button>
+                              <span style={{fontSize:'0.72rem',color:'#818cf8'}}>{row.pe?.iv||'-'}%</span>
+                              <span style={{fontSize:'0.7rem',color:'var(--text-dim)',textAlign:'right'}}>{((row.pe?.oi||0)/100000).toFixed(1)}L</span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
                 </div>
                 )}
 
@@ -7046,34 +7187,39 @@ Respond ONLY with valid JSON:
               </div>
               <div style={{display:'flex',gap:'0.5rem',alignItems:'center',flexWrap:'wrap'}}>
                 {['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY'].map(sym => (
-                  <button key={sym} onClick={() => { setExpirySymbol(sym); fetchExpiryData(sym); }}
+                  <button key={sym} onClick={() => { setExpirySymbol(sym); setSelectedUnderlying(sym); setExpiryData(null); }}
                     style={{padding:'0.35rem 0.75rem',borderRadius:'20px',border:'1px solid var(--border)',cursor:'pointer',fontSize:'0.8rem',fontWeight:expirySymbol===sym?700:400,background:expirySymbol===sym?'var(--accent)':'var(--bg-surface)',color:expirySymbol===sym?'#000':'var(--text-dim)'}}>
                     {sym}
                   </button>
                 ))}
-                <button onClick={() => fetchExpiryData(expirySymbol)} disabled={expiryLoading}
+                <button onClick={() => fetchExpiryData()} disabled={expiryLoading}
                   style={{padding:'0.35rem 1rem',borderRadius:'8px',border:'none',cursor:'pointer',fontSize:'0.82rem',fontWeight:700,background:'var(--accent)',color:'#000'}}>
                   {expiryLoading ? '⏳' : '🔄 Refresh'}
                 </button>
               </div>
             </div>
 
-            {/* Load prompt */}
-            {!expiryData && !expiryLoading && (
+            {/* Status: if chain not loaded yet */}
+            {!expiryData && !expiryLoading && liveOptionChain.length === 0 && (
               <div style={{textAlign:'center',padding:'4rem 2rem',color:'var(--text-dim)'}}>
                 <div style={{fontSize:'3rem',marginBottom:'1rem'}}>⏰</div>
-                <p style={{marginBottom:'1rem'}}>Click Refresh to load live expiry data from NSE</p>
-                <button onClick={() => fetchExpiryData(expirySymbol)}
+                <p style={{marginBottom:'1rem'}}>Waiting for live option chain… please wait a moment or switch to Option Chain tab first.</p>
+              </div>
+            )}
+
+            {!expiryData && !expiryLoading && liveOptionChain.length > 0 && (
+              <div style={{textAlign:'center',padding:'2rem',color:'var(--text-dim)'}}>
+                <button onClick={() => fetchExpiryData()}
                   style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.75rem 2rem',fontWeight:700,cursor:'pointer'}}>
-                  Load Expiry Data
+                  ⚡ Compute Expiry Data
                 </button>
               </div>
             )}
 
             {expiryLoading && (
               <div style={{textAlign:'center',padding:'4rem',color:'var(--text-dim)'}}>
-                <div style={{fontSize:'2rem',marginBottom:'0.5rem'}}>⏳</div>
-                <p>Fetching live data from NSE...</p>
+                <div style={{fontSize:'2rem',marginBottom:'0.5rem'}}>⚡</div>
+                <p>Computing from live chain ({liveOptionChain.length} strikes)...</p>
               </div>
             )}
 
