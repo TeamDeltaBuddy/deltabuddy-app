@@ -1566,59 +1566,101 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
       if (d.blockDeals) setBlockDeals(d.blockDeals);
     } catch(e) { console.warn("Bulk deals fetch error:", e.message); }
   };
-  const fetchExpiryData = (sym) => {
-    // Compute entirely from liveOptionChain — no backend call needed,
-    // avoids NSE cookie/403 issues that plagued the backend endpoint.
-    const chain = liveOptionChain;
-    if (!chain || chain.length === 0) {
-      setExpiryData(null);
-      return;
-    }
+  const fetchExpiryData = async (sym) => {
+    const symbol = (sym || expirySymbol || 'NIFTY').toUpperCase();
     setExpiryLoading(true);
     try {
-      const S = spot;
+      // Fetch directly from backend for this specific symbol — 
+      // do NOT rely on liveOptionChain which is always the currently-selected underlying
+      const res = await fetch(`${BACKEND_URL}/api/option-chain?symbol=${symbol}`);
+      const json = await res.json();
+      if (!json?.records?.data?.length) throw new Error('No chain data returned');
 
-      // Max Pain — strike where total writer loss is minimum
-      let maxPainStrike = 0, minLoss = Infinity;
+      const records = json.records.data;
+      const S = json.records.underlyingValue || spot;
+
+      // Build per-strike map
+      const map = {};
+      records.forEach(row => {
+        const k = row.strikePrice;
+        if (!map[k]) map[k] = { strike:k, ceOI:0, peOI:0, ceLTP:0, peLTP:0, ceIV:0, peIV:0, ceVol:0, peVol:0 };
+        if (row.CE) { map[k].ceOI += row.CE.openInterest||0; map[k].ceLTP = row.CE.lastPrice||0; map[k].ceIV = row.CE.impliedVolatility||0; map[k].ceVol += row.CE.totalTradedVolume||0; }
+        if (row.PE) { map[k].peOI += row.PE.openInterest||0; map[k].peLTP = row.PE.lastPrice||0; map[k].peIV = row.PE.impliedVolatility||0; map[k].peVol += row.PE.totalTradedVolume||0; }
+      });
+      const chain = Object.values(map).sort((a,b) => a.strike - b.strike);
+
+      // Max Pain
+      let maxPainStrike = Math.round(S/50)*50, minLoss = Infinity;
       for (const test of chain) {
         const T = test.strike;
         let loss = 0;
         for (const row of chain) {
-          if (T > row.strike) loss += (T - row.strike) * (row.ce?.oi || 0);
-          if (T < row.strike) loss += (row.strike - T) * (row.pe?.oi || 0);
+          if (T > row.strike) loss += (T - row.strike) * row.ceOI;
+          if (T < row.strike) loss += (row.strike - T) * row.peOI;
         }
         if (loss < minLoss) { minLoss = loss; maxPainStrike = T; }
       }
 
       // PCR
-      const totalCeOI  = chain.reduce((s,r) => s + (r.ce?.oi  || 0), 0);
-      const totalPeOI  = chain.reduce((s,r) => s + (r.pe?.oi  || 0), 0);
-      const totalCeVol = chain.reduce((s,r) => s + (r.ce?.volume || 0), 0);
-      const totalPeVol = chain.reduce((s,r) => s + (r.pe?.volume || 0), 0);
+      const totalCeOI  = chain.reduce((s,r) => s + r.ceOI,  0);
+      const totalPeOI  = chain.reduce((s,r) => s + r.peOI,  0);
+      const totalCeVol = chain.reduce((s,r) => s + r.ceVol, 0);
+      const totalPeVol = chain.reduce((s,r) => s + r.peVol, 0);
       const pcrOI  = totalCeOI  ? +(totalPeOI  / totalCeOI ).toFixed(2) : 0;
       const pcrVol = totalCeVol ? +(totalPeVol / totalCeVol).toFixed(2) : 0;
       const pcrBias = pcrOI > 1.2 ? 'Bullish' : pcrOI < 0.8 ? 'Bearish' : 'Neutral';
 
       // ATM
-      const atmRow = chain.reduce((a, b) => Math.abs(b.strike - S) < Math.abs(a.strike - S) ? b : a);
-      const straddlePremium = parseFloat(atmRow.ce?.ltp || 0) + parseFloat(atmRow.pe?.ltp || 0);
-      const atmIV = (parseFloat(atmRow.ce?.iv || 0) + parseFloat(atmRow.pe?.iv || 0)) / 2;
+      const atmRow = chain.reduce((a,b) => Math.abs(b.strike-S) < Math.abs(a.strike-S) ? b : a, chain[0]);
+      const straddlePremium = (atmRow.ceLTP||0) + (atmRow.peLTP||0);
+      const atmIV = ((atmRow.ceIV||0) + (atmRow.peIV||0)) / 2;
       const expectedMove = +(S * atmIV / 100 / Math.sqrt(365)).toFixed(0);
 
-      // OI chart — ±5% from spot
+      // OI chart ±5%
       const oiChart = chain
         .filter(r => Math.abs(r.strike - S) / S <= 0.05)
-        .map(r => ({ strike: r.strike, ceOI: r.ce?.oi || 0, peOI: r.pe?.oi || 0, ceLTP: parseFloat(r.ce?.ltp || 0), peLTP: parseFloat(r.pe?.ltp || 0) }));
+        .map(r => ({ strike:r.strike, ceOI:r.ceOI, peOI:r.peOI, ceLTP:r.ceLTP, peLTP:r.peLTP }));
 
-      // Resistance & Support
-      const resistance = [...chain].sort((a,b) => (b.ce?.oi||0) - (a.ce?.oi||0)).slice(0,3)
-        .map(r => ({ strike: r.strike, ceOI: r.ce?.oi||0, ceLTP: parseFloat(r.ce?.ltp||0) }));
-      const support = [...chain].sort((a,b) => (b.pe?.oi||0) - (a.pe?.oi||0)).slice(0,3)
-        .map(r => ({ strike: r.strike, peOI: r.pe?.oi||0, peLTP: parseFloat(r.pe?.ltp||0) }));
+      // Top resistance / support
+      const resistance = [...chain].sort((a,b) => b.ceOI - a.ceOI).slice(0,3)
+        .map(r => ({ strike:r.strike, ceOI:r.ceOI, ceLTP:r.ceLTP }));
+      const support = [...chain].sort((a,b) => b.peOI - a.peOI).slice(0,3)
+        .map(r => ({ strike:r.strike, peOI:r.peOI, peLTP:r.peLTP }));
 
-      setExpiryData({ symbol: expirySymbol, spot: S, maxPain: maxPainStrike, pcrOI, pcrVol, pcrBias, straddlePremium: +straddlePremium.toFixed(2), atmIV: +atmIV.toFixed(1), expectedMove, oiChart, resistance, support });
-    } catch(e) { console.error('Expiry compute error:', e); }
-    finally { setExpiryLoading(false); }
+      setExpiryData({ symbol, spot:S, maxPain:maxPainStrike, pcrOI, pcrVol, pcrBias,
+        straddlePremium:+straddlePremium.toFixed(2), atmIV:+atmIV.toFixed(1),
+        expectedMove, oiChart, resistance, support });
+    } catch(e) {
+      console.error('Expiry fetch error:', e.message);
+      // Fallback to liveOptionChain if backend fails
+      const chain = liveOptionChain;
+      if (chain.length > 0) {
+        const S = spot;
+        let maxPainStrike = 0, minLoss = Infinity;
+        for (const test of chain) {
+          const T = test.strike; let loss = 0;
+          for (const row of chain) {
+            if (T > row.strike) loss += (T-row.strike)*(row.ce?.oi||0);
+            if (T < row.strike) loss += (row.strike-T)*(row.pe?.oi||0);
+          }
+          if (loss < minLoss) { minLoss = loss; maxPainStrike = T; }
+        }
+        const totalCeOI = chain.reduce((s,r)=>s+(r.ce?.oi||0),0);
+        const totalPeOI = chain.reduce((s,r)=>s+(r.pe?.oi||0),0);
+        const pcrOI = totalCeOI ? +(totalPeOI/totalCeOI).toFixed(2) : 0;
+        const pcrBias = pcrOI > 1.2 ? 'Bullish' : pcrOI < 0.8 ? 'Bearish' : 'Neutral';
+        const atmRow = chain.reduce((a,b)=>Math.abs(b.strike-S)<Math.abs(a.strike-S)?b:a);
+        const straddlePremium = parseFloat(atmRow.ce?.ltp||0)+parseFloat(atmRow.pe?.ltp||0);
+        const atmIV = (parseFloat(atmRow.ce?.iv||0)+parseFloat(atmRow.pe?.iv||0))/2;
+        setExpiryData({ symbol, spot:S, maxPain:maxPainStrike, pcrOI, pcrVol:pcrOI, pcrBias,
+          straddlePremium:+straddlePremium.toFixed(2), atmIV:+atmIV.toFixed(1),
+          expectedMove:+(S*atmIV/100/Math.sqrt(365)).toFixed(0),
+          oiChart: chain.filter(r=>Math.abs(r.strike-S)/S<=0.05).map(r=>({strike:r.strike,ceOI:r.ce?.oi||0,peOI:r.pe?.oi||0,ceLTP:parseFloat(r.ce?.ltp||0),peLTP:parseFloat(r.pe?.ltp||0)})),
+          resistance: [...chain].sort((a,b)=>(b.ce?.oi||0)-(a.ce?.oi||0)).slice(0,3).map(r=>({strike:r.strike,ceOI:r.ce?.oi||0,ceLTP:parseFloat(r.ce?.ltp||0)})),
+          support: [...chain].sort((a,b)=>(b.pe?.oi||0)-(a.pe?.oi||0)).slice(0,3).map(r=>({strike:r.strike,peOI:r.pe?.oi||0,peLTP:parseFloat(r.pe?.ltp||0)})),
+        });
+      }
+    } finally { setExpiryLoading(false); }
   };
 
   const fetchGex = async (sym) => {
@@ -2632,10 +2674,10 @@ Respond ONLY with valid JSON:
     setPrevOI(prev => Object.keys(prev).length === 0 ? snapshot : prev);
   }, [liveOptionChain]);
 
-  // Auto-recompute expiry tools whenever chain updates (client-side, no backend call)
+  // Auto-refresh expiry tools when on expiry tab (uses backend per-symbol fetch)
   useEffect(() => {
-    if (liveOptionChain.length > 0 && activeTab === 'expiry') fetchExpiryData();
-  }, [liveOptionChain, activeTab]);
+    if (activeTab === 'expiry' && !expiryData && !expiryLoading) fetchExpiryData(expirySymbol);
+  }, [activeTab, expirySymbol]);
 
 
   const saveStrategy = () => {
@@ -2981,8 +3023,8 @@ Respond ONLY with valid JSON:
                   </button>
                 ) : (
                   <button onClick={()=>setShowPricing(true)}
-                    style={{fontSize:'0.72rem',fontWeight:700,padding:'3px 8px',borderRadius:'20px',background:'rgba(0,255,136,0.1)',border:'1px solid rgba(0,255,136,0.3)',color:'var(--accent)',cursor:'pointer',whiteSpace:'nowrap'}}>
-                    {trialDaysLeft}d free
+                    style={{fontSize:'0.72rem',fontWeight:700,padding:'3px 8px',borderRadius:'20px',background:'linear-gradient(135deg,rgba(249,115,22,0.15),rgba(251,191,36,0.1))',border:'1px solid rgba(249,115,22,0.4)',color:'#f97316',cursor:'pointer',whiteSpace:'nowrap'}}>
+                    Pro — ₹299/qtr
                   </button>
                 )}
                 <button onClick={()=>setShowTgSetup(true)}
@@ -4669,54 +4711,48 @@ Respond ONLY with valid JSON:
                       Loading option chain… switch to Option Chain tab first if not loaded.
                     </div>
                   ) : (
-                    <div style={{overflowX:'auto',maxHeight:'320px',overflowY:'auto'}}>
+                    <div style={{overflowX:'auto',maxHeight:'380px',overflowY:'auto',borderRadius:'6px',border:'1px solid var(--border)'}}>
                       {/* Table header */}
-                      <div style={{display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 60px 80px 80px 80px 1fr',gap:'0.25rem',padding:'0.3rem 0.5rem',borderBottom:'1px solid var(--border)',fontSize:'0.65rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.06em',fontWeight:700,position:'sticky',top:0,background:'var(--bg-card)',zIndex:1}}>
+                      <div style={{display:'grid',gridTemplateColumns:'60px 60px 80px 80px 70px 80px 80px 60px 60px',gap:'0.2rem',padding:'0.4rem 0.5rem',borderBottom:'2px solid var(--border)',fontSize:'0.62rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:700,background:'var(--bg-dark)'}}>
                         <span style={{textAlign:'right'}}>CE OI</span>
-                        <span style={{textAlign:'right'}}>CE IV%</span>
-                        <span style={{textAlign:'right',color:'#60a5fa',cursor:'pointer'}} onClick={()=>setLegs(prev=>[...prev,{id:Date.now(),position:'buy',optionType:'call',strike:atmStrike,premium:parseFloat(liveOptionChain.find(r=>r.strike===atmStrike)?.ce?.ltp||0),quantity:1}])}>+CE BUY</span>
-                        <span style={{textAlign:'right',color:'#f87171',cursor:'pointer'}} onClick={()=>setLegs(prev=>[...prev,{id:Date.now(),position:'sell',optionType:'call',strike:atmStrike,premium:parseFloat(liveOptionChain.find(r=>r.strike===atmStrike)?.ce?.ltp||0),quantity:1}])}>+CE SELL</span>
-                        <span style={{textAlign:'center',color:'var(--accent)',fontWeight:800}}>STRIKE</span>
-                        <span style={{textAlign:'left',color:'#4ade80',cursor:'pointer'}} onClick={()=>setLegs(prev=>[...prev,{id:Date.now(),position:'buy',optionType:'put',strike:atmStrike,premium:parseFloat(liveOptionChain.find(r=>r.strike===atmStrike)?.pe?.ltp||0),quantity:1}])}>+PE BUY</span>
-                        <span style={{textAlign:'left',color:'#f87171',cursor:'pointer'}} onClick={()=>setLegs(prev=>[...prev,{id:Date.now(),position:'sell',optionType:'put',strike:atmStrike,premium:parseFloat(liveOptionChain.find(r=>r.strike===atmStrike)?.pe?.ltp||0),quantity:1}])}>+PE SELL</span>
-                        <span style={{textAlign:'left'}}>PE IV%</span>
+                        <span style={{textAlign:'right'}}>IV%</span>
+                        <span style={{textAlign:'right',color:'#60a5fa'}}>CE LTP</span>
+                        <span style={{textAlign:'right',color:'#60a5fa'}}>+CE BUY</span>
+                        <span style={{textAlign:'center',color:'var(--accent)'}}>STRIKE</span>
+                        <span style={{color:'#4ade80'}}>+PE BUY</span>
+                        <span style={{color:'#f87171'}}>PE LTP</span>
+                        <span>IV%</span>
                         <span>PE OI</span>
                       </div>
                       {liveOptionChain
-                        .filter(r => Math.abs(r.strike - spot) / spot <= 0.04)
+                        .filter(r => Math.abs(r.strike - spot) / (spot || 25500) <= 0.06)
+                        .sort((a,b) => b.strike - a.strike)
                         .map(row => {
                           const isATM = row.strike === atmStrike;
                           const ceLTP = parseFloat(row.ce?.ltp || 0);
                           const peLTP = parseFloat(row.pe?.ltp || 0);
                           return (
-                            <div key={row.strike} style={{display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 60px 80px 80px 80px 1fr',gap:'0.25rem',padding:'0.3rem 0.5rem',borderRadius:'4px',
-                              background:isATM?'rgba(0,255,136,0.06)':'transparent',
-                              border:isATM?'1px solid rgba(0,255,136,0.15)':'1px solid transparent',
-                              marginBottom:'1px',alignItems:'center'}}>
-                              {/* CE side */}
-                              <span style={{textAlign:'right',fontSize:'0.7rem',color:'var(--text-dim)'}}>{((row.ce?.oi||0)/100000).toFixed(1)}L</span>
-                              <span style={{textAlign:'right',fontSize:'0.72rem',color:'#818cf8'}}>{row.ce?.iv||'-'}%</span>
+                            <div key={row.strike} style={{display:'grid',gridTemplateColumns:'60px 60px 80px 80px 70px 80px 80px 60px 60px',gap:'0.2rem',padding:'0.3rem 0.5rem',
+                              background:isATM?'rgba(0,255,136,0.07)':'transparent',
+                              borderBottom:`1px solid ${isATM?'rgba(0,255,136,0.2)':'rgba(255,255,255,0.03)'}`,
+                              alignItems:'center'}}>
+                              <span style={{textAlign:'right',fontSize:'0.65rem',color:'#94a3b8'}}>{((row.ce?.oi||0)/100000).toFixed(1)}L</span>
+                              <span style={{textAlign:'right',fontSize:'0.67rem',color:'#818cf8'}}>{row.ce?.iv||0}%</span>
+                              <span style={{textAlign:'right',fontSize:'0.75rem',color:'#93c5fd',fontWeight:600}}>₹{ceLTP.toFixed(0)}</span>
                               <button onClick={()=>setLegs(prev=>[...prev,{id:Date.now(),position:'buy',optionType:'call',strike:row.strike,premium:ceLTP,quantity:1}])}
-                                style={{background:'rgba(96,165,250,0.12)',color:'#60a5fa',border:'1px solid rgba(96,165,250,0.25)',borderRadius:'4px',padding:'0.2rem 0.3rem',fontSize:'0.7rem',fontWeight:700,cursor:'pointer',textAlign:'center'}}>
+                                style={{background:'rgba(96,165,250,0.15)',color:'#60a5fa',border:'1px solid rgba(96,165,250,0.3)',borderRadius:'4px',padding:'0.2rem 0.25rem',fontSize:'0.68rem',fontWeight:700,cursor:'pointer',textAlign:'center'}}>
                                 B ₹{ceLTP.toFixed(0)}
                               </button>
-                              <button onClick={()=>setLegs(prev=>[...prev,{id:Date.now(),position:'sell',optionType:'call',strike:row.strike,premium:ceLTP,quantity:1}])}
-                                style={{background:'rgba(248,113,113,0.1)',color:'#f87171',border:'1px solid rgba(248,113,113,0.2)',borderRadius:'4px',padding:'0.2rem 0.3rem',fontSize:'0.7rem',fontWeight:700,cursor:'pointer',textAlign:'center'}}>
-                                S ₹{ceLTP.toFixed(0)}
-                              </button>
-                              {/* Strike */}
-                              <span style={{textAlign:'center',fontWeight:800,fontSize:isATM?'0.85rem':'0.78rem',color:isATM?'var(--accent)':'var(--text-main)'}}>{row.strike}{isATM?' ◄':''}</span>
-                              {/* PE side */}
+                              <div style={{textAlign:'center',fontWeight:800,fontSize:isATM?'0.88rem':'0.78rem',color:isATM?'var(--accent)':'var(--text-main)',padding:'0 0.15rem'}}>
+                                {row.strike}{isATM?<span style={{fontSize:'0.6rem',color:'var(--accent)',marginLeft:'2px'}}>ATM</span>:''}
+                              </div>
                               <button onClick={()=>setLegs(prev=>[...prev,{id:Date.now(),position:'buy',optionType:'put',strike:row.strike,premium:peLTP,quantity:1}])}
-                                style={{background:'rgba(74,222,128,0.1)',color:'#4ade80',border:'1px solid rgba(74,222,128,0.2)',borderRadius:'4px',padding:'0.2rem 0.3rem',fontSize:'0.7rem',fontWeight:700,cursor:'pointer',textAlign:'center'}}>
+                                style={{background:'rgba(74,222,128,0.12)',color:'#4ade80',border:'1px solid rgba(74,222,128,0.25)',borderRadius:'4px',padding:'0.2rem 0.25rem',fontSize:'0.68rem',fontWeight:700,cursor:'pointer'}}>
                                 B ₹{peLTP.toFixed(0)}
                               </button>
-                              <button onClick={()=>setLegs(prev=>[...prev,{id:Date.now(),position:'sell',optionType:'put',strike:row.strike,premium:peLTP,quantity:1}])}
-                                style={{background:'rgba(248,113,113,0.1)',color:'#f87171',border:'1px solid rgba(248,113,113,0.2)',borderRadius:'4px',padding:'0.2rem 0.3rem',fontSize:'0.7rem',fontWeight:700,cursor:'pointer',textAlign:'center'}}>
-                                S ₹{peLTP.toFixed(0)}
-                              </button>
-                              <span style={{fontSize:'0.72rem',color:'#818cf8'}}>{row.pe?.iv||'-'}%</span>
-                              <span style={{fontSize:'0.7rem',color:'var(--text-dim)',textAlign:'right'}}>{((row.pe?.oi||0)/100000).toFixed(1)}L</span>
+                              <span style={{fontSize:'0.75rem',color:'#86efac',fontWeight:600}}>₹{peLTP.toFixed(0)}</span>
+                              <span style={{fontSize:'0.67rem',color:'#818cf8'}}>{row.pe?.iv||0}%</span>
+                              <span style={{fontSize:'0.65rem',color:'#94a3b8'}}>{((row.pe?.oi||0)/100000).toFixed(1)}L</span>
                             </div>
                           );
                         })}
@@ -7187,39 +7223,33 @@ Respond ONLY with valid JSON:
               </div>
               <div style={{display:'flex',gap:'0.5rem',alignItems:'center',flexWrap:'wrap'}}>
                 {['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY'].map(sym => (
-                  <button key={sym} onClick={() => { setExpirySymbol(sym); setSelectedUnderlying(sym); setExpiryData(null); }}
+                  <button key={sym} onClick={() => { setExpirySymbol(sym); setExpiryData(null); fetchExpiryData(sym); }}
                     style={{padding:'0.35rem 0.75rem',borderRadius:'20px',border:'1px solid var(--border)',cursor:'pointer',fontSize:'0.8rem',fontWeight:expirySymbol===sym?700:400,background:expirySymbol===sym?'var(--accent)':'var(--bg-surface)',color:expirySymbol===sym?'#000':'var(--text-dim)'}}>
                     {sym}
                   </button>
                 ))}
-                <button onClick={() => fetchExpiryData()} disabled={expiryLoading}
+                <button onClick={() => fetchExpiryData(expirySymbol)} disabled={expiryLoading}
                   style={{padding:'0.35rem 1rem',borderRadius:'8px',border:'none',cursor:'pointer',fontSize:'0.82rem',fontWeight:700,background:'var(--accent)',color:'#000'}}>
                   {expiryLoading ? '⏳' : '🔄 Refresh'}
                 </button>
               </div>
             </div>
 
-            {/* Status: if chain not loaded yet */}
-            {!expiryData && !expiryLoading && liveOptionChain.length === 0 && (
-              <div style={{textAlign:'center',padding:'4rem 2rem',color:'var(--text-dim)'}}>
+            {!expiryData && !expiryLoading && (
+              <div style={{textAlign:'center',padding:'3rem 2rem',color:'var(--text-dim)'}}>
                 <div style={{fontSize:'3rem',marginBottom:'1rem'}}>⏰</div>
-                <p style={{marginBottom:'1rem'}}>Waiting for live option chain… please wait a moment or switch to Option Chain tab first.</p>
-              </div>
-            )}
-
-            {!expiryData && !expiryLoading && liveOptionChain.length > 0 && (
-              <div style={{textAlign:'center',padding:'2rem',color:'var(--text-dim)'}}>
-                <button onClick={() => fetchExpiryData()}
+                <p style={{marginBottom:'1rem'}}>Click Refresh to load live expiry data from NSE</p>
+                <button onClick={() => fetchExpiryData(expirySymbol)}
                   style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.75rem 2rem',fontWeight:700,cursor:'pointer'}}>
-                  ⚡ Compute Expiry Data
+                  Load Expiry Data
                 </button>
               </div>
             )}
 
             {expiryLoading && (
               <div style={{textAlign:'center',padding:'4rem',color:'var(--text-dim)'}}>
-                <div style={{fontSize:'2rem',marginBottom:'0.5rem'}}>⚡</div>
-                <p>Computing from live chain ({liveOptionChain.length} strikes)...</p>
+                <div style={{fontSize:'2rem',marginBottom:'0.5rem'}}>⏳</div>
+                <p>Fetching {expirySymbol} data from NSE…</p>
               </div>
             )}
 
