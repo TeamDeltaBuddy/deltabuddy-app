@@ -2579,7 +2579,7 @@ Respond ONLY with valid JSON:
       const portfolioInterval = setInterval(fetchPortfolio, 30000);
 
       // Expiry tools: recompute every 60s from live chain (no separate fetch needed)
-      const expiryInterval = setInterval(() => fetchExpiryData(), 60000);
+      const expiryInterval = setInterval(() => { fetchExpiryData(expirySymbol); }, 60000);
 
       // VIX: every 60 seconds
       const vixInterval = setInterval(fetchVix, 60000);
