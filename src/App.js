@@ -4826,7 +4826,6 @@ Respond ONLY with valid JSON:
             );
           })()
         ) : activeTab === 'markets' ? (
-        ) : activeTab === 'markets' ? (
           <div>
             {/* -- STOCK DEEP DIVE -- */}
             <div style={{background:'linear-gradient(135deg,#0f172a,#1a2744)',border:'1px solid #1e3a5f',borderRadius:'12px',padding:'1.25rem',marginBottom:'1.5rem'}}>
