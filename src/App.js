@@ -1027,6 +1027,13 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     fetch(`${BACKEND_URL}/api/health`).catch(()=>{});
   }, []);
 
+  // -- Auto-load admin users when admin tab opened --------------------------
+  useEffect(() => {
+    if (activeTab === 'admin' && isAdmin && adminUsers.length === 0) {
+      fetchAllUsers();
+    }
+  }, [activeTab, isAdmin]); // eslint-disable-line
+
   // -- Firebase auth listener ------------------------------------------------
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -1482,8 +1489,9 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     if (!isAdmin) return;
     setAdminLoading(true);
     try {
-      const snap = await getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc')));
-      const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const snap = await getDocs(collection(db, 'users'));
+      const users = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
       setAdminUsers(users);
     } catch(e) { setAdminMsg('Error: ' + e.message); }
     finally { setAdminLoading(false); }
@@ -2790,6 +2798,9 @@ Respond ONLY with valid JSON:
   // -- Auto-fetch Markets tab data when sub-tab is opened -------------------
   useEffect(() => {
     if (activeTab !== 'markets') return;
+    if (activeMarketsTab === 'option-chain') {
+      if (liveOptionChain.length === 0) generateLiveOptionChain(selectedUnderlying);
+    }
     if (activeMarketsTab === 'fii-dii') {
       fetchFiiDii();
       fetchBulkDeals();
