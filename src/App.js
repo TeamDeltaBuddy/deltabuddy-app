@@ -1961,8 +1961,13 @@ Respond ONLY with valid JSON:
     'Nifty Realty'             : 'NIFTY REALTY',
     'Nifty Energy'             : 'NIFTY ENERGY',
     'Nifty Midcap 50'          : 'NIFTY MIDCAP 50',
+    'Nifty Midcap Select'      : 'NIFTY MIDCAP SELECT',
+    'Nifty Midcap 100'         : 'NIFTY MIDCAP 100',
     'Nifty Smallcap 50'        : 'NIFTY SMLCAP 50',
     'Nifty Financial Services' : 'NIFTY FIN SERVICE',
+    'Nifty PSU Bank'           : 'NIFTY PSU BANK',
+    'Nifty Private Bank'       : 'NIFTY PRIVATE BANK',
+    'Nifty Infrastructure'     : 'NIFTY INFRA',
     'Nifty Next 50'            : 'NIFTY NEXT 50',
     'Nifty 100'                : 'NIFTY 100',
     'Nifty 200'                : 'NIFTY 200',
@@ -5333,18 +5338,19 @@ Respond ONLY with valid JSON:
 
             {/* -- INDICES LIVE OVERVIEW -- */}
             {(()=>{
+              // keys: ordered list of livePrices keys to try (NSE sends different names)
               const rows = [
-                {label:'Nifty 50',           key:'Nifty 50',                    col:'#4ade80'},
-                {label:'Bank Nifty',         key:'Bank Nifty',                  col:'#60a5fa'},
-                {label:'Fin Nifty',          key:'Nifty Financial Services',    col:'#a78bfa'},
-                {label:'Midcap 50',          key:'Nifty Midcap 50',             col:'#fb923c'},
-                {label:'Nifty IT',           key:'Nifty IT',                    col:'#34d399'},
-                {label:'Nifty Auto',         key:'Nifty Auto',                  col:'#f472b6'},
-                {label:'Nifty Pharma',       key:'Nifty Pharma',                col:'#fbbf24'},
-                {label:'Nifty Metal',        key:'Nifty Metal',                 col:'#94a3b8'},
-                {label:'Nifty PSU Bank',     key:'Nifty PSU Bank',              col:'#38bdf8'},
-                {label:'Nifty FMCG',         key:'Nifty FMCG',                  col:'#86efac'},
-                {label:'India VIX',          key:'India VIX',                   col:'#f87171', isVix:true},
+                {label:'Nifty 50',     keys:['Nifty 50','NIFTY 50'],                                               col:'#4ade80'},
+                {label:'Bank Nifty',   keys:['Bank Nifty','NIFTY BANK'],                                           col:'#60a5fa'},
+                {label:'Fin Nifty',    keys:['Nifty Financial Services','NIFTY FIN SERVICE','NIFTY FIN SERV'],      col:'#a78bfa'},
+                {label:'Midcap Nifty', keys:['Nifty Midcap Select','NIFTY MIDCAP SELECT','Nifty Midcap 50','NIFTY MIDCAP 50'], col:'#fb923c'},
+                {label:'Nifty IT',     keys:['Nifty IT','NIFTY IT'],                                               col:'#34d399'},
+                {label:'Nifty Auto',   keys:['Nifty Auto','NIFTY AUTO'],                                           col:'#f472b6'},
+                {label:'Nifty Pharma', keys:['Nifty Pharma','NIFTY PHARMA'],                                       col:'#fbbf24'},
+                {label:'Nifty Metal',  keys:['Nifty Metal','NIFTY METAL'],                                         col:'#94a3b8'},
+                {label:'PSU Bank',     keys:['Nifty PSU Bank','NIFTY PSU BANK'],                                   col:'#38bdf8'},
+                {label:'Nifty FMCG',   keys:['Nifty FMCG','NIFTY FMCG'],                                          col:'#86efac'},
+                {label:'India VIX',    keys:['India VIX','INDIA VIX'],                                             col:'#f87171', isVix:true},
               ];
               return (
                 <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1rem',marginBottom:'1rem'}}>
@@ -5357,8 +5363,8 @@ Respond ONLY with valid JSON:
                   </div>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:'0.5rem'}}>
                     {rows.map(r=>{
-                      const price = livePrices[r.key];
-                      const chg   = liveChanges[r.key];
+                      const price = r.keys.reduce((v,k) => v != null ? v : livePrices[k], null);
+                      const chg   = r.keys.reduce((v,k) => v != null ? v : liveChanges[k], null);
                       const pos   = (chg||0) >= 0;
                       const chgCol = pos ? '#4ade80' : '#f87171';
                       const vixCol = price>24?'#f87171':price>20?'#f97316':price>14?'#fbbf24':'#4ade80';
