@@ -1679,103 +1679,103 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     setGexError('');
     setGexData(null);
 
-    // --- Client-side GEX computation from liveOptionChain ---
-    // No backend call needed — avoids NSE IP-block on Render
     try {
-      const chain = liveOptionChain;
-      if (!chain || chain.length === 0) {
-        setGexError('Load the option chain first (Markets tab → Option Chain → Load)');
-        setGexLoading(false);
-        return;
-      }
+      // Fetch option chain for THIS specific symbol from backend
+      const res = await fetch(`${BACKEND_URL}/api/option-chain?symbol=${s}`, { headers:{'Accept':'application/json'} });
+      if (!res.ok) throw new Error(`Chain fetch failed: HTTP ${res.status}`);
+      const nseJson = await res.json();
 
-      // Spot price
-      const spotMap = { NIFTY: marketData.nifty?.value, BANKNIFTY: marketData.bankNifty?.value };
-      let spot = spotMap[s] || marketData.nifty?.value || chain[Math.floor(chain.length/2)]?.strike || 24500;
+      if (!nseJson?.records?.data?.length) throw new Error('No option chain data returned for ' + s);
 
-      // Lot size
-      const lotMap = { NIFTY:75, BANKNIFTY:30, FINNIFTY:60, MIDCPNIFTY:120, SENSEX:10 };
-      const lotSize = lotMap[s] || 75;
+      // Parse NSE response — near expiry only
+      const spot = nseJson.records.underlyingValue || 0;
+      if (!spot) throw new Error('Spot price missing in chain response');
 
-      // Time to expiry — use selectedExpiry if available, else next weekly
-      let T = 7/365; // default 1 week
-      if (selectedExpiry) {
-        const parts = selectedExpiry.split('-');
-        const monthMap = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+      const allRows   = nseJson.records.data;
+      const expiryDates = nseJson.records.expiryDates || [];
+      const nearExpiry  = expiryDates[0] || '';
+      const rows = nearExpiry ? allRows.filter(r => r.expiryDate === nearExpiry) : allRows.slice(0, 120);
+
+      // Parse expiry date for T calculation
+      const monthMap2 = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+      let T = 7/365;
+      if (nearExpiry) {
+        const parts = nearExpiry.split('-');
         if (parts.length === 3) {
-          const expDate = new Date(parseInt(parts[2]), monthMap[parts[1]] ?? parseInt(parts[1])-1, parseInt(parts[0]), 15, 30, 0);
+          const expDate = new Date(parseInt(parts[2]), monthMap2[parts[1]] ?? parseInt(parts[1])-1, parseInt(parts[0]), 15, 30, 0);
           const msLeft = expDate - Date.now();
           if (msLeft > 0) T = msLeft / (1000*60*60*24*365);
         }
       }
-      T = Math.max(T, 0.001);
+      T = Math.max(T, 1/365); // min 1 day
+
+      // Lot size
+      const lotFallback = { NIFTY:75, BANKNIFTY:30, FINNIFTY:60, MIDCPNIFTY:120, SENSEX:10 };
+      let lotSize = 0;
+      for (const row of rows) {
+        const opt = row.CE || row.PE;
+        if (opt?.marketLot) { lotSize = opt.marketLot; break; }
+      }
+      if (!lotSize) lotSize = lotFallback[s] || 75;
 
       // Black-Scholes gamma
       function normPDF(x) { return Math.exp(-0.5*x*x) / Math.sqrt(2*Math.PI); }
-      function bsGamma(S, K, T, sigma) {
-        if (T <= 0 || sigma <= 0 || S <= 0 || K <= 0) return 0;
+      function bsGamma(S, K, t, sigma) {
+        if (t <= 0 || sigma <= 0 || S <= 0 || K <= 0) return 0;
         try {
-          const d1 = (Math.log(S/K) + (0.065 + 0.5*sigma*sigma)*T) / (sigma*Math.sqrt(T));
-          return normPDF(d1) / (S * sigma * Math.sqrt(T));
+          const d1 = (Math.log(S/K) + (0.065 + 0.5*sigma*sigma)*t) / (sigma*Math.sqrt(t));
+          return normPDF(d1) / (S * sigma * Math.sqrt(t));
         } catch(e) { return 0; }
       }
 
-      const strikes = [];
-      let totalCeGEX = 0, totalPeGEX = 0;
-
-      chain.forEach(row => {
-        const K  = row.strike;
-        const ceIV  = (parseFloat(row.ce?.iv) || 15) / 100;
-        const peIV  = (parseFloat(row.pe?.iv) || 15) / 100;
-        const ceOI  = row.ce?.oi || 0;
-        const peOI  = row.pe?.oi || 0;
-
-        const ceGamma = bsGamma(spot, K, T, ceIV);
-        const peGamma = bsGamma(spot, K, T, peIV);
-
-        const ceGEX = ceGamma * ceOI * lotSize * spot * spot * 0.01;
-        const peGEX = peGamma * peOI * lotSize * spot * spot * 0.01;
-        const netGEX = ceGEX - peGEX;
-
-        totalCeGEX += ceGEX;
-        totalPeGEX += peGEX;
-
-        strikes.push({
-          strike: K,
-          ceGEX, peGEX, netGEX,
-          ceOI, peOI,
-          ceLTP: parseFloat(row.ce?.ltp) || 0,
-          peLTP: parseFloat(row.pe?.ltp) || 0,
-          ceIV: parseFloat(row.ce?.iv) || 0,
-          peIV: parseFloat(row.pe?.iv) || 0,
-        });
+      // Build strikes from this symbol's chain
+      const strikeMap = {};
+      rows.forEach(row => {
+        const K = row.strikePrice;
+        if (!K) return;
+        if (!strikeMap[K]) strikeMap[K] = { strike:K, ceGEX:0, peGEX:0, netGEX:0, ceOI:0, peOI:0, ceLTP:0, peLTP:0, ceIV:0, peIV:0 };
+        const sk = strikeMap[K];
+        if (row.CE) {
+          const iv = (row.CE.impliedVolatility || 15) / 100;
+          const oi = row.CE.openInterest || 0;
+          sk.ceOI  = oi;
+          sk.ceIV  = row.CE.impliedVolatility || 0;
+          sk.ceLTP = row.CE.lastPrice || 0;
+          sk.ceGEX = bsGamma(spot, K, T, iv) * oi * lotSize * spot * spot * 0.01;
+        }
+        if (row.PE) {
+          const iv = (row.PE.impliedVolatility || 15) / 100;
+          const oi = row.PE.openInterest || 0;
+          sk.peOI  = oi;
+          sk.peIV  = row.PE.impliedVolatility || 0;
+          sk.peLTP = row.PE.lastPrice || 0;
+          sk.peGEX = bsGamma(spot, K, T, iv) * oi * lotSize * spot * spot * 0.01;
+        }
+        sk.netGEX = sk.ceGEX - sk.peGEX;
       });
 
-      strikes.sort((a,b) => a.strike - b.strike);
-      const totalGEX = totalCeGEX - totalPeGEX;
+      const strikes = Object.values(strikeMap).sort((a,b) => a.strike - b.strike);
+      if (!strikes.length) throw new Error('No valid strikes computed');
 
-      // Gamma flip point
+      const totalGEX = strikes.reduce((sum, sk) => sum + sk.netGEX, 0);
+
+      // Gamma flip
       let gammaFlip = null;
       for (let i = 1; i < strikes.length; i++) {
-        if (strikes[i-1].netGEX * strikes[i].netGEX < 0) {
-          gammaFlip = strikes[i].strike;
-          break;
-        }
+        if (strikes[i-1].netGEX * strikes[i].netGEX < 0) { gammaFlip = strikes[i].strike; break; }
       }
 
-      // Walls
-      const sorted = [...strikes].sort((a,b) => Math.abs(b.netGEX) - Math.abs(a.netGEX));
-      const posWalls = sorted.filter(s => s.netGEX > 0).slice(0,3).map(s => s.strike);
-      const negWalls = sorted.filter(s => s.netGEX < 0).slice(0,3).map(s => s.strike);
-      const topCallOI = [...strikes].sort((a,b) => b.ceOI - a.ceOI).slice(0,3).map(s => s.strike);
-      const topPutOI  = [...strikes].sort((a,b) => b.peOI - a.peOI).slice(0,3).map(s => s.strike);
+      // Walls — by highest absolute GEX
+      const byAbsGex = [...strikes].sort((a,b) => Math.abs(b.netGEX) - Math.abs(a.netGEX));
+      const posWalls  = byAbsGex.filter(sk => sk.netGEX > 0).slice(0,3).map(sk => sk.strike);
+      const negWalls  = byAbsGex.filter(sk => sk.netGEX < 0).slice(0,3).map(sk => sk.strike);
+      const topCallOI = [...strikes].sort((a,b) => b.ceOI - a.ceOI).slice(0,3).map(sk => sk.strike);
+      const topPutOI  = [...strikes].sort((a,b) => b.peOI - a.peOI).slice(0,3).map(sk => sk.strike);
 
-      const aboveFlip = gammaFlip && spot > gammaFlip;
       const zoneLabel = totalGEX > 0
-        ? (aboveFlip ? 'Positive Gamma — Pinning likely' : 'Positive Gamma — Range bound')
+        ? ((gammaFlip && spot > gammaFlip) ? 'Positive Gamma — Pinning likely' : 'Positive Gamma — Range bound')
         : 'Negative Gamma — Trend amplification';
 
-      // Only strikes ±4% from spot for chart
       const nearStrikes = strikes.filter(r => r.strike >= spot*0.96 && r.strike <= spot*1.04);
 
       setGexData({
@@ -1783,12 +1783,11 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
         gammaFlip, vannaFlip: null, charmCentre: Math.round(spot),
         posWalls, negWalls, topCallOI, topPutOI,
         zoneLabel, regime: totalGEX > 0 ? 'positive' : 'negative',
-        nearExpiry: selectedExpiry || 'nearest',
-        rowCount: chain.length, lotSizeSource: 'fallback',
+        nearExpiry, rowCount: rows.length, lotSizeSource: lotSize ? 'nse' : 'fallback',
         strikes: nearStrikes,
       });
     } catch(e) {
-      setGexError('GEX computation error: ' + e.message);
+      setGexError('GEX failed: ' + e.message);
     }
     setGexLoading(false);
   };
