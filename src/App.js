@@ -1340,6 +1340,8 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [gexLoading, setGexLoading]       = useState(false);
   const [gexError, setGexError]           = useState('');
   const [gexSymbol, setGexSymbol]         = useState('NIFTY');
+  const [indicesPcr, setIndicesPcr]       = useState({});
+  const [indicesPcrLoading, setIndicesPcrLoading] = useState(false);
   const [watchlist, setWatchlist]         = useState(() => { try { return JSON.parse(localStorage.getItem('db_watchlist')||'[]'); } catch(e) { return []; }});
   const [watchlistPrices, setWatchlistPrices] = useState({});
   const [showAddWatch, setShowAddWatch]   = useState(false);
@@ -5391,12 +5393,9 @@ Respond ONLY with valid JSON:
                 {sym:'MIDCPNIFTY', label:'Midcap Nifty',      ceOI:0, peOI:0, pcr:'-', spot:livePrices['Nifty Midcap 50']},
               ];
 
-              // State for multi-index PCR
-              const [indicesPcr, setIndicesPcr] = React.useState({});
-              const [pcrLoading, setPcrLoading] = React.useState(false);
-
+              // State for multi-index PCR (declared at component level)
               const fetchAllPcr = async () => {
-                setPcrLoading(true);
+                setIndicesPcrLoading(true);
                 const results = {};
                 for (const idx of indices.slice(1)) { // NIFTY already loaded
                   try {
@@ -5410,16 +5409,16 @@ Respond ONLY with valid JSON:
                   } catch(e) {}
                 }
                 setIndicesPcr(results);
-                setPcrLoading(false);
+                setIndicesPcrLoading(false);
               };
 
               return (
                 <div className="panel">
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem'}}>
                     <h2 style={{margin:0}}>⚡ Put/Call Ratio — All Indices</h2>
-                    <button onClick={fetchAllPcr} disabled={pcrLoading}
+                    <button onClick={fetchAllPcr} disabled={indicesPcrLoading}
                       style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
-                      {pcrLoading ? '⏳ Loading...' : '🔄 Load All'}
+                      {indicesPcrLoading ? '⏳ Loading...' : '🔄 Load All'}
                     </button>
                   </div>
                   <p style={{color:'var(--text-dim)',fontSize:'0.82rem',marginBottom:'1.25rem'}}>PCR &gt; 1.2 = more puts = bullish sentiment. PCR &lt; 0.8 = more calls = bearish sentiment.</p>
