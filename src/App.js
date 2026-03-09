@@ -5496,10 +5496,10 @@ Respond ONLY with valid JSON:
                       <tbody>
                         {liveOptionChain.map((row,idx)=>{
                           const spot  = selectedUnderlying==='NIFTY'?marketData.nifty.value:selectedUnderlying==='BANKNIFTY'?marketData.bankNifty.value:marketData.nifty.value;
-                          const isATM = Math.abs(row.strike-spot)<(selectedUnderlying==='NIFTY'?26:51);
-                          const itmCE = row.strike < spot;
-                          const itmPE = row.strike > spot;
-                          const maxOI = Math.max(...liveOptionChain.map(r=>Math.max(r.ce?.oi||0,r.pe?.oi||0)));
+                          const isATM = Math.abs(row.strike-spot2)<(selectedUnderlying==='NIFTY'?26:selectedUnderlying==='BANKNIFTY'?51:26);
+                          const itmCE = row.strike < spot2;
+                          const itmPE = row.strike > spot2;
+                          const maxOI = Math.max(...visibleChain.map(r=>Math.max(r.ce?.oi||0,r.pe?.oi||0)));
                           const ceOI  = row.ce?.oi||0;
                           const peOI  = row.pe?.oi||0;
                           const ceChg = parseFloat(row.ce?.change||0);
@@ -5528,8 +5528,8 @@ Respond ONLY with valid JSON:
                               {/* Strike */}
                               <td style={{padding:'5px 8px',textAlign:'center',background:'rgba(249,115,22,0.06)',borderLeft:'1px solid rgba(249,115,22,0.2)',borderRight:'1px solid rgba(249,115,22,0.2)'}}>
                                 {isATM
-                                  ? <span style={{background:'#f97316',color:'white',borderRadius:'99px',padding:'2px 7px',fontWeight:800,fontSize:'0.78rem',whiteSpace:'nowrap'}}>{row.strike?.toLocaleString()} ★</span>
-                                  : <span style={{fontWeight:600,color:'var(--text-dim)',fontSize:'0.8rem'}}>{row.strike?.toLocaleString()}</span>
+                                  ? <span style={{background:'#f97316',color:'white',borderRadius:'99px',padding:'2px 7px',fontWeight:800,fontSize:'0.78rem',whiteSpace:'nowrap'}}>{row.strike?.toLocaleString()} ATM</span>
+                                  : <span style={{fontWeight:600,color:itmCE?'rgba(74,222,128,0.8)':itmPE?'rgba(248,113,113,0.8)':'var(--text-dim)',fontSize:'0.8rem'}}>{row.strike?.toLocaleString()}</span>
                                 }
                               </td>
                               {/* PE side */}
@@ -5545,7 +5545,8 @@ Respond ONLY with valid JSON:
                               </td>
                             </tr>
                           );
-                        })}
+                          });
+                          })()}
                       </tbody>
                     </table>
                     {/* Legend */}
