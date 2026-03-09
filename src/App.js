@@ -5379,19 +5379,75 @@ Respond ONLY with valid JSON:
             })()}
 
             {activeMarketsTab === 'pcr' && activeHomeTab !== 'pcr' && (() => {
-              const ceOI = liveOptionChain.reduce((s,r)=>s+(r.ce?.oi||0),0);
-              const peOI = liveOptionChain.reduce((s,r)=>s+(r.pe?.oi||0),0);
-              const pcr  = ceOI>0?(peOI/ceOI).toFixed(2):'-';
-              const bull = parseFloat(pcr)>1.2;
-              const bear = parseFloat(pcr)<0.8;
-              const clr  = bull?'#4ade80':bear?'#f87171':'#fbbf24';
+              // NIFTY 50 from liveOptionChain (already loaded)
+              const niftyCeOI = liveOptionChain.reduce((s,r)=>s+(r.ce?.oi||0),0);
+              const niftyPeOI = liveOptionChain.reduce((s,r)=>s+(r.pe?.oi||0),0);
+              const niftyPcr  = niftyCeOI>0?(niftyPeOI/niftyCeOI).toFixed(2):'-';
+
+              const indices = [
+                {sym:'NIFTY',      label:'Nifty 50',          ceOI:niftyCeOI, peOI:niftyPeOI, pcr:niftyPcr, spot:marketData.nifty?.value},
+                {sym:'BANKNIFTY',  label:'Bank Nifty',        ceOI:0, peOI:0, pcr:'-', spot:marketData.bankNifty?.value},
+                {sym:'FINNIFTY',   label:'Fin Nifty',         ceOI:0, peOI:0, pcr:'-', spot:livePrices['Nifty Financial Services']},
+                {sym:'MIDCPNIFTY', label:'Midcap Nifty',      ceOI:0, peOI:0, pcr:'-', spot:livePrices['Nifty Midcap 50']},
+              ];
+
+              // State for multi-index PCR
+              const [indicesPcr, setIndicesPcr] = React.useState({});
+              const [pcrLoading, setPcrLoading] = React.useState(false);
+
+              const fetchAllPcr = async () => {
+                setPcrLoading(true);
+                const results = {};
+                for (const idx of indices.slice(1)) { // NIFTY already loaded
+                  try {
+                    const r = await fetch(`${BACKEND_URL}/api/option-chain?symbol=${idx.sym}`);
+                    const j = await r.json();
+                    if (j?.records?.data?.length) {
+                      let ce=0, pe=0;
+                      j.records.data.forEach(row => { ce+=row.CE?.openInterest||0; pe+=row.PE?.openInterest||0; });
+                      results[idx.sym] = { pcr: ce>0?(pe/ce).toFixed(2):'-', ceOI:ce, peOI:pe, spot:j.records.underlyingValue };
+                    }
+                  } catch(e) {}
+                }
+                setIndicesPcr(results);
+                setPcrLoading(false);
+              };
+
               return (
-                <div className="panel" style={{textAlign:'center'}}>
-                  <h2>⚡ Put/Call Ratio</h2>
-                  <div style={{fontSize:'4rem',fontWeight:900,color:clr,margin:'1rem 0'}}>{pcr}</div>
-                  <div style={{fontSize:'1.2rem',fontWeight:700,color:clr}}>{bull?'BULLISH SENTIMENT':bear?'BEARISH SENTIMENT':'NEUTRAL'}</div>
-                  <p style={{color:'var(--text-dim)',marginTop:'1rem',fontSize:'0.85rem'}}>PCR above 1.2 = more puts = traders hedging downside = market likely to go up.<br/>PCR below 0.8 = more calls = overconfident bulls = possible correction.</p>
-                  <p style={{color:'var(--text-dim)',fontSize:'0.78rem',marginTop:'0.5rem'}}>Refresh option chain for updated PCR.</p>
+                <div className="panel">
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem'}}>
+                    <h2 style={{margin:0}}>⚡ Put/Call Ratio — All Indices</h2>
+                    <button onClick={fetchAllPcr} disabled={pcrLoading}
+                      style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
+                      {pcrLoading ? '⏳ Loading...' : '🔄 Load All'}
+                    </button>
+                  </div>
+                  <p style={{color:'var(--text-dim)',fontSize:'0.82rem',marginBottom:'1.25rem'}}>PCR &gt; 1.2 = more puts = bullish sentiment. PCR &lt; 0.8 = more calls = bearish sentiment.</p>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:'0.75rem'}}>
+                    {indices.map(idx => {
+                      const data = idx.sym === 'NIFTY' ? idx : (indicesPcr[idx.sym] || idx);
+                      const pcr = data.pcr;
+                      const bull = parseFloat(pcr) > 1.2;
+                      const bear = parseFloat(pcr) < 0.8;
+                      const clr  = pcr==='-'?'var(--text-muted)':bull?'#4ade80':bear?'#f87171':'#fbbf24';
+                      const lbl  = pcr==='-'?'Click Load All':bull?'BULLISH':bear?'BEARISH':'NEUTRAL';
+                      return (
+                        <div key={idx.sym} style={{background:'var(--bg-dark)',borderRadius:'10px',padding:'1rem',border:`1px solid ${clr==='var(--text-muted)'?'var(--border)':clr+'33'}`}}>
+                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'0.5rem'}}>
+                            <div>
+                              <div style={{fontWeight:700,fontSize:'0.9rem',color:'var(--text-main)'}}>{idx.label}</div>
+                              <div style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>{data.spot ? data.spot.toLocaleString('en-IN') : '—'}</div>
+                            </div>
+                            <span style={{fontSize:'0.72rem',fontWeight:700,padding:'2px 8px',borderRadius:'99px',background:clr==='var(--text-muted)'?'rgba(255,255,255,0.05)':clr+'22',color:clr}}>{lbl}</span>
+                          </div>
+                          <div style={{fontSize:'2.5rem',fontWeight:900,color:clr,lineHeight:1}}>{pcr}</div>
+                          {data.ceOI>0 && <div style={{fontSize:'0.7rem',color:'var(--text-muted)',marginTop:'0.4rem'}}>
+                            CE OI: {(data.ceOI/100000).toFixed(1)}L &nbsp;|&nbsp; PE OI: {(data.peOI/100000).toFixed(1)}L
+                          </div>}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })()}
@@ -7426,19 +7482,13 @@ Respond ONLY with valid JSON:
             </div>
             {gexError && (
               <div style={{background:'rgba(248,113,113,0.08)',border:'1px solid rgba(248,113,113,0.25)',borderRadius:'10px',padding:'1.5rem',marginBottom:'1rem',textAlign:'center'}}>
-                <div style={{fontSize:'2rem',marginBottom:'0.5rem'}}>
-                  {gexError.toLowerCase().includes('closed') || gexError.toLowerCase().includes('empty') ? '🌙' : '⚠️'}
-                </div>
-                <div style={{fontWeight:700,color:'#f87171',marginBottom:'0.4rem'}}>
-                  {gexError.toLowerCase().includes('closed') || gexError.toLowerCase().includes('empty')
-                    ? 'Market is Closed'
-                    : 'GEX Load Failed'}
-                </div>
-                <div style={{fontSize:'0.82rem',color:'var(--text-dim)',lineHeight:1.6}}>
-                  {gexError.toLowerCase().includes('closed') || gexError.toLowerCase().includes('empty')
-                    ? 'NSE option chain data is only available during market hours — Monday to Friday, 9:15 AM to 3:30 PM IST.'
-                    : gexError}
-                </div>
+                <div style={{fontSize:'2rem',marginBottom:'0.5rem'}}>⚠️</div>
+                <div style={{fontWeight:700,color:'#f87171',marginBottom:'0.4rem'}}>GEX Load Failed</div>
+                <div style={{fontSize:'0.82rem',color:'var(--text-dim)',lineHeight:1.6,marginBottom:'1rem'}}>{gexError}</div>
+                <button onClick={()=>fetchGex(gexSymbol)}
+                  style={{background:'#6366f1',color:'#fff',border:'none',borderRadius:'8px',padding:'0.45rem 1.25rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
+                  🔄 Retry
+                </button>
               </div>
             )}
             {!gexData && !gexLoading && !gexError && (
