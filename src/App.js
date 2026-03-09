@@ -5445,11 +5445,12 @@ Respond ONLY with valid JSON:
                       <option value="MIDCPNIFTY">MIDCAP NIFTY</option>
                     </select>
                     <span style={{fontSize:'1.4rem',fontWeight:700,color:'#4ade80'}}>
-                      {(selectedUnderlying==='NIFTY'?marketData.nifty.value:marketData.bankNifty.value)?.toLocaleString()}
+                      {(selectedUnderlying==='NIFTY'?marketData.nifty.value:selectedUnderlying==='BANKNIFTY'?marketData.bankNifty.value:livePrices[selectedUnderlying==='FINNIFTY'?'NIFTY FINANCIAL SERVICES':'NIFTY MIDCAP SELECT']||marketData.nifty.value)?.toLocaleString()}
                     </span>
                     <span style={{fontSize:'0.85rem',color:((selectedUnderlying==='NIFTY'?marketData.nifty.change:marketData.bankNifty.change)||0)>=0?'#4ade80':'#f87171'}}>
                       {((selectedUnderlying==='NIFTY'?marketData.nifty.change:marketData.bankNifty.change)||0)>=0?'+':''}{selectedUnderlying==='NIFTY'?marketData.nifty.change:marketData.bankNifty.change}%
                     </span>
+                    <span style={{fontSize:'0.75rem',color:'#64748b',marginLeft:'0.5rem'}}>ATM ±10 strikes</span>
                   </div>
                   <button onClick={()=>generateLiveOptionChain(selectedUnderlying)} disabled={isLoadingChain}
                     style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.35rem 0.9rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
@@ -5506,9 +5507,12 @@ Respond ONLY with valid JSON:
                       </thead>
                       <tbody>
                         {(()=>{
-                          const spot = selectedUnderlying==='NIFTY'?marketData.nifty.value:selectedUnderlying==='BANKNIFTY'?marketData.bankNifty.value:selectedUnderlying==='FINNIFTY'?(livePrices['NIFTY FINANCIAL SERVICES']||marketData.nifty.value):(livePrices['NIFTY MIDCAP SELECT']||marketData.nifty.value);
-                          const atmIdx = liveOptionChain.length>0?liveOptionChain.reduce((best,row,i)=>Math.abs(row.strike-spot)<Math.abs(liveOptionChain[best].strike-spot)?i:best,0):0;
-                          const visChain = liveOptionChain.slice(Math.max(0,atmIdx-10),atmIdx+11);
+                          const spotVal = selectedUnderlying==='NIFTY'?marketData.nifty.value:selectedUnderlying==='BANKNIFTY'?marketData.bankNifty.value:selectedUnderlying==='FINNIFTY'?(livePrices['NIFTY FINANCIAL SERVICES']||marketData.nifty.value):(livePrices['NIFTY MIDCAP SELECT']||marketData.nifty.value);
+                          const spot = spotVal || 25500;
+                          // Sort chain ascending by strike first, then find ATM
+                          const sortedChain = [...liveOptionChain].sort((a,b)=>a.strike-b.strike);
+                          const atmIdx = sortedChain.length>0?sortedChain.reduce((best,row,i)=>Math.abs(row.strike-spot)<Math.abs(sortedChain[best].strike-spot)?i:best,0):0;
+                          const visChain = sortedChain.slice(Math.max(0,atmIdx-10),atmIdx+11);
                           const maxOI = Math.max(1,...visChain.map(r=>Math.max(r.ce?.oi||0,r.pe?.oi||0)));
                           const gap = selectedUnderlying==='BANKNIFTY'?51:selectedUnderlying==='MIDCPNIFTY'?13:26;
                           return visChain.map((row,idx)=>{
