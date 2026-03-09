@@ -3030,10 +3030,7 @@ Respond ONLY with valid JSON:
                     Expired
                   </button>
                 ) : (
-                  <button onClick={()=>setShowPricing(true)}
-                    style={{fontSize:'0.72rem',fontWeight:700,padding:'3px 8px',borderRadius:'20px',background:'linear-gradient(135deg,rgba(249,115,22,0.15),rgba(251,191,36,0.1))',border:'1px solid rgba(249,115,22,0.4)',color:'#f97316',cursor:'pointer',whiteSpace:'nowrap'}}>
-                    Pro — ₹299/qtr
-                  </button>
+                  null
                 )}
                 <button onClick={()=>setShowTgSetup(true)}
                   title={tgChatId?'Telegram connected  -  click to update':'Connect Telegram for alerts'}
@@ -3053,11 +3050,6 @@ Respond ONLY with valid JSON:
                 Sign In
               </button>
             ))}
-            <a href="https://wa.me/917506218502?text=Hi%20DeltaBuddy%20Team%2C%20I%20need%20help%20with..."
-              target="_blank" rel="noreferrer"
-              style={{color:'#25D366',fontSize:'1.2rem',lineHeight:1,textDecoration:'none'}} title="WhatsApp Support">
-              💬
-            </a>
             <button className="hamburger" onClick={()=>setShowMobileMenu(m=>!m)}
               style={{background:'none',border:'none',cursor:'pointer',padding:'6px',lineHeight:1,color:'var(--text-main)'}}>
               {showMobileMenu ? '✕' : '☰'}
@@ -3508,7 +3500,7 @@ Respond ONLY with valid JSON:
                   <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap'}}>
                     {subStatus==='trial' && (
                       <span onClick={()=>setShowPricing(true)} style={{fontSize:'0.75rem',padding:'0.25rem 0.75rem',borderRadius:'20px',background:'rgba(0,255,136,0.1)',border:'1px solid rgba(0,255,136,0.25)',color:'var(--accent)',cursor:'pointer',fontWeight:600}}>
-                        {trialDaysLeft} days free trial remaining
+                        {trialDaysLeft} days of Pro remaining
                       </span>
                     )}
                     {subStatus==='expired' && (
@@ -3818,7 +3810,7 @@ Respond ONLY with valid JSON:
                   <div key={s.name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.55rem 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
                     <div>
                       <div style={{fontSize:'0.875rem',fontWeight:600,color:'var(--text-main)'}}>{s.name}</div>
-                      <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{'₹'+s.value.toLocaleString()}</div>
+                      <div style={{fontSize:'0.75rem',color:'var(--text-main)',fontWeight:600}}>{'₹'+s.value.toLocaleString()}</div>
                     </div>
                     <div style={{textAlign:'right'}}>
                       <div style={{fontSize:'0.9rem',fontWeight:700,color:col}}>{isGainer?'▲':'▼'} {Math.abs(s.change).toFixed(2)}%</div>
@@ -3861,11 +3853,23 @@ Respond ONLY with valid JSON:
                   d.setHours(15,30,0,0);
                   return d;
                 };
+                // Last occurrence of weekday `dow` in a given month
+                const lastWeekdayOfMonth = (year, month, dow) => {
+                  const d = new Date(year, month + 1, 0); // last day of month
+                  d.setDate(d.getDate() - (d.getDay() - dow + 7) % 7);
+                  d.setHours(15,30,0,0);
+                  return d;
+                };
+                const monthlyOf = (dow) => {
+                  const t = lastWeekdayOfMonth(now.getFullYear(), now.getMonth(), dow);
+                  return t > now ? t : lastWeekdayOfMonth(now.getFullYear(), now.getMonth() + 1, dow);
+                };
                 const rows = [
-                  {sym:'NIFTY',   label:'NIFTY Weekly',    d:getNext(4), col:'#4ade80'},
-                  {sym:'BNKNIFTY',label:'BANKNIFTY Weekly',d:getNext(2), col:'#60a5fa'},
-                  {sym:'FINNIFTY',label:'FINNIFTY Weekly', d:getNext(2), col:'#f59e0b'},
-                  {sym:'MONTHLY', label:'Monthly Expiry',  d:getNext(4), col:'#c084fc'},
+                  {sym:'NIFTY',      label:'NIFTY Weekly',          d:getNext(2),      col:'#4ade80'},  // Tuesday
+                  {sym:'SENSEX',     label:'SENSEX Weekly (BSE)',    d:getNext(4),      col:'#60a5fa'},  // Thursday
+                  {sym:'BANKNIFTY',  label:'BANKNIFTY Monthly',      d:monthlyOf(3),    col:'#f59e0b'},  // last Wednesday
+                  {sym:'FINNIFTY',   label:'FINNIFTY Monthly',       d:monthlyOf(2),    col:'#c084fc'},  // last Tuesday
+                  {sym:'MIDCPNIFTY', label:'MIDCAP NIFTY Monthly',   d:monthlyOf(1),    col:'#fb7185'},  // last Monday
                 ];
                 return (
                   <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'1.25rem'}}>
@@ -3880,16 +3884,16 @@ Respond ONLY with valid JSON:
                       const mins = Math.floor((ms % 3600000) / 60000);
                       const urgent = days < 1;
                       return (
-                        <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.5rem 0.75rem',background:'var(--bg-surface)',borderRadius:'var(--radius-sm)',border:'1px solid var(--border)',marginBottom:'0.4rem'}}>
+                        <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.5rem 0.75rem',background:'var(--bg-surface)',borderRadius:'var(--radius-sm)',border:`1px solid ${urgent?'rgba(248,113,113,0.35)':'var(--border)'}`,marginBottom:'0.4rem'}}>
                           <div>
                             <div style={{fontSize:'0.875rem',fontWeight:700,color:r.col}}>{r.sym}</div>
                             <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{r.label}</div>
                           </div>
                           <div style={{textAlign:'right'}}>
                             <div style={{fontSize:'1.1rem',fontWeight:800,color:urgent?'#f87171':r.col}}>
-                              {days > 0 ? (days + 'd ' + hrs + 'h') : (hrs + 'h ' + mins + 'm')}
+                              {days > 0 ? `${days}d ${hrs}h` : `${hrs}h ${mins}m`}
                             </div>
-                            {urgent && <div style={{fontSize:'0.75rem',color:'var(--red)',fontWeight:700}}>TODAY</div>}
+                            {urgent && <div style={{fontSize:'0.7rem',color:'#f87171',fontWeight:700}}>EXPIRY TODAY</div>}
                           </div>
                         </div>
                       );
@@ -3933,25 +3937,49 @@ Respond ONLY with valid JSON:
 
               {/* CARD 3  -  MARKET MOOD-O-METER */}
               {(()=>{
-                const vix = marketData.nifty?.vix || 14.5;
-                const pcr = pcrData?.pcr || 1.0;
-                const spot = marketData.nifty?.value || 23500;
-                const prev = livePrevClose['Nifty 50'] || spot;
+                const vix     = marketData.vix?.value || marketData.nifty?.vix || 14.5;
+                const pcr     = pcrData?.pcr || 1.0;
+                const niftyChg = parseFloat(marketData.nifty?.change  || 0);
+                const bnkChg   = parseFloat(marketData.bankNifty?.change || 0);
                 let score = 50;
-                if (vix > 22) { score -= 20; } else if (vix > 18) { score -= 10; } else if (vix < 12) { score += 15; } else if (vix < 15) { score += 8; }
-                if (pcr > 1.4) { score += 15; } else if (pcr > 1.2) { score += 8; } else if (pcr < 0.7) { score -= 15; } else if (pcr < 0.9) { score -= 8; }
-                if (spot > prev) { score += 8; } else if (spot < prev) { score -= 8; }
-                score = Math.max(0, Math.min(100, score));
+                // VIX: India VIX <12 euphoria, 12-15 calm, 15-20 alert, >20 fear, >25 panic
+                if      (vix > 25) score -= 25;
+                else if (vix > 20) score -= 15;
+                else if (vix > 17) score -= 7;
+                else if (vix < 12) score += 18;
+                else if (vix < 15) score += 10;
+                // PCR signal
+                if      (pcr > 1.5) score += 20;
+                else if (pcr > 1.3) score += 12;
+                else if (pcr > 1.1) score += 5;
+                else if (pcr < 0.6) score -= 20;
+                else if (pcr < 0.8) score -= 12;
+                else if (pcr < 0.9) score -= 5;
+                // Nifty day move
+                if      (niftyChg >  1.5) score += 12;
+                else if (niftyChg >  0.5) score += 6;
+                else if (niftyChg < -1.5) score -= 12;
+                else if (niftyChg < -0.5) score -= 6;
+                // BankNifty confirmation
+                if (bnkChg >  1 && niftyChg > 0) score += 5;
+                if (bnkChg < -1 && niftyChg < 0) score -= 5;
+                score = Math.max(0, Math.min(100, Math.round(score)));
                 const label = score < 20 ? 'Extreme Fear' : score < 40 ? 'Fear' : score < 60 ? 'Neutral' : score < 80 ? 'Greed' : 'Extreme Greed';
                 const col   = score < 20 ? '#ef4444' : score < 40 ? '#f87171' : score < 60 ? '#fbbf24' : score < 80 ? '#4ade80' : '#22c55e';
                 const zones = [
-                  {label:'Extreme Fear',pct:20,col:'#ef4444'},
-                  {label:'Fear',        pct:20,col:'#f87171'},
-                  {label:'Neutral',     pct:20,col:'#fbbf24'},
-                  {label:'Greed',       pct:20,col:'#4ade80'},
-                  {label:'Extreme Greed',pct:20,col:'#22c55e'},
+                  {label:'Extreme Fear', col:'#ef4444'},
+                  {label:'Fear',         col:'#f87171'},
+                  {label:'Neutral',      col:'#fbbf24'},
+                  {label:'Greed',        col:'#4ade80'},
+                  {label:'Extreme Greed',col:'#22c55e'},
                 ];
                 const activeZone = Math.min(4, Math.floor(score / 20));
+                const signals = [
+                  {k:'VIX',   v: vix ? vix.toFixed(1) : '—',                        c: vix>20?'#f87171':vix<14?'#4ade80':'#fbbf24'},
+                  {k:'PCR',   v: pcr.toFixed(2),                                      c: pcr>1.2?'#4ade80':pcr<0.8?'#f87171':'#fbbf24'},
+                  {k:'NIFTY', v: `${niftyChg>=0?'+':''}${niftyChg.toFixed(2)}%`,     c: niftyChg>=0?'#4ade80':'#f87171'},
+                  {k:'Score', v: `${score}/100`,                                       c: col},
+                ];
                 return (
                   <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'1.25rem'}}>
                     <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'1rem'}}>
@@ -3960,23 +3988,26 @@ Respond ONLY with valid JSON:
                     </div>
                     <div style={{textAlign:'center',marginBottom:'1rem'}}>
                       <div style={{fontSize:'2rem',fontWeight:900,color:col}}>{label}</div>
-                      <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.2rem'}}>Score: {Math.round(score)}/100  |  VIX {vix}  |  PCR {pcr}</div>
+                      <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.2rem'}}>Live · VIX + PCR + Nifty move + BankNifty</div>
                     </div>
-                    <div style={{display:'flex',borderRadius:'var(--radius-sm)',overflow:'hidden',height:'12px',marginBottom:'0.75rem'}}>
+                    <div style={{position:'relative',marginBottom:'0.5rem'}}>
+                      <div style={{display:'flex',borderRadius:'var(--radius-sm)',overflow:'hidden',height:'12px'}}>
+                        {zones.map((z,i) => (
+                          <div key={i} style={{flex:1,background:z.col,opacity:i===activeZone?1:0.22}}/>
+                        ))}
+                      </div>
+                      <div style={{position:'absolute',top:'-3px',left:`calc(${score}% - 4px)`,width:'8px',height:'18px',background:'#fff',borderRadius:'2px',boxShadow:'0 0 4px rgba(0,0,0,0.6)',transition:'left 0.5s'}}/>
+                    </div>
+                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:'0.75rem'}}>
                       {zones.map((z,i) => (
-                        <div key={i} style={{flex:1,background:z.col,opacity:i===activeZone?1:0.3,transition:'opacity 0.3s'}}/>
+                        <div key={i} style={{fontSize:'0.58rem',color:i===activeZone?z.col:'var(--text-muted)',fontWeight:i===activeZone?700:400,textAlign:'center',flex:1,lineHeight:1.2}}>{z.label}</div>
                       ))}
                     </div>
-                    <div style={{display:'flex',justifyContent:'space-between'}}>
-                      {zones.map((z,i) => (
-                        <div key={i} style={{fontSize:'0.75rem',color:i===activeZone?z.col:'var(--text-muted)',fontWeight:i===activeZone?700:400,textAlign:'center',flex:1}}>{z.label}</div>
-                      ))}
-                    </div>
-                    <div style={{marginTop:'0.75rem',display:'flex',gap:'0.5rem',justifyContent:'center',flexWrap:'wrap'}}>
-                      {[['VIX',vix,'#f87171'],['PCR',pcr,'#4ade80'],['Score',Math.round(score),'#60a5fa']].map(([k,v,c],i)=>(
-                        <div key={i} style={{background:'var(--bg-surface)',borderRadius:'6px',padding:'0.3rem 0.6rem',textAlign:'center'}}>
-                          <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{k}</div>
-                          <div style={{fontSize:'0.875rem',fontWeight:700,color:c}}>{v}</div>
+                    <div style={{display:'flex',gap:'0.4rem',justifyContent:'center',flexWrap:'wrap'}}>
+                      {signals.map(({k,v,c},i)=>(
+                        <div key={i} style={{background:'var(--bg-surface)',borderRadius:'6px',padding:'0.3rem 0.6rem',textAlign:'center',minWidth:'55px'}}>
+                          <div style={{fontSize:'0.68rem',color:'var(--text-muted)'}}>{k}</div>
+                          <div style={{fontSize:'0.85rem',fontWeight:700,color:c}}>{v}</div>
                         </div>
                       ))}
                     </div>
