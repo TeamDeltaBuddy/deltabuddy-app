@@ -3608,7 +3608,7 @@ Respond ONLY with valid JSON:
                     {label:'NIFTY',     val:marketData.nifty.value,         chg:marketData.nifty.change},
                     {label:'BANKNIFTY', val:marketData.bankNifty.value,      chg:marketData.bankNifty.change},
                     {label:'VIX',       val:marketData.vix?.value,           chg:marketData.vix?.change ?? null, vix:true},
-                    {label:'PCR',       val:pcrData?.totalCE>0 ? pcrData?.pcr?.toFixed(2) : null, chg:null, pcr:true},
+                    {label:'PCR',       val:(()=>{const ce=liveOptionChain.reduce((a,r)=>a+(r.ce?.oi||0),0);const pe=liveOptionChain.reduce((a,r)=>a+(r.pe?.oi||0),0);return ce>0?(pe/ce).toFixed(2):pcrData?.totalCE>0?pcrData?.pcr?.toFixed(2):null;})(), chg:null, pcr:true},
                   ].map((r,i)=>{
                     const pos = (r.chg||0) >= 0;
                     const vixVal = r.val || 0;
@@ -5223,6 +5223,62 @@ Respond ONLY with valid JSON:
                 </div>
               </div>
             )}
+
+            {/* -- INDICES LIVE OVERVIEW -- */}
+            {(()=>{
+              const rows = [
+                {label:'Nifty 50',           key:'Nifty 50',                    col:'#4ade80'},
+                {label:'Bank Nifty',         key:'Bank Nifty',                  col:'#60a5fa'},
+                {label:'Fin Nifty',          key:'Nifty Financial Services',    col:'#a78bfa'},
+                {label:'Midcap 50',          key:'Nifty Midcap 50',             col:'#fb923c'},
+                {label:'Nifty IT',           key:'Nifty IT',                    col:'#34d399'},
+                {label:'Nifty Auto',         key:'Nifty Auto',                  col:'#f472b6'},
+                {label:'Nifty Pharma',       key:'Nifty Pharma',                col:'#fbbf24'},
+                {label:'Nifty Metal',        key:'Nifty Metal',                 col:'#94a3b8'},
+                {label:'Nifty PSU Bank',     key:'Nifty PSU Bank',              col:'#38bdf8'},
+                {label:'Nifty FMCG',         key:'Nifty FMCG',                  col:'#86efac'},
+                {label:'India VIX',          key:'India VIX',                   col:'#f87171', isVix:true},
+              ];
+              return (
+                <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1rem',marginBottom:'1rem'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem'}}>
+                    <div style={{fontWeight:700,fontSize:'0.92rem'}}>📊 Live Indices</div>
+                    <button onClick={fetchLivePrices} disabled={isPriceLoading}
+                      style={{background:'var(--bg-surface)',color:'var(--text-dim)',border:'1px solid var(--border)',borderRadius:'6px',padding:'0.25rem 0.75rem',fontSize:'0.75rem',cursor:'pointer',fontWeight:600}}>
+                      {isPriceLoading ? '⟳ ...' : '⟳ Refresh'}
+                    </button>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:'0.5rem'}}>
+                    {rows.map(r=>{
+                      const price = livePrices[r.key];
+                      const chg   = liveChanges[r.key];
+                      const pos   = (chg||0) >= 0;
+                      const chgCol = pos ? '#4ade80' : '#f87171';
+                      const vixCol = price>24?'#f87171':price>20?'#f97316':price>14?'#fbbf24':'#4ade80';
+                      const displayCol = r.isVix ? vixCol : chgCol;
+                      return (
+                        <div key={r.key} style={{background:'var(--bg-surface)',borderRadius:'8px',padding:'0.6rem 0.75rem',border:'1px solid var(--border)'}}>
+                          <div style={{fontSize:'0.7rem',color:'var(--text-muted)',marginBottom:'0.2rem',fontWeight:600}}>{r.label}</div>
+                          <div style={{fontSize:'1rem',fontWeight:800,color:r.isVix?vixCol:chgCol}}>
+                            {price ? (r.isVix ? price.toFixed(2) : price.toLocaleString('en-IN')) : '—'}
+                          </div>
+                          {!r.isVix && chg != null && (
+                            <div style={{fontSize:'0.72rem',color:chgCol,fontWeight:600}}>
+                              {pos?'▲':'▼'} {Math.abs(chg).toFixed(2)}%
+                            </div>
+                          )}
+                          {r.isVix && price && (
+                            <div style={{fontSize:'0.72rem',color:vixCol,fontWeight:600}}>
+                              {price>24?'HIGH':price>20?'ELEVATED':price>14?'MODERATE':'LOW'}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* -- MARKETS SUB-TABS -- */}
             <div className="home-tabs" style={{marginBottom:'1rem'}}>
