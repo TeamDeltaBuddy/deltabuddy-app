@@ -1953,6 +1953,7 @@ Respond ONLY with valid JSON:
   const NSE_INDEX_MAP = {
     'Nifty 50'                 : 'NIFTY 50',
     'Bank Nifty'               : 'NIFTY BANK',
+    'Fin Nifty'                : 'NIFTY FINANCIAL SERVICES',
     'Nifty IT'                 : 'NIFTY IT',
     'Nifty Pharma'             : 'NIFTY PHARMA',
     'Nifty Auto'               : 'NIFTY AUTO',
@@ -1960,14 +1961,15 @@ Respond ONLY with valid JSON:
     'Nifty FMCG'               : 'NIFTY FMCG',
     'Nifty Realty'             : 'NIFTY REALTY',
     'Nifty Energy'             : 'NIFTY ENERGY',
-    'Nifty Midcap 50'          : 'NIFTY MIDCAP 50',
     'Nifty Midcap Select'      : 'NIFTY MIDCAP SELECT',
+    'Nifty Midcap 50'          : 'NIFTY MIDCAP 50',
     'Nifty Midcap 100'         : 'NIFTY MIDCAP 100',
-    'Nifty Smallcap 50'        : 'NIFTY SMLCAP 50',
-    'Nifty Financial Services' : 'NIFTY FIN SERVICE',
+    'Nifty Smallcap 50'        : 'NIFTY SMALLCAP 50',
+    'Nifty Smallcap 100'       : 'NIFTY SMALLCAP 100',
+    'Nifty Financial Services' : 'NIFTY FINANCIAL SERVICES',
     'Nifty PSU Bank'           : 'NIFTY PSU BANK',
     'Nifty Private Bank'       : 'NIFTY PRIVATE BANK',
-    'Nifty Infrastructure'     : 'NIFTY INFRA',
+    'Nifty Infrastructure'     : 'NIFTY INFRASTRUCTURE',
     'Nifty Next 50'            : 'NIFTY NEXT 50',
     'Nifty 100'                : 'NIFTY 100',
     'Nifty 200'                : 'NIFTY 200',
@@ -5338,19 +5340,19 @@ Respond ONLY with valid JSON:
 
             {/* -- INDICES LIVE OVERVIEW -- */}
             {(()=>{
-              // keys: ordered list of livePrices keys to try (NSE sends different names)
+              // Exact index names from NSE allIndices API (idx.index field)
               const rows = [
-                {label:'Nifty 50',     keys:['Nifty 50','NIFTY 50'],                                               col:'#4ade80'},
-                {label:'Bank Nifty',   keys:['Bank Nifty','NIFTY BANK'],                                           col:'#60a5fa'},
-                {label:'Fin Nifty',    keys:['Nifty Financial Services','NIFTY FIN SERVICE','NIFTY FIN SERV'],      col:'#a78bfa'},
-                {label:'Midcap Nifty', keys:['Nifty Midcap Select','NIFTY MIDCAP SELECT','Nifty Midcap 50','NIFTY MIDCAP 50'], col:'#fb923c'},
-                {label:'Nifty IT',     keys:['Nifty IT','NIFTY IT'],                                               col:'#34d399'},
-                {label:'Nifty Auto',   keys:['Nifty Auto','NIFTY AUTO'],                                           col:'#f472b6'},
-                {label:'Nifty Pharma', keys:['Nifty Pharma','NIFTY PHARMA'],                                       col:'#fbbf24'},
-                {label:'Nifty Metal',  keys:['Nifty Metal','NIFTY METAL'],                                         col:'#94a3b8'},
-                {label:'PSU Bank',     keys:['Nifty PSU Bank','NIFTY PSU BANK'],                                   col:'#38bdf8'},
-                {label:'Nifty FMCG',   keys:['Nifty FMCG','NIFTY FMCG'],                                          col:'#86efac'},
-                {label:'India VIX',    keys:['India VIX','INDIA VIX'],                                             col:'#f87171', isVix:true},
+                {label:'Nifty 50',        keys:['NIFTY 50'],                        col:'#4ade80'},
+                {label:'Bank Nifty',      keys:['NIFTY BANK'],                       col:'#60a5fa'},
+                {label:'Fin Nifty',       keys:['NIFTY FINANCIAL SERVICES','NIFTY FIN SERVICE'], col:'#a78bfa'},
+                {label:'Midcap Select',   keys:['NIFTY MIDCAP SELECT','NIFTY MID SELECT'],       col:'#fb923c'},
+                {label:'Nifty IT',        keys:['NIFTY IT'],                         col:'#34d399'},
+                {label:'Nifty Auto',      keys:['NIFTY AUTO'],                       col:'#f472b6'},
+                {label:'Nifty Pharma',    keys:['NIFTY PHARMA'],                     col:'#fbbf24'},
+                {label:'Nifty Metal',     keys:['NIFTY METAL'],                      col:'#94a3b8'},
+                {label:'PSU Bank',        keys:['NIFTY PSU BANK'],                   col:'#38bdf8'},
+                {label:'Nifty FMCG',      keys:['NIFTY FMCG'],                       col:'#86efac'},
+                {label:'India VIX',       keys:['INDIA VIX'],                        col:'#f87171', isVix:true},
               ];
               return (
                 <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'1rem',marginBottom:'1rem'}}>
