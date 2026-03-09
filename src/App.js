@@ -1673,6 +1673,76 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     } finally { setExpiryLoading(false); }
   };
 
+  // Fetch option chain for any symbol with full NSE→Yahoo→Simulation fallback
+  // Returns { chain, spot, nearExpiry } — never throws
+  const fetchChainForSymbol = async (sym) => {
+    const YAHOO_MAP = { NIFTY:'^NSEI', BANKNIFTY:'^NSEBANK', FINNIFTY:'NIFTY_FIN_SERVICE.NS', MIDCPNIFTY:'^NSEMDCP50' };
+    const BASE = { NIFTY:25500, BANKNIFTY:54000, FINNIFTY:23500, MIDCPNIFTY:12800 };
+    const GAP  = { NIFTY:50, BANKNIFTY:100, FINNIFTY:50, MIDCPNIFTY:25 };
+    const YAHOO = 'https://query1.finance.yahoo.com/v7/finance';
+
+    // --- Tier 1: NSE via backend ---
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/option-chain?symbol=${sym}`, { headers:{'Accept':'application/json'} });
+      if (r.ok) {
+        const j = await r.json();
+        if (j?.records?.data?.length > 0) {
+          const spot = j.records.underlyingValue || 0;
+          const allRows = j.records.data;
+          const expiries = j.records.expiryDates || [];
+          const nearExpiry = expiries[0] || '';
+          const rows = nearExpiry ? allRows.filter(r => r.expiryDate === nearExpiry) : allRows.slice(0, 120);
+          const map = {};
+          rows.forEach(row => {
+            const K = row.strikePrice; if (!K) return;
+            if (!map[K]) map[K] = { strike:K };
+            if (row.CE) map[K].ce = { ltp: row.CE.lastPrice||0, iv: row.CE.impliedVolatility||0, oi: row.CE.openInterest||0 };
+            if (row.PE) map[K].pe = { ltp: row.PE.lastPrice||0, iv: row.PE.impliedVolatility||0, oi: row.PE.openInterest||0 };
+          });
+          const chain = Object.values(map).filter(r => r.ce && r.pe).sort((a,b) => a.strike-b.strike);
+          if (chain.length > 0 && spot > 0) return { chain, spot, nearExpiry };
+        }
+      }
+    } catch(e) { /* fall through */ }
+
+    // --- Tier 2: Yahoo Finance ---
+    try {
+      const ySym = YAHOO_MAP[sym] || '^NSEI';
+      const r = await fetch(`${YAHOO}/options/${encodeURIComponent(ySym)}`);
+      if (r.ok) {
+        const j = await r.json();
+        const result = j?.optionChain?.result?.[0];
+        if (result) {
+          const spot = result.quote?.regularMarketPrice || BASE[sym] || 24500;
+          const opts = result.options?.[0];
+          if (opts) {
+            const map = {};
+            (opts.calls||[]).forEach(c => { const K=c.strike; if(!map[K]) map[K]={strike:K}; map[K].ce={ltp:c.lastPrice||0,iv:(c.impliedVolatility||0)*100,oi:c.openInterest||0}; });
+            (opts.puts||[]).forEach(p  => { const K=p.strike; if(!map[K]) map[K]={strike:K}; map[K].pe={ltp:p.lastPrice||0,iv:(p.impliedVolatility||0)*100,oi:p.openInterest||0}; });
+            const chain = Object.values(map).filter(r => r.ce && r.pe).sort((a,b) => a.strike-b.strike);
+            if (chain.length > 0) return { chain, spot, nearExpiry: 'Yahoo' };
+          }
+        }
+      }
+    } catch(e) { /* fall through */ }
+
+    // --- Tier 3: Simulation ---
+    const spot = BASE[sym] || 24500;
+    const gap  = GAP[sym]  || 50;
+    const atm  = Math.round(spot/gap)*gap;
+    const chain = Array.from({length:21},(_,i)=>atm+(i-10)*gap).map(K => {
+      const d = Math.abs(K-spot);
+      const iv = 15 + (d/spot)*100;
+      const oiMul = Math.max(0.1, 1-(d/(spot*0.08)));
+      return {
+        strike: K,
+        ce: { ltp:0, iv, oi: Math.floor((80000+Math.random()*120000)*oiMul) },
+        pe: { ltp:0, iv, oi: Math.floor((80000+Math.random()*120000)*oiMul) },
+      };
+    });
+    return { chain, spot, nearExpiry: 'simulated' };
+  };
+
   const fetchGex = async (sym) => {
     const s = sym || gexSymbol;
     setGexLoading(true);
@@ -1680,26 +1750,13 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     setGexData(null);
 
     try {
-      // Fetch option chain for THIS specific symbol from backend
-      const res = await fetch(`${BACKEND_URL}/api/option-chain?symbol=${s}`, { headers:{'Accept':'application/json'} });
-      if (!res.ok) throw new Error(`Chain fetch failed: HTTP ${res.status}`);
-      const nseJson = await res.json();
+      // Fetch chain with full NSE→Yahoo→Simulation fallback
+      const { chain, spot, nearExpiry } = await fetchChainForSymbol(s);
 
-      if (!nseJson?.records?.data?.length) throw new Error('No option chain data returned for ' + s);
-
-      // Parse NSE response — near expiry only
-      const spot = nseJson.records.underlyingValue || 0;
-      if (!spot) throw new Error('Spot price missing in chain response');
-
-      const allRows   = nseJson.records.data;
-      const expiryDates = nseJson.records.expiryDates || [];
-      const nearExpiry  = expiryDates[0] || '';
-      const rows = nearExpiry ? allRows.filter(r => r.expiryDate === nearExpiry) : allRows.slice(0, 120);
-
-      // Parse expiry date for T calculation
+      // Parse expiry date for T
       const monthMap2 = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
       let T = 7/365;
-      if (nearExpiry) {
+      if (nearExpiry && nearExpiry !== 'Yahoo' && nearExpiry !== 'simulated') {
         const parts = nearExpiry.split('-');
         if (parts.length === 3) {
           const expDate = new Date(parseInt(parts[2]), monthMap2[parts[1]] ?? parseInt(parts[1])-1, parseInt(parts[0]), 15, 30, 0);
@@ -1707,18 +1764,11 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
           if (msLeft > 0) T = msLeft / (1000*60*60*24*365);
         }
       }
-      T = Math.max(T, 1/365); // min 1 day
+      T = Math.max(T, 1/365);
 
-      // Lot size
-      const lotFallback = { NIFTY:75, BANKNIFTY:30, FINNIFTY:60, MIDCPNIFTY:120, SENSEX:10 };
-      let lotSize = 0;
-      for (const row of rows) {
-        const opt = row.CE || row.PE;
-        if (opt?.marketLot) { lotSize = opt.marketLot; break; }
-      }
-      if (!lotSize) lotSize = lotFallback[s] || 75;
+      const lotMap = { NIFTY:75, BANKNIFTY:30, FINNIFTY:60, MIDCPNIFTY:120, SENSEX:10 };
+      const lotSize = lotMap[s] || 75;
 
-      // Black-Scholes gamma
       function normPDF(x) { return Math.exp(-0.5*x*x) / Math.sqrt(2*Math.PI); }
       function bsGamma(S, K, t, sigma) {
         if (t <= 0 || sigma <= 0 || S <= 0 || K <= 0) return 0;
@@ -1728,44 +1778,26 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
         } catch(e) { return 0; }
       }
 
-      // Build strikes from this symbol's chain
-      const strikeMap = {};
-      rows.forEach(row => {
-        const K = row.strikePrice;
-        if (!K) return;
-        if (!strikeMap[K]) strikeMap[K] = { strike:K, ceGEX:0, peGEX:0, netGEX:0, ceOI:0, peOI:0, ceLTP:0, peLTP:0, ceIV:0, peIV:0 };
-        const sk = strikeMap[K];
-        if (row.CE) {
-          const iv = (row.CE.impliedVolatility || 15) / 100;
-          const oi = row.CE.openInterest || 0;
-          sk.ceOI  = oi;
-          sk.ceIV  = row.CE.impliedVolatility || 0;
-          sk.ceLTP = row.CE.lastPrice || 0;
-          sk.ceGEX = bsGamma(spot, K, T, iv) * oi * lotSize * spot * spot * 0.01;
-        }
-        if (row.PE) {
-          const iv = (row.PE.impliedVolatility || 15) / 100;
-          const oi = row.PE.openInterest || 0;
-          sk.peOI  = oi;
-          sk.peIV  = row.PE.impliedVolatility || 0;
-          sk.peLTP = row.PE.lastPrice || 0;
-          sk.peGEX = bsGamma(spot, K, T, iv) * oi * lotSize * spot * spot * 0.01;
-        }
-        sk.netGEX = sk.ceGEX - sk.peGEX;
+      const strikes = chain.map(row => {
+        const K    = row.strike;
+        const ceIV = (parseFloat(row.ce?.iv) || 15) / 100;
+        const peIV = (parseFloat(row.pe?.iv) || 15) / 100;
+        const ceOI = row.ce?.oi || 0;
+        const peOI = row.pe?.oi || 0;
+        const ceGEX = bsGamma(spot, K, T, ceIV) * ceOI * lotSize * spot * spot * 0.01;
+        const peGEX = bsGamma(spot, K, T, peIV) * peOI * lotSize * spot * spot * 0.01;
+        return { strike:K, ceGEX, peGEX, netGEX: ceGEX-peGEX, ceOI, peOI,
+          ceLTP: parseFloat(row.ce?.ltp)||0, peLTP: parseFloat(row.pe?.ltp)||0,
+          ceIV: parseFloat(row.ce?.iv)||0, peIV: parseFloat(row.pe?.iv)||0 };
       });
-
-      const strikes = Object.values(strikeMap).sort((a,b) => a.strike - b.strike);
-      if (!strikes.length) throw new Error('No valid strikes computed');
 
       const totalGEX = strikes.reduce((sum, sk) => sum + sk.netGEX, 0);
 
-      // Gamma flip
       let gammaFlip = null;
       for (let i = 1; i < strikes.length; i++) {
         if (strikes[i-1].netGEX * strikes[i].netGEX < 0) { gammaFlip = strikes[i].strike; break; }
       }
 
-      // Walls — by highest absolute GEX
       const byAbsGex = [...strikes].sort((a,b) => Math.abs(b.netGEX) - Math.abs(a.netGEX));
       const posWalls  = byAbsGex.filter(sk => sk.netGEX > 0).slice(0,3).map(sk => sk.strike);
       const negWalls  = byAbsGex.filter(sk => sk.netGEX < 0).slice(0,3).map(sk => sk.strike);
@@ -1777,14 +1809,15 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
         : 'Negative Gamma — Trend amplification';
 
       const nearStrikes = strikes.filter(r => r.strike >= spot*0.96 && r.strike <= spot*1.04);
+      const isSimulated = nearExpiry === 'simulated';
 
       setGexData({
         symbol: s, spot, lotSize, totalGEX: Math.round(totalGEX),
         gammaFlip, vannaFlip: null, charmCentre: Math.round(spot),
         posWalls, negWalls, topCallOI, topPutOI,
         zoneLabel, regime: totalGEX > 0 ? 'positive' : 'negative',
-        nearExpiry, rowCount: rows.length, lotSizeSource: lotSize ? 'nse' : 'fallback',
-        strikes: nearStrikes,
+        nearExpiry, rowCount: chain.length, lotSizeSource: 'computed',
+        strikes: nearStrikes, isSimulated,
       });
     } catch(e) {
       setGexError('GEX failed: ' + e.message);
