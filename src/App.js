@@ -1625,7 +1625,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
         const nseRes = await fetch(`${BACKEND_URL}/api/option-chain?symbol=${EXPIRY_NSE[symbol]||symbol}`, {headers:{'Accept':'application/json'}});
         if (nseRes.ok) {
           const nseJson = await nseRes.json();
-          if (nseJson?.records?.data?.length > 0) {
+          if (!nseJson?.error && nseJson?.records?.data?.length > 0) {
             S = nseJson.records.underlyingValue || BASE[symbol] || 25000;
             const map = {};
             nseJson.records.data.forEach(row => {
@@ -2198,7 +2198,12 @@ Respond ONLY with valid JSON:
       if (row.CE) map[s].ce = { ltp:(row.CE.lastPrice||0).toFixed(2), iv:(row.CE.impliedVolatility||0).toFixed(1), oi:row.CE.openInterest||0, oiChg:row.CE.changeinOpenInterest||0, volume:row.CE.totalTradedVolume||0, bid:(row.CE.bidprice||0).toFixed(2), ask:(row.CE.askPrice||0).toFixed(2), change:(row.CE.change||0).toFixed(2), pChange:(row.CE.pChange||0).toFixed(2) };
       if (row.PE) map[s].pe = { ltp:(row.PE.lastPrice||0).toFixed(2), iv:(row.PE.impliedVolatility||0).toFixed(1), oi:row.PE.openInterest||0, oiChg:row.PE.changeinOpenInterest||0, volume:row.PE.totalTradedVolume||0, bid:(row.PE.bidprice||0).toFixed(2), ask:(row.PE.askPrice||0).toFixed(2), change:(row.PE.change||0).toFixed(2), pChange:(row.PE.pChange||0).toFixed(2) };
     });
-    const chain = Object.values(map).filter(r => r.ce && r.pe).sort((a,b) => a.strike - b.strike);
+    // Fill missing CE/PE with empty objects so strikes always appear
+    Object.values(map).forEach(r => {
+      if (!r.ce) r.ce = { ltp:'0.00', iv:'0.0', oi:0, oiChg:0, volume:0, bid:'0.00', ask:'0.00', change:'0.00', pChange:'0.00' };
+      if (!r.pe) r.pe = { ltp:'0.00', iv:'0.0', oi:0, oiChg:0, volume:0, bid:'0.00', ask:'0.00', change:'0.00', pChange:'0.00' };
+    });
+    const chain = Object.values(map).sort((a,b) => a.strike - b.strike);
     if (chain.length > 0) {
       setLiveOptionChain(chain);
       setChartData({ oi:chain.map(r=>({strike:r.strike,ce:r.ce.oi/1000,pe:r.pe.oi/1000})), iv:chain.map(r=>({strike:r.strike,ce:parseFloat(r.ce.iv),pe:parseFloat(r.pe.iv)})), volume:chain.map(r=>({strike:r.strike,ce:r.ce.volume/1000,pe:r.pe.volume/1000})), priceHistory:[] });
@@ -5516,8 +5521,10 @@ Respond ONLY with valid JSON:
                     })}
                   </div>
                 )}
-                {isLoadingChain && liveOptionChain.length===0 ? (
-                  <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>Loading option chain...</div>
+                {liveOptionChain.length===0 && isLoadingChain ? (
+                  <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>⏳ Loading option chain...</div>
+                ) : liveOptionChain.length===0 ? (
+                  <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>No data — click Refresh</div>
                 ) : (
                   <div style={{overflowX:'auto'}}>
                     {/* Column headers */}
