@@ -1250,6 +1250,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
 
   // LIVE OPTION CHAIN STATE
   const [liveOptionChain, setLiveOptionChain] = useState([]);
+  const [rawNseData,      setRawNseData]      = useState(null);   // raw NSE records keyed by expiry
   const [selectedExpiry,   setSelectedExpiry]   = useState('');
   const [nseExpiryDates,   setNseExpiryDates]   = useState([]);
   const [selectedUnderlying, setSelectedUnderlying] = useState('NIFTY');
@@ -2182,66 +2183,71 @@ Respond ONLY with valid JSON:
     });
   };
 
-  const generateLiveOptionChain = async (underlying = 'NIFTY') => {
+  // Parse stored raw NSE data for a specific expiry into liveOptionChain
+  const parseChainForExpiry = (raw, expiry, spot) => {
+    const rows = raw.filter(r => r.expiryDate === expiry);
+    if (!rows.length) return;
+    const map = {};
+    rows.forEach(row => {
+      const s = row.strikePrice;
+      if (!map[s]) map[s] = { strike: s };
+      if (row.CE) map[s].ce = { ltp:(row.CE.lastPrice||0).toFixed(2), iv:(row.CE.impliedVolatility||0).toFixed(1), oi:row.CE.openInterest||0, oiChg:row.CE.changeinOpenInterest||0, volume:row.CE.totalTradedVolume||0, bid:(row.CE.bidprice||0).toFixed(2), ask:(row.CE.askPrice||0).toFixed(2), change:(row.CE.change||0).toFixed(2), pChange:(row.CE.pChange||0).toFixed(2) };
+      if (row.PE) map[s].pe = { ltp:(row.PE.lastPrice||0).toFixed(2), iv:(row.PE.impliedVolatility||0).toFixed(1), oi:row.PE.openInterest||0, oiChg:row.PE.changeinOpenInterest||0, volume:row.PE.totalTradedVolume||0, bid:(row.PE.bidprice||0).toFixed(2), ask:(row.PE.askPrice||0).toFixed(2), change:(row.PE.change||0).toFixed(2), pChange:(row.PE.pChange||0).toFixed(2) };
+    });
+    const chain = Object.values(map).filter(r => r.ce && r.pe).sort((a,b) => a.strike - b.strike);
+    if (chain.length > 0) {
+      setLiveOptionChain(chain);
+      setChartData({ oi:chain.map(r=>({strike:r.strike,ce:r.ce.oi/1000,pe:r.pe.oi/1000})), iv:chain.map(r=>({strike:r.strike,ce:parseFloat(r.ce.iv),pe:parseFloat(r.pe.iv)})), volume:chain.map(r=>({strike:r.strike,ce:r.ce.volume/1000,pe:r.pe.volume/1000})), priceHistory:[] });
+    }
+  };
+
+  const generateLiveOptionChain = async (underlying = 'NIFTY', forceExpiry = null) => {
     setIsLoadingChain(true);
-    let usedLive = false;
     try {
-      // Try NSE India first (most accurate), fallback to Yahoo
-      let json, spot, usedNSE = false;
-      try {
-        const nseRes = await fetch(`${BACKEND_URL}/api/option-chain?symbol=${UNDERLYING_NSE[underlying]||'NIFTY'}`, {headers:{'Accept':'application/json'}});
-        if (nseRes.ok) {
-          const nseJson = await nseRes.json();
-          if (nseJson?.records?.data?.length > 0) {
-            // Parse NSE format
-            spot = nseJson.records.underlyingValue;
-            const expiries = [...new Set(nseJson.records.data.map(d=>d.expiryDate))].slice(0,6);
-            if (expiries.length>0) setNseExpiryDates(expiries);
-            const map = {};
-            nseJson.records.data.forEach(row => {
-              const s = row.strikePrice;
-              if (!map[s]) map[s] = {strike:s, atmDistance:Math.abs(s-spot)};
-              if (row.CE) map[s].ce = {ltp:(row.CE.lastPrice||0).toFixed(2),iv:(row.CE.impliedVolatility||0).toFixed(1),oi:row.CE.openInterest||0,oiChg:row.CE.changeinOpenInterest||0,volume:row.CE.totalTradedVolume||0,bid:(row.CE.bidprice||0).toFixed(2),ask:(row.CE.askPrice||0).toFixed(2),change:(row.CE.change||0).toFixed(2),pChange:(row.CE.pChange||0).toFixed(2)};
-              if (row.PE) map[s].pe = {ltp:(row.PE.lastPrice||0).toFixed(2),iv:(row.PE.impliedVolatility||0).toFixed(1),oi:row.PE.openInterest||0,oiChg:row.PE.changeinOpenInterest||0,volume:row.PE.totalTradedVolume||0,bid:(row.PE.bidprice||0).toFixed(2),ask:(row.PE.askPrice||0).toFixed(2),change:(row.PE.change||0).toFixed(2),pChange:(row.PE.pChange||0).toFixed(2)};
-            });
-            const chain = Object.values(map).filter(r=>r.ce&&r.pe).sort((a,b)=>a.strike-b.strike);
-            if (chain.length > 0) {
-              setLiveOptionChain(chain);
-              setChartData({oi:chain.map(r=>({strike:r.strike,ce:r.ce.oi/1000,pe:r.pe.oi/1000})),iv:chain.map(r=>({strike:r.strike,ce:parseFloat(r.ce.iv),pe:parseFloat(r.pe.iv)})),volume:chain.map(r=>({strike:r.strike,ce:r.ce.volume/1000,pe:r.pe.volume/1000})),priceHistory:[]});
-              setMarketData(prev=>({...prev,nifty:underlying==='NIFTY'?{...prev.nifty,value:Math.round(spot)}:prev.nifty,bankNifty:underlying==='BANKNIFTY'?{...prev.bankNifty,value:Math.round(spot)}:prev.bankNifty}));
-              setIsLoadingChain(false); return; // SUCCESS  -  NSE data loaded
-            }
+      // ── Tier 1: NSE via backend ──
+      const nseRes = await fetch(`${BACKEND_URL}/api/option-chain?symbol=${UNDERLYING_NSE[underlying]||'NIFTY'}`, { headers:{'Accept':'application/json'} });
+      if (nseRes.ok) {
+        const nseJson = await nseRes.json();
+        if (nseJson?.records?.data?.length > 0) {
+          const spot = nseJson.records.underlyingValue || BASE_PRICES[underlying];
+          const allRows = nseJson.records.data;
+          // Get expiry list from NSE (already sorted nearest first)
+          const expiries = nseJson.records.expiryDates ||
+            [...new Set(allRows.map(r => r.expiryDate))];
+          if (expiries.length > 0) {
+            setNseExpiryDates(expiries);
+            setRawNseData(allRows);
+            // Use forceExpiry, or current selectedExpiry, or nearest
+            const useExpiry = forceExpiry || selectedExpiry || expiries[0];
+            if (!selectedExpiry) setSelectedExpiry(expiries[0]);
+            parseChainForExpiry(allRows, useExpiry, spot);
+            setMarketData(prev => ({
+              ...prev,
+              nifty:     underlying==='NIFTY'     ? {...prev.nifty,     value:Math.round(spot)} : prev.nifty,
+              bankNifty: underlying==='BANKNIFTY'  ? {...prev.bankNifty, value:Math.round(spot)} : prev.bankNifty,
+            }));
+            setIsLoadingChain(false);
+            return;
           }
         }
-      } catch(nseErr) { console.warn('NSE direct failed, trying Yahoo:', nseErr.message); }
+      }
+    } catch(e) { console.warn('NSE chain failed, using simulation:', e.message); }
 
-      // Yahoo Finance fallback
-      const sym = UNDERLYING_YAHOO[underlying] || '^NSEI';
-      const yahooRes = await fetch(`${YAHOO}/options/${encodeURIComponent(sym)}`);
-      if (!yahooRes.ok) throw new Error(`HTTP ${yahooRes.status}`);
-      const yahooJson = await yahooRes.json();
-      const result = yahooJson?.optionChain?.result?.[0];
-      if (!result) throw new Error('No result');
-      const yahooSpot = result.quote?.regularMarketPrice || BASE_PRICES[underlying];
-      const expiries = (result.expirationDates||[]).map(ts => new Date(ts*1000).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}));
-      if (expiries.length>0) setNseExpiryDates(expiries);
-      const opts = result.options?.[0]; if (!opts) throw new Error('No options');
-      const ymap = {};
-      (opts.calls||[]).forEach(c => { const s=c.strike; if(!ymap[s]) ymap[s]={strike:s,atmDistance:Math.abs(s-yahooSpot)}; ymap[s].ce={premium:(c.lastPrice||0).toFixed(2),iv:((c.impliedVolatility||0)*100).toFixed(1),oi:c.openInterest||0,volume:c.volume||0,bid:(c.bid||0).toFixed(2),ask:(c.ask||0).toFixed(2),ltp:(c.lastPrice||0).toFixed(2),change:(c.percentChange||0).toFixed(2),delta:0,gamma:0,theta:0,vega:0}; });
-      (opts.puts||[]).forEach(p  => { const s=p.strike; if(!ymap[s]) ymap[s]={strike:s,atmDistance:Math.abs(s-yahooSpot)}; ymap[s].pe={premium:(p.lastPrice||0).toFixed(2),iv:((p.impliedVolatility||0)*100).toFixed(1),oi:p.openInterest||0,volume:p.volume||0,bid:(p.bid||0).toFixed(2),ask:(p.ask||0).toFixed(2),ltp:(p.lastPrice||0).toFixed(2),change:(p.percentChange||0).toFixed(2),delta:0,gamma:0,theta:0,vega:0}; });
-      const chain = Object.values(ymap).filter(r=>r.ce&&r.pe).sort((a,b)=>a.strike-b.strike);
-      if (!chain.length) throw new Error('Empty chain from Yahoo');
-      usedLive = true;
-      setLiveOptionChain(chain);
-      setChartData({ oi:chain.map(r=>({strike:r.strike,ce:r.ce.oi/1000,pe:r.pe.oi/1000})), iv:chain.map(r=>({strike:r.strike,ce:parseFloat(r.ce.iv),pe:parseFloat(r.pe.iv)})), volume:chain.map(r=>({strike:r.strike,ce:r.ce.volume/1000,pe:r.pe.volume/1000})), priceHistory:[] });
-      setMarketData(prev => ({ ...prev, nifty:underlying==='NIFTY'?{...prev.nifty,value:Math.round(yahooSpot)}:prev.nifty, bankNifty:underlying==='BANKNIFTY'?{...prev.bankNifty,value:Math.round(yahooSpot)}:prev.bankNifty }));
-    } catch(e) {
-      console.warn('Yahoo option chain failed, using simulation:', e.message);
-      const spot = marketData.nifty.value > 24000 ? marketData.nifty.value : BASE_PRICES[underlying];
-      const chain = buildSimulatedChain(underlying, spot);
-      setLiveOptionChain(chain);
-      setChartData({ oi:chain.map(r=>({strike:r.strike,ce:r.ce.oi/1000,pe:r.pe.oi/1000})), iv:chain.map(r=>({strike:r.strike,ce:parseFloat(r.ce.iv),pe:parseFloat(r.pe.iv)})), volume:chain.map(r=>({strike:r.strike,ce:r.ce.volume/1000,pe:r.pe.volume/1000})), priceHistory:[] });
-    } finally { setIsLoadingChain(false); }
+    // ── Tier 2: Simulation fallback ──
+    const spot = marketData.nifty.value > 24000 ? marketData.nifty.value : BASE_PRICES[underlying];
+    const chain = buildSimulatedChain(underlying, spot);
+    // Build fake expiry dates for UI consistency
+    const today = new Date();
+    const fakeExpiries = [0,7,14,28].map(d => {
+      const dt = new Date(today.getTime() + d*86400000);
+      return dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}).replace(/ /g,'-');
+    });
+    setNseExpiryDates(fakeExpiries);
+    if (!selectedExpiry) setSelectedExpiry(fakeExpiries[0]);
+    setRawNseData(null);
+    setLiveOptionChain(chain);
+    setChartData({ oi:chain.map(r=>({strike:r.strike,ce:r.ce.oi/1000,pe:r.pe.oi/1000})), iv:chain.map(r=>({strike:r.strike,ce:parseFloat(r.ce.iv),pe:parseFloat(r.pe.iv)})), volume:chain.map(r=>({strike:r.strike,ce:r.ce.volume/1000,pe:r.pe.volume/1000})), priceHistory:[] });
+    setIsLoadingChain(false);
   };
 
   // Fetch General Business News
@@ -5463,7 +5469,7 @@ Respond ONLY with valid JSON:
                       const daysLeft = Math.round((new Date(exp.replace(/-/g,'/'))-new Date())/(1000*60*60*24));
                       const isSelected = selectedExpiry===exp||(i===0&&!selectedExpiry);
                       return (
-                        <button key={exp} onClick={()=>{setSelectedExpiry(exp);generateLiveOptionChain(selectedUnderlying);}}
+                        <button key={exp} onClick={()=>{setSelectedExpiry(exp);if(rawNseData){parseChainForExpiry(rawNseData,exp,selectedUnderlying==='NIFTY'?marketData.nifty.value:marketData.bankNifty.value);}else{generateLiveOptionChain(selectedUnderlying,exp);}}}
                           style={{background:'none',border:'none',borderBottom:isSelected?'2px solid var(--accent)':'2px solid transparent',marginBottom:'-2px',padding:'0.5rem 1rem',cursor:'pointer',whiteSpace:'nowrap',color:isSelected?'var(--accent)':'var(--text-dim)',fontWeight:isSelected?700:400,fontSize:'0.85rem'}}>
                           {exp}
                           <div style={{fontSize:'0.68rem',color:isSelected?'var(--accent)':'#64748b',marginTop:'2px'}}>{daysLeft<=0?'Today':`${daysLeft}D`}</div>
@@ -5507,15 +5513,10 @@ Respond ONLY with valid JSON:
                       </thead>
                       <tbody>
                         {(()=>{
-                          const spotVal = selectedUnderlying==='NIFTY'?marketData.nifty.value:selectedUnderlying==='BANKNIFTY'?marketData.bankNifty.value:selectedUnderlying==='FINNIFTY'?(livePrices['NIFTY FINANCIAL SERVICES']||marketData.nifty.value):(livePrices['NIFTY MIDCAP SELECT']||marketData.nifty.value);
-                          const spot = spotVal || 25500;
-                          // Sort chain ascending by strike first, then find ATM
-                          const sortedChain = [...liveOptionChain].sort((a,b)=>a.strike-b.strike);
-                          const atmIdx = sortedChain.length>0?sortedChain.reduce((best,row,i)=>Math.abs(row.strike-spot)<Math.abs(sortedChain[best].strike-spot)?i:best,0):0;
-                          const visChain = sortedChain.slice(Math.max(0,atmIdx-10),atmIdx+11);
-                          const maxOI = Math.max(1,...visChain.map(r=>Math.max(r.ce?.oi||0,r.pe?.oi||0)));
+                          const spot = selectedUnderlying==='NIFTY'?marketData.nifty.value:selectedUnderlying==='BANKNIFTY'?marketData.bankNifty.value:selectedUnderlying==='FINNIFTY'?(livePrices['NIFTY FINANCIAL SERVICES']||marketData.nifty.value):(livePrices['NIFTY MIDCAP SELECT']||marketData.nifty.value)||25500;
                           const gap = selectedUnderlying==='BANKNIFTY'?51:selectedUnderlying==='MIDCPNIFTY'?13:26;
-                          return visChain.map((row,idx)=>{
+                          const maxOI = Math.max(1,...liveOptionChain.map(r=>Math.max(r.ce?.oi||0,r.pe?.oi||0)));
+                          return liveOptionChain.map((row,idx)=>{
                             const isATM = Math.abs(row.strike-spot)<gap;
                             const itmCE = row.strike < spot;
                             const itmPE = row.strike > spot;
