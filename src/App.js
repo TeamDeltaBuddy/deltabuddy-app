@@ -2233,20 +2233,46 @@ Respond ONLY with valid JSON:
       }
     } catch(e) { console.warn('NSE chain failed, using simulation:', e.message); }
 
-    // ── Tier 2: Simulation fallback ──
+    // ── Tier 2: Simulation fallback (expiry-aware) ──
     const spot = marketData.nifty.value > 24000 ? marketData.nifty.value : BASE_PRICES[underlying];
-    const chain = buildSimulatedChain(underlying, spot);
-    // Build fake expiry dates for UI consistency
+    // Build 4 simulated expiry dates (Thursday/weekly cadence)
     const today = new Date();
-    const fakeExpiries = [0,7,14,28].map(d => {
-      const dt = new Date(today.getTime() + d*86400000);
-      return dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}).replace(/ /g,'-');
+    const getNextThursday = (offset=0) => {
+      const d = new Date(today);
+      const day = d.getDay(); // 0=Sun
+      const daysToThu = (4 - day + 7) % 7 || 7;
+      d.setDate(d.getDate() + daysToThu + offset*7);
+      return d;
+    };
+    const fakeExpiries = [0,1,2,4].map(i => {
+      const dt = getNextThursday(i);
+      return dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}).split('/').join('-');
+    });
+    // Store simulated chain rows per expiry in rawNseData-like structure
+    const simRawRows = fakeExpiries.flatMap((exp, ei) => {
+      const daysLeft = 7 + ei * 7;
+      const T = daysLeft / 365;
+      const gap = STRIKE_GAP[underlying] || 50;
+      const atm = Math.round(spot / gap) * gap;
+      const strikes = Array.from({length:31}, (_,i) => atm + (i-15)*gap);
+      return strikes.flatMap(K => {
+        const d = Math.abs(K - spot);
+        const iv = (14 + (d/spot)*80 + ei*1.5 + (Math.random()*1-0.5));
+        const oiMul = Math.max(0.05, 1-(d/(spot*0.1)));
+        const itmCE = K < spot, itmPE = K > spot;
+        const cePrem = Math.max(0.5, itmCE?(spot-K)*0.95:spot*iv/100*Math.sqrt(T)*0.4);
+        const pePrem = Math.max(0.5, itmPE?(K-spot)*0.95:spot*iv/100*Math.sqrt(T)*0.4);
+        return [
+          { expiryDate:exp, strikePrice:K, CE:{ lastPrice:+cePrem.toFixed(2), impliedVolatility:+iv.toFixed(1), openInterest:Math.floor((50000+Math.random()*100000)*oiMul), changeinOpenInterest:Math.floor((Math.random()*10000-5000)*oiMul), totalTradedVolume:Math.floor((10000+Math.random()*30000)*oiMul), bidprice:(cePrem*0.98).toFixed(2), askPrice:(cePrem*1.02).toFixed(2), change:(Math.random()*10-5).toFixed(2), pChange:(Math.random()*8-4).toFixed(2) } },
+          { expiryDate:exp, strikePrice:K, PE:{ lastPrice:+pePrem.toFixed(2), impliedVolatility:+iv.toFixed(1), openInterest:Math.floor((50000+Math.random()*100000)*oiMul), changeinOpenInterest:Math.floor((Math.random()*10000-5000)*oiMul), totalTradedVolume:Math.floor((10000+Math.random()*30000)*oiMul), bidprice:(pePrem*0.98).toFixed(2), askPrice:(pePrem*1.02).toFixed(2), change:(Math.random()*10-5).toFixed(2), pChange:(Math.random()*8-4).toFixed(2) } },
+        ];
+      });
     });
     setNseExpiryDates(fakeExpiries);
+    setRawNseData(simRawRows);
+    const useExp = forceExpiry || selectedExpiry || fakeExpiries[0];
     if (!selectedExpiry) setSelectedExpiry(fakeExpiries[0]);
-    setRawNseData(null);
-    setLiveOptionChain(chain);
-    setChartData({ oi:chain.map(r=>({strike:r.strike,ce:r.ce.oi/1000,pe:r.pe.oi/1000})), iv:chain.map(r=>({strike:r.strike,ce:parseFloat(r.ce.iv),pe:parseFloat(r.pe.iv)})), volume:chain.map(r=>({strike:r.strike,ce:r.ce.volume/1000,pe:r.pe.volume/1000})), priceHistory:[] });
+    parseChainForExpiry(simRawRows, useExp, spot);
     setIsLoadingChain(false);
   };
 
