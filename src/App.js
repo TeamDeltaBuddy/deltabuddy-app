@@ -5494,59 +5494,60 @@ Respond ONLY with valid JSON:
                         </tr>
                       </thead>
                       <tbody>
-                        {liveOptionChain.map((row,idx)=>{
-                          const spot  = selectedUnderlying==='NIFTY'?marketData.nifty.value:selectedUnderlying==='BANKNIFTY'?marketData.bankNifty.value:marketData.nifty.value;
-                          const isATM = Math.abs(row.strike-spot2)<(selectedUnderlying==='NIFTY'?26:selectedUnderlying==='BANKNIFTY'?51:26);
-                          const itmCE = row.strike < spot2;
-                          const itmPE = row.strike > spot2;
-                          const maxOI = Math.max(...visibleChain.map(r=>Math.max(r.ce?.oi||0,r.pe?.oi||0)));
-                          const ceOI  = row.ce?.oi||0;
-                          const peOI  = row.pe?.oi||0;
-                          const ceChg = parseFloat(row.ce?.change||0);
-                          const peChg = parseFloat(row.pe?.change||0);
-                          const ceOIChg = row.ce?.oiChg||0;
-                          const peOIChg = row.pe?.oiChg||0;
-                          const fmt = (n) => n>=100000?(n/100000).toFixed(1)+'L':n>=1000?(n/1000).toFixed(0)+'K':n;
-                          const ceBg = itmCE ? 'rgba(74,222,128,0.05)' : 'transparent';
-                          const peBg = itmPE ? 'rgba(248,113,113,0.05)' : 'transparent';
-                          const rowBg = isATM ? 'rgba(249,115,22,0.08)' : 'transparent';
-                          const ceBarW = maxOI > 0 ? ((ceOI/maxOI)*100).toFixed(0) : 0;
-                          const peBarW = maxOI > 0 ? ((peOI/maxOI)*100).toFixed(0) : 0;
-                          return (
-                            <tr key={idx} style={{borderBottom:'1px solid rgba(255,255,255,0.03)',background:rowBg}}>
-                              {/* CE OI with bar */}
-                              <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,position:'relative'}}>
-                                <div style={{position:'absolute',right:0,top:0,bottom:0,width:`${ceBarW}%`,background:'rgba(74,222,128,0.08)',pointerEvents:'none'}}/>
-                                <span style={{position:'relative',fontWeight:ceOI>500000?700:400,color:ceOI>500000?'#4ade80':'#94a3b8'}}>{fmt(ceOI)}</span>
-                              </td>
-                              <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:ceOIChg>0?'#4ade80':ceOIChg<0?'#f87171':'#64748b',fontSize:'0.7rem'}}>{ceOIChg>0?'+':''}{fmt(ceOIChg)}</td>
-                              <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:'#64748b',fontSize:'0.7rem'}}>{fmt(row.ce?.volume||0)}</td>
-                              <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:'#fbbf24'}}>{row.ce?.iv}</td>
-                              <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,fontWeight:700,color:'#4ade80',fontSize:'0.82rem'}}>₹{row.ce?.ltp}</td>
-                              <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:ceChg>=0?'#4ade80':'#f87171',fontSize:'0.72rem'}}>{ceChg>=0?'+':''}{row.ce?.pChange}%</td>
-                              <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:'#64748b',fontSize:'0.72rem'}}>{row.ce?.bid}</td>
-                              {/* Strike */}
-                              <td style={{padding:'5px 8px',textAlign:'center',background:'rgba(249,115,22,0.06)',borderLeft:'1px solid rgba(249,115,22,0.2)',borderRight:'1px solid rgba(249,115,22,0.2)'}}>
-                                {isATM
-                                  ? <span style={{background:'#f97316',color:'white',borderRadius:'99px',padding:'2px 7px',fontWeight:800,fontSize:'0.78rem',whiteSpace:'nowrap'}}>{row.strike?.toLocaleString()} ATM</span>
-                                  : <span style={{fontWeight:600,color:itmCE?'rgba(74,222,128,0.8)':itmPE?'rgba(248,113,113,0.8)':'var(--text-dim)',fontSize:'0.8rem'}}>{row.strike?.toLocaleString()}</span>
-                                }
-                              </td>
-                              {/* PE side */}
-                              <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'#64748b',fontSize:'0.72rem'}}>{row.pe?.ask}</td>
-                              <td style={{padding:'5px 6px',textAlign:'left',background:peBg,fontWeight:700,color:'#f87171',fontSize:'0.82rem'}}>₹{row.pe?.ltp}</td>
-                              <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:peChg>=0?'#4ade80':'#f87171',fontSize:'0.72rem'}}>{peChg>=0?'+':''}{row.pe?.pChange}%</td>
-                              <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'#fbbf24'}}>{row.pe?.iv}</td>
-                              <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'#64748b',fontSize:'0.7rem'}}>{fmt(row.pe?.volume||0)}</td>
-                              <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:peOIChg>0?'#4ade80':peOIChg<0?'#f87171':'#64748b',fontSize:'0.7rem'}}>{peOIChg>0?'+':''}{fmt(peOIChg)}</td>
-                              <td style={{padding:'5px 6px',textAlign:'left',background:peBg,position:'relative'}}>
-                                <div style={{position:'absolute',left:0,top:0,bottom:0,width:`${peBarW}%`,background:'rgba(248,113,113,0.08)',pointerEvents:'none'}}/>
-                                <span style={{position:'relative',fontWeight:peOI>500000?700:400,color:peOI>500000?'#f87171':'#94a3b8'}}>{fmt(peOI)}</span>
-                              </td>
-                            </tr>
-                          );
+                        {(()=>{
+                          const spot = selectedUnderlying==='NIFTY'?marketData.nifty.value:selectedUnderlying==='BANKNIFTY'?marketData.bankNifty.value:selectedUnderlying==='FINNIFTY'?(livePrices['NIFTY FINANCIAL SERVICES']||marketData.nifty.value):(livePrices['NIFTY MIDCAP SELECT']||marketData.nifty.value);
+                          const atmIdx = liveOptionChain.length>0?liveOptionChain.reduce((best,row,i)=>Math.abs(row.strike-spot)<Math.abs(liveOptionChain[best].strike-spot)?i:best,0):0;
+                          const visChain = liveOptionChain.slice(Math.max(0,atmIdx-10),atmIdx+11);
+                          const maxOI = Math.max(1,...visChain.map(r=>Math.max(r.ce?.oi||0,r.pe?.oi||0)));
+                          const gap = selectedUnderlying==='BANKNIFTY'?51:selectedUnderlying==='MIDCPNIFTY'?13:26;
+                          return visChain.map((row,idx)=>{
+                            const isATM = Math.abs(row.strike-spot)<gap;
+                            const itmCE = row.strike < spot;
+                            const itmPE = row.strike > spot;
+                            const ceOI  = row.ce?.oi||0;
+                            const peOI  = row.pe?.oi||0;
+                            const ceChg = parseFloat(row.ce?.change||0);
+                            const peChg = parseFloat(row.pe?.change||0);
+                            const ceOIChg = row.ce?.oiChg||0;
+                            const peOIChg = row.pe?.oiChg||0;
+                            const fmt = (n) => n>=100000?(n/100000).toFixed(1)+'L':n>=1000?(n/1000).toFixed(0)+'K':String(n);
+                            const ceBg = itmCE?'rgba(74,222,128,0.05)':'transparent';
+                            const peBg = itmPE?'rgba(248,113,113,0.05)':'transparent';
+                            const rowBg = isATM?'rgba(249,115,22,0.08)':'transparent';
+                            const ceBarW = ((ceOI/maxOI)*100).toFixed(0);
+                            const peBarW = ((peOI/maxOI)*100).toFixed(0);
+                            return (
+                              <tr key={idx} style={{borderBottom:'1px solid rgba(255,255,255,0.03)',background:rowBg}}>
+                                <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,position:'relative'}}>
+                                  <div style={{position:'absolute',right:0,top:0,bottom:0,width:`${ceBarW}%`,background:'rgba(74,222,128,0.08)',pointerEvents:'none'}}/>
+                                  <span style={{position:'relative',fontWeight:ceOI>500000?700:400,color:ceOI>500000?'#4ade80':'#94a3b8'}}>{fmt(ceOI)}</span>
+                                </td>
+                                <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:ceOIChg>0?'#4ade80':ceOIChg<0?'#f87171':'#64748b',fontSize:'0.7rem'}}>{ceOIChg>0?'+':''}{fmt(ceOIChg)}</td>
+                                <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:'#64748b',fontSize:'0.7rem'}}>{fmt(row.ce?.volume||0)}</td>
+                                <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:'#fbbf24'}}>{row.ce?.iv}</td>
+                                <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,fontWeight:700,color:'#4ade80',fontSize:'0.82rem'}}>&#8377;{row.ce?.ltp}</td>
+                                <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:ceChg>=0?'#4ade80':'#f87171',fontSize:'0.72rem'}}>{ceChg>=0?'+':''}{row.ce?.pChange}%</td>
+                                <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:'#64748b',fontSize:'0.72rem'}}>{row.ce?.bid}</td>
+                                <td style={{padding:'5px 8px',textAlign:'center',background:'rgba(249,115,22,0.06)',borderLeft:'1px solid rgba(249,115,22,0.2)',borderRight:'1px solid rgba(249,115,22,0.2)'}}>
+                                  {isATM
+                                    ?<span style={{background:'#f97316',color:'white',borderRadius:'99px',padding:'2px 7px',fontWeight:800,fontSize:'0.78rem',whiteSpace:'nowrap'}}>{row.strike?.toLocaleString()} ATM</span>
+                                    :<span style={{fontWeight:600,color:itmCE?'rgba(74,222,128,0.8)':itmPE?'rgba(248,113,113,0.8)':'var(--text-dim)',fontSize:'0.8rem'}}>{row.strike?.toLocaleString()}</span>
+                                  }
+                                </td>
+                                <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'#64748b',fontSize:'0.72rem'}}>{row.pe?.ask}</td>
+                                <td style={{padding:'5px 6px',textAlign:'left',background:peBg,fontWeight:700,color:'#f87171',fontSize:'0.82rem'}}>&#8377;{row.pe?.ltp}</td>
+                                <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:peChg>=0?'#4ade80':'#f87171',fontSize:'0.72rem'}}>{peChg>=0?'+':''}{row.pe?.pChange}%</td>
+                                <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'#fbbf24'}}>{row.pe?.iv}</td>
+                                <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'#64748b',fontSize:'0.7rem'}}>{fmt(row.pe?.volume||0)}</td>
+                                <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:peOIChg>0?'#4ade80':peOIChg<0?'#f87171':'#64748b',fontSize:'0.7rem'}}>{peOIChg>0?'+':''}{fmt(peOIChg)}</td>
+                                <td style={{padding:'5px 6px',textAlign:'left',background:peBg,position:'relative'}}>
+                                  <div style={{position:'absolute',left:0,top:0,bottom:0,width:`${peBarW}%`,background:'rgba(248,113,113,0.08)',pointerEvents:'none'}}/>
+                                  <span style={{position:'relative',fontWeight:peOI>500000?700:400,color:peOI>500000?'#f87171':'#94a3b8'}}>{fmt(peOI)}</span>
+                                </td>
+                              </tr>
+                            );
                           });
-                          })()}
+                        })()}
                       </tbody>
                     </table>
                     {/* Legend */}
