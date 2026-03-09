@@ -2243,6 +2243,7 @@ Respond ONLY with valid JSON:
     } catch(e) { console.warn('NSE chain failed, using simulation:', e.message); }
 
     // ── Tier 2: Simulation fallback (expiry-aware) ──
+    try {
     const spot = marketData.nifty.value > 24000 ? marketData.nifty.value : BASE_PRICES[underlying];
     // Build 4 simulated expiry dates (Thursday/weekly cadence)
     const today = new Date();
