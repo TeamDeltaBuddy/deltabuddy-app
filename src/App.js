@@ -1712,8 +1712,9 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
       }
     } catch(e) { /* fall through to simulation */ }
 
-    // --- Tier 2: Simulation (always works) ---
-    const spot = BASE[sym] || 24500;
+    // --- Tier 2: Simulation — use live spot from marketData, not stale BASE ──
+    const liveSpot = sym==='NIFTY'?marketData.nifty.value:sym==='BANKNIFTY'?marketData.bankNifty.value:0;
+    const spot = (liveSpot > 10000) ? liveSpot : (BASE[sym] || 24500);
     const gap  = GAP[sym]  || 50;
     const atm  = Math.round(spot/gap)*gap;
     const chain = Array.from({length:25},(_,i)=>atm+(i-12)*gap).map(K => {
@@ -1785,10 +1786,13 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
       }
 
       const byAbsGex = [...strikes].sort((a,b) => Math.abs(b.netGEX) - Math.abs(a.netGEX));
-      const posWalls  = byAbsGex.filter(sk => sk.netGEX > 0).slice(0,3).map(sk => sk.strike);
-      const negWalls  = byAbsGex.filter(sk => sk.netGEX < 0).slice(0,3).map(sk => sk.strike);
-      const topCallOI = [...strikes].sort((a,b) => b.ceOI - a.ceOI).slice(0,3).map(sk => sk.strike);
-      const topPutOI  = [...strikes].sort((a,b) => b.peOI - a.peOI).slice(0,3).map(sk => sk.strike);
+      // Resistance walls: positive GEX ABOVE spot (CE-heavy strikes above current price)
+      const posWalls  = byAbsGex.filter(sk => sk.netGEX > 0 && sk.strike >= spot).slice(0,3).map(sk => sk.strike);
+      // Support walls: negative GEX BELOW spot (PE-heavy strikes below current price)
+      const negWalls  = byAbsGex.filter(sk => sk.netGEX < 0 && sk.strike <= spot).slice(0,3).map(sk => sk.strike);
+      // Top CE OI above spot = resistance; Top PE OI below spot = support
+      const topCallOI = [...strikes].filter(sk => sk.strike > spot).sort((a,b) => b.ceOI - a.ceOI).slice(0,3).map(sk => sk.strike);
+      const topPutOI  = [...strikes].filter(sk => sk.strike < spot).sort((a,b) => b.peOI - a.peOI).slice(0,3).map(sk => sk.strike);
 
       const zoneLabel = totalGEX > 0
         ? ((gammaFlip && spot > gammaFlip) ? 'Positive Gamma — Pinning likely' : 'Positive Gamma — Range bound')
@@ -2204,8 +2208,13 @@ Respond ONLY with valid JSON:
   const generateLiveOptionChain = async (underlying = 'NIFTY', forceExpiry = null) => {
     setIsLoadingChain(true);
     try {
-      // ── Tier 1: NSE via backend ──
-      const nseRes = await fetch(`${BACKEND_URL}/api/option-chain?symbol=${UNDERLYING_NSE[underlying]||'NIFTY'}`, { headers:{'Accept':'application/json'} });
+      // ── Tier 1: NSE via backend (10s timeout) ──
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 10000);
+      let nseRes;
+      try {
+        nseRes = await fetch(`${BACKEND_URL}/api/option-chain?symbol=${UNDERLYING_NSE[underlying]||'NIFTY'}`, { headers:{'Accept':'application/json'}, signal: ctrl.signal });
+      } finally { clearTimeout(timer); }
       if (nseRes.ok) {
         const nseJson = await nseRes.json();
         if (nseJson?.records?.data?.length > 0) {
@@ -2273,7 +2282,9 @@ Respond ONLY with valid JSON:
     const useExp = forceExpiry || selectedExpiry || fakeExpiries[0];
     if (!selectedExpiry) setSelectedExpiry(fakeExpiries[0]);
     parseChainForExpiry(simRawRows, useExp, spot);
+  } finally {
     setIsLoadingChain(false);
+  }
   };
 
   // Fetch General Business News
