@@ -1673,15 +1673,13 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     } finally { setExpiryLoading(false); }
   };
 
-  // Fetch option chain for any symbol with full NSE→Yahoo→Simulation fallback
+  // Fetch option chain for any symbol — backend (NSE+Yahoo inside) then simulation fallback
   // Returns { chain, spot, nearExpiry } — never throws
   const fetchChainForSymbol = async (sym) => {
-    const YAHOO_MAP = { NIFTY:'^NSEI', BANKNIFTY:'^NSEBANK', FINNIFTY:'NIFTY_FIN_SERVICE.NS', MIDCPNIFTY:'^NSEMDCP50' };
     const BASE = { NIFTY:25500, BANKNIFTY:54000, FINNIFTY:23500, MIDCPNIFTY:12800 };
-    const GAP  = { NIFTY:50, BANKNIFTY:100, FINNIFTY:50, MIDCPNIFTY:25 };
-    const YAHOO = 'https://query1.finance.yahoo.com/v7/finance';
+    const GAP  = { NIFTY:50,   BANKNIFTY:100,   FINNIFTY:50,    MIDCPNIFTY:25 };
 
-    // --- Tier 1: NSE via backend ---
+    // --- Tier 1: backend /api/option-chain (tries NSE then Yahoo internally) ---
     try {
       const r = await fetch(`${BACKEND_URL}/api/option-chain?symbol=${sym}`, { headers:{'Accept':'application/json'} });
       if (r.ok) {
@@ -1703,41 +1701,20 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
           if (chain.length > 0 && spot > 0) return { chain, spot, nearExpiry };
         }
       }
-    } catch(e) { /* fall through */ }
+    } catch(e) { /* fall through to simulation */ }
 
-    // --- Tier 2: Yahoo Finance ---
-    try {
-      const ySym = YAHOO_MAP[sym] || '^NSEI';
-      const r = await fetch(`${YAHOO}/options/${encodeURIComponent(ySym)}`);
-      if (r.ok) {
-        const j = await r.json();
-        const result = j?.optionChain?.result?.[0];
-        if (result) {
-          const spot = result.quote?.regularMarketPrice || BASE[sym] || 24500;
-          const opts = result.options?.[0];
-          if (opts) {
-            const map = {};
-            (opts.calls||[]).forEach(c => { const K=c.strike; if(!map[K]) map[K]={strike:K}; map[K].ce={ltp:c.lastPrice||0,iv:(c.impliedVolatility||0)*100,oi:c.openInterest||0}; });
-            (opts.puts||[]).forEach(p  => { const K=p.strike; if(!map[K]) map[K]={strike:K}; map[K].pe={ltp:p.lastPrice||0,iv:(p.impliedVolatility||0)*100,oi:p.openInterest||0}; });
-            const chain = Object.values(map).filter(r => r.ce && r.pe).sort((a,b) => a.strike-b.strike);
-            if (chain.length > 0) return { chain, spot, nearExpiry: 'Yahoo' };
-          }
-        }
-      }
-    } catch(e) { /* fall through */ }
-
-    // --- Tier 3: Simulation ---
+    // --- Tier 2: Simulation (always works) ---
     const spot = BASE[sym] || 24500;
     const gap  = GAP[sym]  || 50;
     const atm  = Math.round(spot/gap)*gap;
-    const chain = Array.from({length:21},(_,i)=>atm+(i-10)*gap).map(K => {
+    const chain = Array.from({length:25},(_,i)=>atm+(i-12)*gap).map(K => {
       const d = Math.abs(K-spot);
-      const iv = 15 + (d/spot)*100;
-      const oiMul = Math.max(0.1, 1-(d/(spot*0.08)));
+      const iv = 14 + (d/spot)*120 + (Math.random()*2-1);
+      const oiMul = Math.max(0.05, 1-(d/(spot*0.08)));
       return {
         strike: K,
-        ce: { ltp:0, iv, oi: Math.floor((80000+Math.random()*120000)*oiMul) },
-        pe: { ltp:0, iv, oi: Math.floor((80000+Math.random()*120000)*oiMul) },
+        ce: { ltp: Math.max(0.5, K<spot ? spot-K : 0) + iv*0.1, iv, oi: Math.floor((60000+Math.random()*140000)*oiMul) },
+        pe: { ltp: Math.max(0.5, K>spot ? K-spot : 0) + iv*0.1, iv, oi: Math.floor((60000+Math.random()*140000)*oiMul) },
       };
     });
     return { chain, spot, nearExpiry: 'simulated' };
@@ -7767,7 +7744,7 @@ Respond ONLY with valid JSON:
                     <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.8rem'}}>
                       <thead>
                         <tr style={{background:'var(--bg-surface)'}}>
-                          {['Strike','Net GEX','CE Delta','PE Delta','Vanna','Charm','CE OI','PE OI'].map(h=>(
+                          {['Strike','Net GEX','CE IV%','PE IV%','CE OI','PE OI','CE LTP','PE LTP'].map(h=>(
                             <th key={h} style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'var(--text-muted)',fontSize:'0.7rem',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
                           ))}
                         </tr>
@@ -7777,14 +7754,14 @@ Respond ONLY with valid JSON:
                           const atm=Math.abs(s.strike-gexData.spot)<100;
                           return (
                             <tr key={s.strike} style={{borderBottom:'1px solid rgba(255,255,255,0.04)',background:atm?'rgba(249,115,22,0.08)':'transparent'}}>
-                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',fontWeight:atm?800:600,color:atm?'#f97316':'var(--text-main)'}}>{s.strike.toLocaleString('en-IN')}{atm?' *':''}</td>
-                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',fontWeight:700,color:s.netGEX>=0?'#4ade80':'#f87171'}}>{s.netGEX>=0?'+':''}{Math.round(s.netGEX).toLocaleString('en-IN')}</td>
-                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'#f87171'}}>{(s.ceDelta/1000).toFixed(1)}K</td>
-                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'#4ade80'}}>{(s.peDelta/1000).toFixed(1)}K</td>
-                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'#a78bfa'}}>{s.netVanna.toFixed(0)}</td>
-                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'#38bdf8'}}>{s.netCharm.toFixed(0)}</td>
-                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'var(--text-dim)'}}>{(s.ceOI/1000).toFixed(0)}K</td>
-                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'var(--text-dim)'}}>{(s.peOI/1000).toFixed(0)}K</td>
+                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',fontWeight:atm?800:600,color:atm?'#f97316':'var(--text-main)'}}>{(s.strike||0).toLocaleString('en-IN')}{atm?' *':''}</td>
+                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',fontWeight:700,color:(s.netGEX||0)>=0?'#4ade80':'#f87171'}}>{(s.netGEX||0)>=0?'+':''}{Math.round(s.netGEX||0).toLocaleString('en-IN')}</td>
+                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'#f87171'}}>{(s.ceIV||0).toFixed(1)}%</td>
+                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'#4ade80'}}>{(s.peIV||0).toFixed(1)}%</td>
+                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'var(--text-dim)'}}>{((s.ceOI||0)/1000).toFixed(0)}K</td>
+                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'var(--text-dim)'}}>{((s.peOI||0)/1000).toFixed(0)}K</td>
+                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'#60a5fa'}}>{(s.ceLTP||0).toFixed(1)}</td>
+                              <td style={{padding:'0.5rem 0.6rem',textAlign:'right',color:'#c084fc'}}>{(s.peLTP||0).toFixed(1)}</td>
                             </tr>
                           );
                         })}
