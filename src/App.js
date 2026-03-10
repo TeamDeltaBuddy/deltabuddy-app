@@ -2297,23 +2297,49 @@ Respond ONLY with valid JSON:
 
   const generateLiveOptionChain = async (underlying = 'NIFTY', forceExpiry = null, _isRetry = false) => {
     setIsLoadingChain(true);
-    setLiveOptionChain([]); // clear stale data while loading
+    setLiveOptionChain([]);
     try {
       const ctrl  = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 12000);
-      let nseJson;
+      let nseJson = null;
+
+      // --- Tier 1: NSE via backend ---
       try {
         const r = await fetch(
           `${BACKEND_URL}/api/option-chain?symbol=${UNDERLYING_NSE[underlying]||'NIFTY'}`,
           { headers:{'Accept':'application/json'}, signal: ctrl.signal }
         );
-        if (r.ok) nseJson = await r.json();
-      } finally { clearTimeout(timer); }
+        if (r.ok) {
+          const j = await r.json();
+          if (!j?.error && j?.records?.data?.length > 0) nseJson = j;
+        }
+      } catch(e) { console.warn('[OC] NSE tier failed:', e.message); }
+      finally { clearTimeout(timer); }
 
-      if (!nseJson?.error && nseJson?.records?.data?.length > 0) {
+      // --- Tier 2: Yahoo Finance fallback ---
+      if (!nseJson) {
+        console.log('[OC] Trying Yahoo Finance fallback...');
+        try {
+          const ctrl2  = new AbortController();
+          const timer2 = setTimeout(() => ctrl2.abort(), 15000);
+          const r2 = await fetch(
+            `${BACKEND_URL}/api/option-chain-yahoo?symbol=${underlying}`,
+            { headers:{'Accept':'application/json'}, signal: ctrl2.signal }
+          );
+          clearTimeout(timer2);
+          if (r2.ok) {
+            const j2 = await r2.json();
+            if (!j2?.error && j2?.records?.data?.length > 0) {
+              nseJson = j2;
+              console.log('[OC] Yahoo fallback succeeded, source:', j2._source);
+            }
+          }
+        } catch(e) { console.warn('[OC] Yahoo tier failed:', e.message); }
+      }
+
+      if (nseJson?.records?.data?.length > 0) {
         const spot    = nseJson.records.underlyingValue || BASE_PRICES[underlying];
         const allRows = nseJson.records.data;
-        // NSE provides sorted expiry list
         const expiries = nseJson.records.expiryDates ||
           [...new Set(allRows.map(r => r.expiryDate))];
 
@@ -2328,19 +2354,20 @@ Respond ONLY with valid JSON:
         const useExpiry = forceExpiry || (selectedExpiry && expiries.includes(selectedExpiry) ? selectedExpiry : expiries[0]);
         setSelectedExpiry(useExpiry);
         parseChainForExpiry(allRows, useExpiry, spot);
-        return; // ← success, skip simulation
+        return;
       }
     } catch(e) {
-      console.warn('Option chain fetch failed:', e.message);
+      console.warn('[OC] generateLiveOptionChain error:', e.message);
     } finally {
       setIsLoadingChain(false);
     }
-    // NSE failed — schedule one auto-retry after 3 seconds
+
+    // Both tiers failed
     setLiveOptionChain([]);
     setNseExpiryDates([]);
     if (!_isRetry) {
-      console.log('[OC] Auto-retrying in 3s...');
-      setTimeout(() => generateLiveOptionChain(underlying, forceExpiry, true), 3000);
+      console.log('[OC] Auto-retrying in 4s...');
+      setTimeout(() => generateLiveOptionChain(underlying, forceExpiry, true), 4000);
     }
   };
 
