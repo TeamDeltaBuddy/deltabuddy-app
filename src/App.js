@@ -5,6 +5,7 @@ import './App.css';
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, getDocs, deleteDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // 🔴 REPLACE with your Firebase project config from console.firebase.google.com
 const firebaseConfig = {
@@ -1027,10 +1028,11 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
     fetch(`${BACKEND_URL}/api/health`).catch(()=>{});
   }, []);
 
-  // -- Auto-load admin users when admin tab opened --------------------------
+  // -- Auto-load admin users + pending payments when admin tab opened ------
   useEffect(() => {
-    if (activeTab === 'admin' && isAdmin && adminUsers.length === 0) {
-      fetchAllUsers();
+    if (activeTab === 'admin' && isAdmin) {
+      if (adminUsers.length === 0) fetchAllUsers();
+      fetchPendingPayments();
     }
   }, [activeTab, isAdmin]); // eslint-disable-line
 
@@ -1335,6 +1337,11 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [expirySymbol, setExpirySymbol]   = useState('NIFTY');
   const [showLegal, setShowLegal]         = useState(null);
   const [showPricing, setShowPricing]     = useState(false);
+  const [payStep,     setPayStep]         = useState('qr');   // 'qr' | 'upload' | 'done'
+  const [payFile,     setPayFile]         = useState(null);
+  const [payUploading,setPayUploading]    = useState(false);
+  const [payMsg,      setPayMsg]          = useState('');
+  const [pendingPay,  setPendingPay]      = useState([]);     // admin: pending uploads
   const [adminUsers, setAdminUsers]       = useState([]);
   const [adminLoading, setAdminLoading]   = useState(false);
   const [adminMsg, setAdminMsg]           = useState('');
@@ -1496,6 +1503,57 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
       setAdminUsers(users);
     } catch(e) { setAdminMsg('Error: ' + e.message); }
     finally { setAdminLoading(false); }
+  };
+
+  // Upload payment screenshot to Firebase Storage → save ref in Firestore
+  const submitPaymentProof = async () => {
+    if (!payFile || !currentUser) return;
+    setPayUploading(true);
+    setPayMsg('');
+    try {
+      const path = `payment-proofs/${currentUser.uid}_${Date.now()}.${payFile.name.split('.').pop()}`;
+      const fileRef = storageRef(storage, path);
+      await uploadBytes(fileRef, payFile);
+      const url = await getDownloadURL(fileRef);
+      await setDoc(doc(db, 'paymentProofs', currentUser.uid), {
+        uid: currentUser.uid,
+        email: currentUser.email,
+        name: currentUser.displayName || '',
+        screenshotUrl: url,
+        submittedAt: serverTimestamp(),
+        status: 'pending',
+        amount: 299,
+      });
+      setPayStep('done');
+      setPayMsg('✅ Screenshot submitted! We will activate your Pro within 2 hours.');
+    } catch(e) {
+      setPayMsg('Upload failed: ' + e.message);
+    } finally {
+      setPayUploading(false);
+    }
+  };
+
+  // Admin: fetch pending payment proofs
+  const fetchPendingPayments = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'paymentProofs'));
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setPendingPay(all.filter(p => p.status === 'pending'));
+    } catch(e) { console.log('fetchPendingPayments error:', e.message); }
+  };
+
+  // Admin: approve payment → set Pro + mark proof approved
+  const approvePayment = async (proof) => {
+    try {
+      await setDoc(doc(db, 'users', proof.uid), {
+        subStatus: 'pro', paidAt: new Date().toISOString(),
+        paymentNote: 'UPI screenshot approved', paidAmount: 299,
+      }, { merge: true });
+      await setDoc(doc(db, 'paymentProofs', proof.uid), { status: 'approved' }, { merge: true });
+      setAdminMsg('✅ ' + (proof.email||proof.uid) + ' activated as Pro');
+      fetchPendingPayments();
+      fetchAllUsers();
+    } catch(e) { setAdminMsg('Error: ' + e.message); }
   };
 
   const setUserPro = async (uid, makePro) => {
@@ -2236,7 +2294,7 @@ Respond ONLY with valid JSON:
     });
   };
 
-  const generateLiveOptionChain = async (underlying = 'NIFTY', forceExpiry = null) => {
+  const generateLiveOptionChain = async (underlying = 'NIFTY', forceExpiry = null, _isRetry = false) => {
     setIsLoadingChain(true);
     setLiveOptionChain([]); // clear stale data while loading
     try {
@@ -2276,10 +2334,13 @@ Respond ONLY with valid JSON:
     } finally {
       setIsLoadingChain(false);
     }
-    // NSE failed — leave chain empty, user can retry with Refresh button
-    // Do NOT show fake data — confuses users
+    // NSE failed — schedule one auto-retry after 3 seconds
     setLiveOptionChain([]);
     setNseExpiryDates([]);
+    if (!_isRetry) {
+      console.log('[OC] Auto-retrying in 3s...');
+      setTimeout(() => generateLiveOptionChain(underlying, forceExpiry, true), 3000);
+    }
   };
 
   // Fetch General Business News
@@ -5515,11 +5576,14 @@ Respond ONLY with valid JSON:
                 ) : liveOptionChain.length===0 ? (
                   <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>
                     <div style={{fontSize:'2rem',marginBottom:'0.75rem'}}>📡</div>
-                    <div style={{fontWeight:700,marginBottom:'0.5rem'}}>NSE data unavailable</div>
-                    <div style={{fontSize:'0.82rem',color:'#64748b',marginBottom:'1rem'}}>Market may be closed or NSE is temporarily blocked.<br/>Click Refresh during market hours (9:15 AM – 3:30 PM).</div>
+                    <div style={{fontWeight:700,marginBottom:'0.5rem'}}>Connecting to NSE...</div>
+                    <div style={{fontSize:'0.82rem',color:'#64748b',marginBottom:'1.25rem'}}>
+                      Fetching live option chain. NSE sometimes needs a moment.<br/>
+                      Market hours: 9:15 AM – 3:30 PM IST
+                    </div>
                     <button onClick={()=>generateLiveOptionChain(selectedUnderlying)}
-                      style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.5rem 1.25rem',fontWeight:700,cursor:'pointer'}}>
-                      🔄 Refresh
+                      style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.5rem 1.4rem',fontWeight:700,cursor:'pointer',fontSize:'0.88rem'}}>
+                      🔄 Try Again
                     </button>
                   </div>
                 ) : (
@@ -7857,6 +7921,36 @@ Respond ONLY with valid JSON:
                 <button onClick={()=>setAdminMsg('')} style={{background:'none',border:'none',color:'var(--text-dim)',cursor:'pointer'}}>X</button>
               </div>
             )}
+            {/* === PENDING PAYMENT PROOFS === */}
+            {pendingPay.length > 0 && (
+              <div style={{background:'rgba(249,115,22,0.08)',border:'1px solid rgba(249,115,22,0.35)',borderRadius:'12px',padding:'1rem',marginBottom:'1.5rem'}}>
+                <div style={{fontWeight:700,fontSize:'0.95rem',marginBottom:'0.75rem',color:'#f97316'}}>
+                  🔔 Pending Payments ({pendingPay.length})
+                </div>
+                {pendingPay.map(p => (
+                  <div key={p.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'0.5rem',padding:'0.65rem 0',borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
+                    <div>
+                      <div style={{fontWeight:600,fontSize:'0.88rem',color:'var(--text-main)'}}>{p.email || p.uid}</div>
+                      <div style={{fontSize:'0.75rem',color:'var(--text-muted)'}}>{p.name} • ₹{p.amount} • {p.submittedAt?.seconds ? new Date(p.submittedAt.seconds*1000).toLocaleString('en-IN') : 'Just now'}</div>
+                    </div>
+                    <div style={{display:'flex',gap:'0.5rem',alignItems:'center'}}>
+                      <a href={p.screenshotUrl} target="_blank" rel="noreferrer"
+                        style={{fontSize:'0.78rem',color:'#60a5fa',textDecoration:'none',border:'1px solid #60a5fa',borderRadius:'6px',padding:'3px 10px',fontWeight:600}}>
+                        👁 View Screenshot
+                      </a>
+                      <button onClick={()=>approvePayment(p)}
+                        style={{background:'#00ff88',color:'#000',border:'none',borderRadius:'6px',padding:'4px 12px',fontWeight:800,cursor:'pointer',fontSize:'0.82rem'}}>
+                        ✅ Activate Pro
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <button onClick={fetchPendingPayments} style={{marginTop:'0.6rem',background:'none',border:'1px solid var(--border)',color:'var(--text-dim)',borderRadius:'6px',padding:'4px 12px',fontSize:'0.75rem',cursor:'pointer'}}>
+                  🔄 Refresh
+                </button>
+              </div>
+            )}
+
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'0.75rem',marginBottom:'1.5rem'}}>
               {[
                 {label:'Total Users',val:adminUsers.length,                                                   color:'var(--text-main)'},
@@ -8009,25 +8103,53 @@ Respond ONLY with valid JSON:
                   <div style={{fontSize:'0.82rem',color:'var(--text-dim)',marginBottom:'1.25rem'}}>~100/month - billed every 3 months</div>
                   {subStatus === 'pro' ? (
                     <div style={{background:'rgba(0,255,136,0.1)',border:'1px solid var(--accent)',borderRadius:'8px',padding:'0.6rem',textAlign:'center',fontSize:'0.85rem',color:'var(--accent)',fontWeight:700,marginBottom:'1rem'}}>
-                      You are on Pro
+                      ✅ You are on Pro
+                    </div>
+                  ) : payStep === 'done' ? (
+                    <div style={{background:'rgba(0,255,136,0.08)',border:'1px solid rgba(0,255,136,0.3)',borderRadius:'10px',padding:'1rem',textAlign:'center',marginBottom:'1rem'}}>
+                      <div style={{fontSize:'1.5rem',marginBottom:'0.5rem'}}>🎉</div>
+                      <div style={{fontWeight:700,color:'var(--accent)',marginBottom:'0.3rem'}}>Screenshot Submitted!</div>
+                      <div style={{fontSize:'0.78rem',color:'var(--text-dim)'}}>We'll activate your Pro within 2 hours. You'll see it reflected here.</div>
+                    </div>
+                  ) : payStep === 'upload' ? (
+                    <div style={{marginBottom:'1rem'}}>
+                      <div style={{fontWeight:700,fontSize:'0.88rem',marginBottom:'0.6rem',color:'var(--text-main)'}}>📸 Upload Payment Screenshot</div>
+                      <label style={{display:'block',border:'2px dashed var(--border)',borderRadius:'10px',padding:'1rem',textAlign:'center',cursor:'pointer',marginBottom:'0.75rem',background:'var(--bg-surface)'}}>
+                        <input type="file" accept="image/*" style={{display:'none'}} onChange={e=>{setPayFile(e.target.files[0]);}}/>
+                        {payFile ? <span style={{color:'var(--accent)',fontWeight:600}}>✓ {payFile.name}</span> : <span style={{color:'var(--text-dim)',fontSize:'0.82rem'}}>Tap to select screenshot</span>}
+                      </label>
+                      {payMsg && <div style={{fontSize:'0.78rem',color:'var(--accent)',marginBottom:'0.5rem'}}>{payMsg}</div>}
+                      <button onClick={submitPaymentProof} disabled={!payFile||payUploading}
+                        style={{width:'100%',background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.65rem',fontWeight:800,cursor:'pointer',fontSize:'0.9rem',opacity:(!payFile||payUploading)?0.6:1}}>
+                        {payUploading ? '⏳ Uploading...' : '🚀 Submit for Activation'}
+                      </button>
+                      <button onClick={()=>setPayStep('qr')} style={{width:'100%',background:'none',border:'none',color:'var(--text-dim)',fontSize:'0.78rem',marginTop:'0.5rem',cursor:'pointer'}}>← Back to QR</button>
                     </div>
                   ) : (
                     <div style={{marginBottom:'1rem'}}>
-                      <div style={{
-                        width:'100%',background:'rgba(0,255,136,0.06)',
-                        border:'1px solid rgba(0,255,136,0.25)',
-                        borderRadius:'10px',padding:'0.85rem 1rem',
-                        textAlign:'center',marginBottom:'0.6rem',
-                      }}>
-                        <div style={{fontSize:'1rem',fontWeight:800,color:'var(--accent)',marginBottom:'0.25rem'}}>
-                          🎉 You have full Pro access
+                      <div style={{fontWeight:700,fontSize:'0.88rem',marginBottom:'0.75rem',color:'var(--text-main)',textAlign:'center'}}>Scan & Pay ₹299</div>
+                      <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'0.75rem'}}>
+                        <div style={{background:'white',padding:'10px',borderRadius:'12px',display:'inline-block'}}>
+                          <img
+                            src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent('upi://pay?pa=mhassanuzzaman@fifederal&pn=DeltaBuddy&am=299&cu=INR&tn=DeltaBuddy+Pro+Subscription')}`}
+                            alt="UPI QR" style={{width:180,height:180,display:'block'}}
+                          />
                         </div>
-                        <div style={{fontSize:'0.78rem',color:'var(--text-dim)',lineHeight:1.5}}>
-                          Pro is ₹299/quarter. Payment gateway is being set up — you will be notified on Telegram when ready.
+                        <div style={{textAlign:'center'}}>
+                          <div style={{fontSize:'0.8rem',color:'var(--text-dim)',marginBottom:'0.2rem'}}>UPI ID</div>
+                          <div style={{fontWeight:700,color:'var(--text-main)',fontSize:'0.9rem',letterSpacing:'0.02em'}}>mhassanuzzaman@fifederal</div>
+                          <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginTop:'0.2rem'}}>Amount: ₹299 • DeltaBuddy Pro</div>
                         </div>
-                      </div>
-                      <div style={{textAlign:'center',fontSize:'0.72rem',color:'var(--text-muted)'}}>
-                        No action needed during trial period
+                        <div style={{fontSize:'0.75rem',color:'var(--text-dim)',textAlign:'center',lineHeight:1.6,background:'rgba(255,255,255,0.04)',borderRadius:'8px',padding:'0.6rem 1rem'}}>
+                          1. Scan QR or use UPI ID above<br/>
+                          2. Pay exactly ₹299<br/>
+                          3. Take a screenshot of the success screen<br/>
+                          4. Click below to upload it
+                        </div>
+                        <button onClick={()=>setPayStep('upload')}
+                          style={{width:'100%',background:'linear-gradient(135deg,#00ff88,#00cc6a)',color:'#000',border:'none',borderRadius:'8px',padding:'0.65rem',fontWeight:800,cursor:'pointer',fontSize:'0.9rem'}}>
+                          📸 I've Paid — Upload Screenshot
+                        </button>
                       </div>
                     </div>
                   )}
