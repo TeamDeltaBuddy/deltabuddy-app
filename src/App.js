@@ -2298,75 +2298,62 @@ Respond ONLY with valid JSON:
   const generateLiveOptionChain = async (underlying = 'NIFTY', forceExpiry = null, _isRetry = false) => {
     setIsLoadingChain(true);
     setLiveOptionChain([]);
-    try {
+
+    const trySource = async (url) => {
       const ctrl  = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 12000);
-      let nseJson = null;
-
-      // --- Tier 1: NSE via backend ---
+      const timer = setTimeout(() => ctrl.abort(), 15000);
       try {
-        const r = await fetch(
-          `${BACKEND_URL}/api/option-chain?symbol=${UNDERLYING_NSE[underlying]||'NIFTY'}`,
-          { headers:{'Accept':'application/json'}, signal: ctrl.signal }
-        );
-        if (r.ok) {
-          const j = await r.json();
-          if (!j?.error && j?.records?.data?.length > 0) nseJson = j;
-        }
-      } catch(e) { console.warn('[OC] NSE tier failed:', e.message); }
+        const r = await fetch(url, { headers: { 'Accept': 'application/json' }, signal: ctrl.signal });
+        if (!r.ok) return null;
+        const j = await r.json();
+        if (!j?.error && j?.records?.data?.length > 0) return j;
+        return null;
+      } catch(e) { return null; }
       finally { clearTimeout(timer); }
+    };
 
-      // --- Tier 2: Yahoo Finance fallback ---
-      if (!nseJson) {
-        console.log('[OC] Trying Yahoo Finance fallback...');
-        try {
-          const ctrl2  = new AbortController();
-          const timer2 = setTimeout(() => ctrl2.abort(), 15000);
-          const r2 = await fetch(
-            `${BACKEND_URL}/api/option-chain-yahoo?symbol=${underlying}`,
-            { headers:{'Accept':'application/json'}, signal: ctrl2.signal }
-          );
-          clearTimeout(timer2);
-          if (r2.ok) {
-            const j2 = await r2.json();
-            if (!j2?.error && j2?.records?.data?.length > 0) {
-              nseJson = j2;
-              console.log('[OC] Yahoo fallback succeeded, source:', j2._source);
-            }
-          }
-        } catch(e) { console.warn('[OC] Yahoo tier failed:', e.message); }
+    try {
+      let data = null;
+
+      // Tier 1: Dhan API (most reliable from cloud)
+      console.log('[OC] Trying Dhan...');
+      data = await trySource(`${BACKEND_URL}/api/dhan/option-chain?symbol=${underlying}`);
+
+      // Tier 2: NSE direct (may work sometimes)
+      if (!data) {
+        console.log('[OC] Trying NSE...');
+        data = await trySource(`${BACKEND_URL}/api/option-chain?symbol=${UNDERLYING_NSE[underlying]||underlying}`);
       }
 
-      if (nseJson?.records?.data?.length > 0) {
-        const spot    = nseJson.records.underlyingValue || BASE_PRICES[underlying];
-        const allRows = nseJson.records.data;
-        const expiries = nseJson.records.expiryDates ||
+      if (data?.records?.data?.length > 0) {
+        const spot     = data.records.underlyingValue || BASE_PRICES[underlying];
+        const allRows  = data.records.data;
+        const expiries = data.records.expiryDates ||
           [...new Set(allRows.map(r => r.expiryDate))];
 
         setNseExpiryDates(expiries);
         setRawNseData(allRows);
         setMarketData(prev => ({
           ...prev,
-          nifty:     underlying==='NIFTY'    ? {...prev.nifty,     value:Math.round(spot)} : prev.nifty,
-          bankNifty: underlying==='BANKNIFTY' ? {...prev.bankNifty, value:Math.round(spot)} : prev.bankNifty,
+          nifty:     underlying==='NIFTY'     ? {...prev.nifty,     value: Math.round(spot)} : prev.nifty,
+          bankNifty: underlying==='BANKNIFTY'  ? {...prev.bankNifty, value: Math.round(spot)} : prev.bankNifty,
         }));
 
-        const useExpiry = forceExpiry || (selectedExpiry && expiries.includes(selectedExpiry) ? selectedExpiry : expiries[0]);
+        const useExpiry = forceExpiry ||
+          (selectedExpiry && expiries.includes(selectedExpiry) ? selectedExpiry : expiries[0]);
         setSelectedExpiry(useExpiry);
         parseChainForExpiry(allRows, useExpiry, spot);
         return;
       }
     } catch(e) {
-      console.warn('[OC] generateLiveOptionChain error:', e.message);
+      console.warn('[OC] error:', e.message);
     } finally {
       setIsLoadingChain(false);
     }
 
-    // Both tiers failed
     setLiveOptionChain([]);
     setNseExpiryDates([]);
     if (!_isRetry) {
-      console.log('[OC] Auto-retrying in 4s...');
       setTimeout(() => generateLiveOptionChain(underlying, forceExpiry, true), 4000);
     }
   };
