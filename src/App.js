@@ -2188,109 +2188,98 @@ Respond ONLY with valid JSON:
   };
 
   // Parse stored raw NSE data for a specific expiry into liveOptionChain
-  const parseChainForExpiry = (raw, expiry, spot) => {
-    const rows = raw.filter(r => r.expiryDate === expiry);
+  // Parse raw NSE rows for a specific expiry → setLiveOptionChain
+  const parseChainForExpiry = (rawRows, expiry, spot) => {
+    const rows = rawRows.filter(r => r.expiryDate === expiry);
     if (!rows.length) return;
     const map = {};
     rows.forEach(row => {
-      const s = row.strikePrice;
-      if (!map[s]) map[s] = { strike: s };
-      if (row.CE) map[s].ce = { ltp:(row.CE.lastPrice||0).toFixed(2), iv:(row.CE.impliedVolatility||0).toFixed(1), oi:row.CE.openInterest||0, oiChg:row.CE.changeinOpenInterest||0, volume:row.CE.totalTradedVolume||0, bid:(row.CE.bidprice||0).toFixed(2), ask:(row.CE.askPrice||0).toFixed(2), change:(row.CE.change||0).toFixed(2), pChange:(row.CE.pChange||0).toFixed(2) };
-      if (row.PE) map[s].pe = { ltp:(row.PE.lastPrice||0).toFixed(2), iv:(row.PE.impliedVolatility||0).toFixed(1), oi:row.PE.openInterest||0, oiChg:row.PE.changeinOpenInterest||0, volume:row.PE.totalTradedVolume||0, bid:(row.PE.bidprice||0).toFixed(2), ask:(row.PE.askPrice||0).toFixed(2), change:(row.PE.change||0).toFixed(2), pChange:(row.PE.pChange||0).toFixed(2) };
+      const K = row.strikePrice;
+      if (!K) return;
+      if (!map[K]) map[K] = { strike: K };
+      if (row.CE) map[K].ce = {
+        ltp:   (row.CE.lastPrice        || 0).toFixed(2),
+        iv:    (row.CE.impliedVolatility || 0).toFixed(1),
+        oi:     row.CE.openInterest          || 0,
+        oiChg:  row.CE.changeinOpenInterest  || 0,
+        volume: row.CE.totalTradedVolume     || 0,
+        bid:   (row.CE.bidprice         || 0).toFixed(2),
+        ask:   (row.CE.askPrice         || 0).toFixed(2),
+        change:(row.CE.change           || 0).toFixed(2),
+        pChange:(row.CE.pChange         || 0).toFixed(2),
+      };
+      if (row.PE) map[K].pe = {
+        ltp:   (row.PE.lastPrice        || 0).toFixed(2),
+        iv:    (row.PE.impliedVolatility || 0).toFixed(1),
+        oi:     row.PE.openInterest          || 0,
+        oiChg:  row.PE.changeinOpenInterest  || 0,
+        volume: row.PE.totalTradedVolume     || 0,
+        bid:   (row.PE.bidprice         || 0).toFixed(2),
+        ask:   (row.PE.askPrice         || 0).toFixed(2),
+        change:(row.PE.change           || 0).toFixed(2),
+        pChange:(row.PE.pChange         || 0).toFixed(2),
+      };
     });
-    // Fill missing CE/PE with empty objects so strikes always appear
+    // Fill missing side with zeros so row always appears
     Object.values(map).forEach(r => {
-      if (!r.ce) r.ce = { ltp:'0.00', iv:'0.0', oi:0, oiChg:0, volume:0, bid:'0.00', ask:'0.00', change:'0.00', pChange:'0.00' };
-      if (!r.pe) r.pe = { ltp:'0.00', iv:'0.0', oi:0, oiChg:0, volume:0, bid:'0.00', ask:'0.00', change:'0.00', pChange:'0.00' };
+      const empty = { ltp:'0.00', iv:'0.0', oi:0, oiChg:0, volume:0, bid:'0.00', ask:'0.00', change:'0.00', pChange:'0.00' };
+      if (!r.ce) r.ce = empty;
+      if (!r.pe) r.pe = { ...empty };
     });
     const chain = Object.values(map).sort((a,b) => a.strike - b.strike);
-    if (chain.length > 0) {
-      setLiveOptionChain(chain);
-      setChartData({ oi:chain.map(r=>({strike:r.strike,ce:r.ce.oi/1000,pe:r.pe.oi/1000})), iv:chain.map(r=>({strike:r.strike,ce:parseFloat(r.ce.iv),pe:parseFloat(r.pe.iv)})), volume:chain.map(r=>({strike:r.strike,ce:r.ce.volume/1000,pe:r.pe.volume/1000})), priceHistory:[] });
-    }
+    setLiveOptionChain(chain);
+    setChartData({
+      oi:     chain.map(r => ({ strike:r.strike, ce:r.ce.oi/1000,             pe:r.pe.oi/1000 })),
+      iv:     chain.map(r => ({ strike:r.strike, ce:parseFloat(r.ce.iv),      pe:parseFloat(r.pe.iv) })),
+      volume: chain.map(r => ({ strike:r.strike, ce:r.ce.volume/1000,         pe:r.pe.volume/1000 })),
+      priceHistory: [],
+    });
   };
 
   const generateLiveOptionChain = async (underlying = 'NIFTY', forceExpiry = null) => {
     setIsLoadingChain(true);
+    setLiveOptionChain([]); // clear stale data while loading
     try {
-      // ── Tier 1: NSE via backend (10s timeout) ──
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 10000);
-      let nseRes;
+      const ctrl  = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 12000);
+      let nseJson;
       try {
-        nseRes = await fetch(`${BACKEND_URL}/api/option-chain?symbol=${UNDERLYING_NSE[underlying]||'NIFTY'}`, { headers:{'Accept':'application/json'}, signal: ctrl.signal });
+        const r = await fetch(
+          \`\${BACKEND_URL}/api/option-chain?symbol=\${UNDERLYING_NSE[underlying]||'NIFTY'}\`,
+          { headers:{'Accept':'application/json'}, signal: ctrl.signal }
+        );
+        if (r.ok) nseJson = await r.json();
       } finally { clearTimeout(timer); }
-      if (nseRes.ok) {
-        const nseJson = await nseRes.json();
-        if (nseJson?.records?.data?.length > 0) {
-          const spot = nseJson.records.underlyingValue || BASE_PRICES[underlying];
-          const allRows = nseJson.records.data;
-          // Get expiry list from NSE (already sorted nearest first)
-          const expiries = nseJson.records.expiryDates ||
-            [...new Set(allRows.map(r => r.expiryDate))];
-          if (expiries.length > 0) {
-            setNseExpiryDates(expiries);
-            setRawNseData(allRows);
-            // Use forceExpiry, or current selectedExpiry, or nearest
-            const useExpiry = forceExpiry || selectedExpiry || expiries[0];
-            if (!selectedExpiry) setSelectedExpiry(expiries[0]);
-            parseChainForExpiry(allRows, useExpiry, spot);
-            setMarketData(prev => ({
-              ...prev,
-              nifty:     underlying==='NIFTY'     ? {...prev.nifty,     value:Math.round(spot)} : prev.nifty,
-              bankNifty: underlying==='BANKNIFTY'  ? {...prev.bankNifty, value:Math.round(spot)} : prev.bankNifty,
-            }));
-            setIsLoadingChain(false);
-            return;
-          }
-        }
-      }
-    } catch(e) { console.warn('NSE chain failed, using simulation:', e.message); }
 
-    // ── Tier 2: Simulation fallback (expiry-aware) ──
-    try {
-    const spot = marketData.nifty.value > 24000 ? marketData.nifty.value : BASE_PRICES[underlying];
-    // Build 4 simulated expiry dates (Thursday/weekly cadence)
-    const today = new Date();
-    const getNextThursday = (offset=0) => {
-      const d = new Date(today);
-      const day = d.getDay(); // 0=Sun
-      const daysToThu = (4 - day + 7) % 7 || 7;
-      d.setDate(d.getDate() + daysToThu + offset*7);
-      return d;
-    };
-    const fakeExpiries = [0,1,2,4].map(i => {
-      const dt = getNextThursday(i);
-      return dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}).split('/').join('-');
-    });
-    // Store simulated chain rows per expiry in rawNseData-like structure
-    const simRawRows = fakeExpiries.flatMap((exp, ei) => {
-      const daysLeft = 7 + ei * 7;
-      const T = daysLeft / 365;
-      const gap = STRIKE_GAP[underlying] || 50;
-      const atm = Math.round(spot / gap) * gap;
-      const strikes = Array.from({length:31}, (_,i) => atm + (i-15)*gap);
-      return strikes.flatMap(K => {
-        const d = Math.abs(K - spot);
-        const iv = (14 + (d/spot)*80 + ei*1.5 + (Math.random()*1-0.5));
-        const oiMul = Math.max(0.05, 1-(d/(spot*0.1)));
-        const itmCE = K < spot, itmPE = K > spot;
-        const cePrem = Math.max(0.5, itmCE?(spot-K)*0.95:spot*iv/100*Math.sqrt(T)*0.4);
-        const pePrem = Math.max(0.5, itmPE?(K-spot)*0.95:spot*iv/100*Math.sqrt(T)*0.4);
-        return [
-          { expiryDate:exp, strikePrice:K, CE:{ lastPrice:+cePrem.toFixed(2), impliedVolatility:+iv.toFixed(1), openInterest:Math.floor((50000+Math.random()*100000)*oiMul), changeinOpenInterest:Math.floor((Math.random()*10000-5000)*oiMul), totalTradedVolume:Math.floor((10000+Math.random()*30000)*oiMul), bidprice:(cePrem*0.98).toFixed(2), askPrice:(cePrem*1.02).toFixed(2), change:(Math.random()*10-5).toFixed(2), pChange:(Math.random()*8-4).toFixed(2) } },
-          { expiryDate:exp, strikePrice:K, PE:{ lastPrice:+pePrem.toFixed(2), impliedVolatility:+iv.toFixed(1), openInterest:Math.floor((50000+Math.random()*100000)*oiMul), changeinOpenInterest:Math.floor((Math.random()*10000-5000)*oiMul), totalTradedVolume:Math.floor((10000+Math.random()*30000)*oiMul), bidprice:(pePrem*0.98).toFixed(2), askPrice:(pePrem*1.02).toFixed(2), change:(Math.random()*10-5).toFixed(2), pChange:(Math.random()*8-4).toFixed(2) } },
-        ];
-      });
-    });
-    setNseExpiryDates(fakeExpiries);
-    setRawNseData(simRawRows);
-    const useExp = forceExpiry || selectedExpiry || fakeExpiries[0];
-    if (!selectedExpiry) setSelectedExpiry(fakeExpiries[0]);
-    parseChainForExpiry(simRawRows, useExp, spot);
-  } finally {
-    setIsLoadingChain(false);
-  }
+      if (!nseJson?.error && nseJson?.records?.data?.length > 0) {
+        const spot    = nseJson.records.underlyingValue || BASE_PRICES[underlying];
+        const allRows = nseJson.records.data;
+        // NSE provides sorted expiry list
+        const expiries = nseJson.records.expiryDates ||
+          [...new Set(allRows.map(r => r.expiryDate))];
+
+        setNseExpiryDates(expiries);
+        setRawNseData(allRows);
+        setMarketData(prev => ({
+          ...prev,
+          nifty:     underlying==='NIFTY'    ? {...prev.nifty,     value:Math.round(spot)} : prev.nifty,
+          bankNifty: underlying==='BANKNIFTY' ? {...prev.bankNifty, value:Math.round(spot)} : prev.bankNifty,
+        }));
+
+        const useExpiry = forceExpiry || (selectedExpiry && expiries.includes(selectedExpiry) ? selectedExpiry : expiries[0]);
+        setSelectedExpiry(useExpiry);
+        parseChainForExpiry(allRows, useExpiry, spot);
+        return; // ← success, skip simulation
+      }
+    } catch(e) {
+      console.warn('Option chain fetch failed:', e.message);
+    } finally {
+      setIsLoadingChain(false);
+    }
+    // NSE failed — leave chain empty, user can retry with Refresh button
+    // Do NOT show fake data — confuses users
+    setLiveOptionChain([]);
+    setNseExpiryDates([]);
   };
 
   // Fetch General Business News
@@ -5499,7 +5488,7 @@ Respond ONLY with valid JSON:
                     <span style={{fontSize:'0.85rem',color:((selectedUnderlying==='NIFTY'?marketData.nifty.change:marketData.bankNifty.change)||0)>=0?'#4ade80':'#f87171'}}>
                       {((selectedUnderlying==='NIFTY'?marketData.nifty.change:marketData.bankNifty.change)||0)>=0?'+':''}{selectedUnderlying==='NIFTY'?marketData.nifty.change:marketData.bankNifty.change}%
                     </span>
-                    <span style={{fontSize:'0.75rem',color:'#64748b',marginLeft:'0.5rem'}}>ATM ±10 strikes</span>
+
                   </div>
                   <button onClick={()=>generateLiveOptionChain(selectedUnderlying)} disabled={isLoadingChain}
                     style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.35rem 0.9rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
@@ -5524,7 +5513,15 @@ Respond ONLY with valid JSON:
                 {liveOptionChain.length===0 && isLoadingChain ? (
                   <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>⏳ Loading option chain...</div>
                 ) : liveOptionChain.length===0 ? (
-                  <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>No data — click Refresh</div>
+                  <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>
+                    <div style={{fontSize:'2rem',marginBottom:'0.75rem'}}>📡</div>
+                    <div style={{fontWeight:700,marginBottom:'0.5rem'}}>NSE data unavailable</div>
+                    <div style={{fontSize:'0.82rem',color:'#64748b',marginBottom:'1rem'}}>Market may be closed or NSE is temporarily blocked.<br/>Click Refresh during market hours (9:15 AM – 3:30 PM).</div>
+                    <button onClick={()=>generateLiveOptionChain(selectedUnderlying)}
+                      style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.5rem 1.25rem',fontWeight:700,cursor:'pointer'}}>
+                      🔄 Refresh
+                    </button>
+                  </div>
                 ) : (
                   <div style={{overflowX:'auto'}}>
                     {/* Column headers */}
