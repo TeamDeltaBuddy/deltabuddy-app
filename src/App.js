@@ -5740,7 +5740,46 @@ Respond ONLY with valid JSON:
                       {indicesPcrLoading ? '⏳ Loading...' : '🔄 Load All'}
                     </button>
                   </div>
-                  <p style={{color:'var(--text-dim)',fontSize:'0.82rem',marginBottom:'1.25rem'}}>PCR &gt; 1.2 = more puts = bullish sentiment. PCR &lt; 0.8 = more calls = bearish sentiment.</p>
+                  <p style={{color:'var(--text-dim)',fontSize:'0.82rem',marginBottom:'1rem'}}>PCR &gt; 1.2 = more puts = bullish sentiment. PCR &lt; 0.8 = more calls = bearish sentiment.</p>
+
+                  {/* PCR Zone Prediction */}
+                  {(() => {
+                    const pcrVal = parseFloat(niftyPcr);
+                    if (isNaN(pcrVal)) return null;
+                    let zone, zoneColor, zoneBg, zoneIcon, zoneDesc;
+                    if (pcrVal <= 0.70) {
+                      zone = 'OVERSOLD ZONE'; zoneIcon = '🔴';
+                      zoneColor = '#f87171'; zoneBg = 'rgba(248,113,113,0.08)';
+                      zoneDesc = 'Extreme call buying — market is oversold. Contrarian signal: possible bounce. Watch for reversal.';
+                    } else if (pcrVal <= 1.20) {
+                      zone = 'NEUTRAL ZONE'; zoneIcon = '🟡';
+                      zoneColor = '#fbbf24'; zoneBg = 'rgba(251,191,36,0.08)';
+                      zoneDesc = 'Balanced put/call activity. No strong directional bias. Range-bound movement likely.';
+                    } else {
+                      zone = 'OVERBOUGHT ZONE'; zoneIcon = '🟢';
+                      zoneColor = '#4ade80'; zoneBg = 'rgba(74,222,128,0.08)';
+                      zoneDesc = 'Extreme put buying — market is overbought. Bulls in control. Watch for exhaustion near resistance.';
+                    }
+                    return (
+                      <div style={{background:zoneBg,border:`1px solid ${zoneColor}44`,borderRadius:'12px',padding:'1rem 1.25rem',marginBottom:'1.25rem',display:'flex',gap:'1rem',alignItems:'center',flexWrap:'wrap'}}>
+                        <div style={{textAlign:'center',minWidth:'80px'}}>
+                          <div style={{fontSize:'2rem'}}>{zoneIcon}</div>
+                          <div style={{fontSize:'0.68rem',fontWeight:800,color:zoneColor,textTransform:'uppercase',letterSpacing:'0.06em',marginTop:'0.2rem'}}>{zone}</div>
+                        </div>
+                        <div style={{flex:1}}>
+                          <div style={{display:'flex',gap:'1.5rem',marginBottom:'0.4rem',flexWrap:'wrap'}}>
+                            <div><span style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>NIFTY PCR</span><br/><span style={{fontSize:'1.8rem',fontWeight:900,color:zoneColor}}>{niftyPcr}</span></div>
+                            <div style={{fontSize:'0.75rem',color:'var(--text-dim)',lineHeight:1.6,alignSelf:'center'}}>
+                              <div>🔴 <b>0.30–0.70</b> → Oversold Zone (Bearish PCR)</div>
+                              <div>🟡 <b>0.80–1.20</b> → Neutral Zone</div>
+                              <div>🟢 <b>1.30–1.95</b> → Overbought Zone (Bullish PCR)</div>
+                            </div>
+                          </div>
+                          <div style={{fontSize:'0.8rem',color:'var(--text-dim)',lineHeight:1.5}}>{zoneDesc}</div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:'0.75rem'}}>
                     {indices.map(idx => {
                       const data = idx.sym === 'NIFTY' ? idx : (indicesPcr[idx.sym] || idx);
@@ -5848,6 +5887,146 @@ Respond ONLY with valid JSON:
                 {fiiDiiLoading && (
                   <div style={{textAlign:'center',padding:'2rem',color:'var(--text-dim)'}}>⏳ Fetching from NSE...</div>
                 )}
+
+                {/* FII Analysis & Prediction Engine */}
+                {(() => {
+                  const fii = institutionalActivity?.fii;
+                  if (!fii) return null;
+
+                  // Determine FII equity direction
+                  const equityBull = (fii.net || 0) >= 0;
+
+                  // For futures & options we use net values if available
+                  // fii.futures and fii.options are set from NSE data where available
+                  // fallback: derive from equity direction + context
+                  const futNet = fii.futures ?? fii.net ?? 0;
+                  const optNet = fii.options ?? 0;
+
+                  const futBull = futNet >= 0;
+                  const optBull = optNet >= 0;
+
+                  // FII prediction matrix
+                  let prediction = '', predIcon = '', predColor = '', predBg = '', predDesc = '';
+                  if (equityBull && futBull && optBull) {
+                    prediction='SUPER BULLISH'; predIcon='🚀'; predColor='#4ade80'; predBg='rgba(74,222,128,0.08)';
+                    predDesc='FII buying across Equity, Futures & Options. Strongest bullish signal possible.';
+                  } else if (equityBull && futBull && !optBull) {
+                    prediction='BULLISH'; predIcon='📈'; predColor='#86efac'; predBg='rgba(74,222,128,0.06)';
+                    predDesc='FII buying equity & futures but selling options (hedging upside). Broadly bullish.';
+                  } else if (equityBull && !futBull && !optBull) {
+                    prediction='SIDEWAYS'; predIcon='➡️'; predColor='#fbbf24'; predBg='rgba(251,191,36,0.06)';
+                    predDesc='FII buying equity but selling derivatives. Cautious accumulation, no directional conviction.';
+                  } else if (!equityBull && !futBull && optBull) {
+                    prediction='BEARISH'; predIcon='📉'; predColor='#fca5a5'; predBg='rgba(248,113,113,0.06)';
+                    predDesc='FII selling equity & futures but buying options (put protection). Bearish with hedging.';
+                  } else if (!equityBull && !futBull && !optBull) {
+                    prediction='SUPER BEARISH'; predIcon='🔻'; predColor='#f87171'; predBg='rgba(248,113,113,0.10)';
+                    predDesc='FII selling across all segments. Strongest bearish signal — avoid longs.';
+                  } else if (!equityBull && futBull && optBull) {
+                    prediction='PROFIT BOOKING'; predIcon='💰'; predColor='#fb923c'; predBg='rgba(249,115,22,0.07)';
+                    predDesc='FII selling equity but buying derivatives. Likely profit booking while maintaining derivative exposure.';
+                  } else if (!equityBull && futBull && !optBull) {
+                    prediction='BOTTOM OUT'; predIcon='🔄'; predColor='#a78bfa'; predBg='rgba(167,139,250,0.08)';
+                    predDesc='FII selling equity but buying futures — possible bottoming out. Watch for reversal signal.';
+                  } else {
+                    prediction='MIXED'; predIcon='⚖️'; predColor='#94a3b8'; predBg='rgba(148,163,184,0.06)';
+                    predDesc='Mixed FII signals across segments. Wait for clarity before taking directional trades.';
+                  }
+
+                  // Long/Short analysis
+                  const fiiLong  = (fii.net || 0) > 0;
+                  const callLong = optNet > 0;
+                  const putLong  = optNet < 0;
+
+                  return (
+                    <div style={{marginTop:'1.5rem'}}>
+                      {/* Prediction Banner */}
+                      <div style={{background:predBg,border:`2px solid ${predColor}44`,borderRadius:'14px',padding:'1.25rem',marginBottom:'1.25rem'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:'1rem',flexWrap:'wrap'}}>
+                          <div style={{textAlign:'center',minWidth:'70px'}}>
+                            <div style={{fontSize:'2.2rem'}}>{predIcon}</div>
+                          </div>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:'0.72rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'0.2rem'}}>FII Prediction</div>
+                            <div style={{fontSize:'1.5rem',fontWeight:900,color:predColor,marginBottom:'0.3rem'}}>{prediction}</div>
+                            <div style={{fontSize:'0.82rem',color:'var(--text-dim)',lineHeight:1.5}}>{predDesc}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Signal Breakdown */}
+                      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.6rem',marginBottom:'1.25rem'}}>
+                        {[
+                          {label:'FII Equity', bull: equityBull, val: fii.net},
+                          {label:'FII Futures', bull: futBull,   val: futNet},
+                          {label:'FII Options', bull: optBull,   val: optNet},
+                        ].map((seg,i) => (
+                          <div key={i} style={{background:'var(--bg-dark)',borderRadius:'10px',padding:'0.75rem',textAlign:'center',border:`1px solid ${seg.bull?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'}`}}>
+                            <div style={{fontSize:'0.7rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'0.3rem'}}>{seg.label}</div>
+                            <div style={{fontSize:'1.3rem',fontWeight:900,color:seg.bull?'#4ade80':'#f87171'}}>{seg.bull?'BUY':'SELL'}</div>
+                            {seg.val !== 0 && <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.2rem'}}>{seg.val>=0?'+':''}{(seg.val||0).toFixed(0)} Cr</div>}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* FII Long/Short Interpretation */}
+                      <div style={{background:'var(--bg-dark)',borderRadius:'10px',padding:'1rem',marginBottom:'1rem',border:'1px solid var(--border)'}}>
+                        <div style={{fontWeight:700,fontSize:'0.85rem',marginBottom:'0.75rem',color:'var(--text-main)'}}>📊 FII Position Interpretation</div>
+                        <div style={{display:'grid',gap:'0.5rem'}}>
+                          <div style={{display:'flex',alignItems:'center',gap:'0.5rem',fontSize:'0.82rem'}}>
+                            <span style={{color:fiiLong?'#4ade80':'#f87171',fontWeight:700,minWidth:'70px'}}>{fiiLong?'LONG':'SHORT'}</span>
+                            <span style={{color:'var(--text-dim)'}}>FII are {fiiLong?'Bullish':'Bearish'} in Current Equity Segment</span>
+                          </div>
+                          <div style={{display:'flex',alignItems:'center',gap:'0.5rem',fontSize:'0.82rem'}}>
+                            <span style={{color:callLong?'#4ade80':'#94a3b8',fontWeight:700,minWidth:'70px'}}>{callLong?'CALL LONG':'—'}</span>
+                            {callLong && <span style={{color:'var(--text-dim)'}}>Call Buying & Put Selling → Bullish Options Positioning</span>}
+                            {!callLong && putLong && <span style={{color:'#f87171',fontWeight:700,minWidth:'70px'}}>PUT LONG</span>}
+                            {putLong && <span style={{color:'var(--text-dim)'}}>Put Buying & Call Selling → Bearish Options Positioning</span>}
+                            {!callLong && !putLong && <span style={{color:'var(--text-dim)'}}>No significant options positioning</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Full Matrix Reference */}
+                      <details style={{background:'var(--bg-dark)',borderRadius:'10px',border:'1px solid var(--border)'}}>
+                        <summary style={{padding:'0.75rem 1rem',cursor:'pointer',fontWeight:700,fontSize:'0.82rem',color:'var(--text-dim)'}}>
+                          📋 View Full FII Signal Matrix
+                        </summary>
+                        <div style={{padding:'0.75rem 1rem',overflowX:'auto'}}>
+                          <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.75rem'}}>
+                            <thead>
+                              <tr style={{background:'var(--bg-surface)'}}>
+                                {['#','Equity','Futures','Options','Prediction'].map(h=>(
+                                  <th key={h} style={{padding:'0.4rem 0.6rem',textAlign:'left',color:'var(--text-muted)',borderBottom:'1px solid var(--border)',fontWeight:700,textTransform:'uppercase',fontSize:'0.65rem'}}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {[
+                                [1,'BUY','BUY','BUY','🚀 SUPER BULLISH','#4ade80'],
+                                [2,'BUY','BUY','SELL','📈 BULLISH','#86efac'],
+                                [3,'BUY','SELL','SELL','➡️ SIDEWAYS','#fbbf24'],
+                                [4,'SELL','SELL','BUY','📉 BEARISH','#fca5a5'],
+                                [5,'SELL','SELL','SELL','🔻 SUPER BEARISH','#f87171'],
+                                [6,'SELL','BUY','BUY','💰 PROFIT BOOKING','#fb923c'],
+                                [7,'SELL','BUY','SELL','🔄 BOTTOM OUT','#a78bfa'],
+                              ].map(([num,eq,fut,opt,pred,col])=>(
+                                <tr key={num} style={{borderBottom:'1px solid rgba(255,255,255,0.04)',background: (equityBull===(eq==='BUY') && futBull===(fut==='BUY') && optBull===(opt==='BUY'))?'rgba(255,255,255,0.04)':'transparent'}}>
+                                  <td style={{padding:'0.45rem 0.6rem',color:'var(--text-muted)'}}>{num}</td>
+                                  <td style={{padding:'0.45rem 0.6rem',color:eq==='BUY'?'#4ade80':'#f87171',fontWeight:700}}>{eq}</td>
+                                  <td style={{padding:'0.45rem 0.6rem',color:fut==='BUY'?'#4ade80':'#f87171',fontWeight:700}}>{fut}</td>
+                                  <td style={{padding:'0.45rem 0.6rem',color:opt==='BUY'?'#4ade80':'#f87171',fontWeight:700}}>{opt}</td>
+                                  <td style={{padding:'0.45rem 0.6rem',color:col,fontWeight:700}}>{pred}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </details>
+                    </div>
+                  );
+                })()}
+
               </div>
             )}
 
