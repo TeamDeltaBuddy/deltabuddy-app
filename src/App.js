@@ -2245,7 +2245,7 @@ Respond ONLY with valid JSON:
       let nseJson;
       try {
         const r = await fetch(
-          \`\${BACKEND_URL}/api/option-chain?symbol=\${UNDERLYING_NSE[underlying]||'NIFTY'}\`,
+          `${BACKEND_URL}/api/option-chain?symbol=${UNDERLYING_NSE[underlying]||'NIFTY'}`,
           { headers:{'Accept':'application/json'}, signal: ctrl.signal }
         );
         if (r.ok) nseJson = await r.json();
