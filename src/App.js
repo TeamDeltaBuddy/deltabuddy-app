@@ -7774,6 +7774,7 @@ Respond ONLY with valid JSON:
             )}
           </div>
         ) : activeTab === 'expiry' ? (
+          <div>
           <div className="home-tabs" style={{marginBottom:'1.5rem'}}>
             {[['paper','📝 Paper Trade'],['journal','📓 Journal'],['backtest','📈 Backtest'],['expiry','⏰ Expiry']].map(([t,l])=>(
               <button key={t} className={`home-tab-btn ${activeTab===t?'active':''}`} onClick={()=>setActiveTab(t)}>{l}</button>
@@ -7923,6 +7924,7 @@ Respond ONLY with valid JSON:
             )}
           </div>
 
+          </div>
           </div>
         ) : activeTab === 'gex' ? (
           <ProGate isActive={isPro} onUpgrade={openUpgrade}
