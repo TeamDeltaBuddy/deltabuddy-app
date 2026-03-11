@@ -7506,7 +7506,7 @@ Respond ONLY with valid JSON:
               ) : (
                 <ProGate isActive={false} onUpgrade={openUpgrade}
                   feature="Live Dhan Portfolio Sync"
-                  description="See your real positions, holdings, funds and live P&L from Dhan — updated every 30 seconds. Upgrade to Pro to connect your broker."/>/>
+                  description="See your real positions, holdings, funds and live P&L from Dhan — updated every 30 seconds. Upgrade to Pro to connect your broker."/>
 )
             )}
 
@@ -7535,7 +7535,7 @@ Respond ONLY with valid JSON:
               ) : (
                 <ProGate isActive={false} onUpgrade={openUpgrade}
                   feature="Live Zerodha Portfolio Sync"
-                  description="Connect your Zerodha account to see live positions and holdings. Pro feature."/>/>
+                  description="Connect your Zerodha account to see live positions and holdings. Pro feature."/>
 )
             )}
 
@@ -7567,7 +7567,7 @@ Respond ONLY with valid JSON:
               ) : (
                 <ProGate isActive={false} onUpgrade={openUpgrade}
                   feature="Live Angel One Portfolio Sync"
-                  description="Connect your Angel One SmartAPI to see live positions and P&L. Pro feature."/>/>
+                  description="Connect your Angel One SmartAPI to see live positions and P&L. Pro feature."/>
 )
             )}
 
