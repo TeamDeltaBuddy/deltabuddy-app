@@ -7002,10 +7002,6 @@ Respond ONLY with valid JSON:
                     </div>
                   )}
                 </div>
-              );
-            })()}
-          </>
-          </ProGate>
               ) : null}
             </div>
           );
