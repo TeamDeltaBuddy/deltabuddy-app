@@ -7911,9 +7911,6 @@ Respond ONLY with valid JSON:
               </>
             )}
           </div>
-
-          </div>
-          </div>
         ) : activeTab === 'gex' ? (
           <ProGate isActive={isPro} onUpgrade={openUpgrade}
             feature="GEX + Greeks Analysis"
