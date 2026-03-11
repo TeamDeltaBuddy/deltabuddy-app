@@ -7017,12 +7017,11 @@ Respond ONLY with valid JSON:
                     </div>
                   )}
                 </div>
-
+              );
+            })()}
+          </>
           </ProGate>
           </>
-          </>
-          );
-        })()
         ) : activeTab === 'journal' ? (
           <div>
             {/* Sign-in prompt for journal sync */}
