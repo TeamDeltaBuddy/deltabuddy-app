@@ -569,6 +569,8 @@ function ProGate({ isActive, onUpgrade, feature, description, children, inline =
 
 function App() {
   const [activeTab, setActiveTab] = useState('home');
+  const [analyseSubTab, setAnalyseSubTab] = useState('strategy');   // strategy | scanner | single
+  const [tradesSubTab,  setTradesSubTab]  = useState('paper');       // paper | journal | backtest
   
   const [spot, setSpot] = useState(25500);
   const [strike, setStrike] = useState(25500);
@@ -2540,14 +2542,14 @@ Respond ONLY with valid JSON:
 
   const loadStrategyFromNews = (tradingIdea) => {
     if (tradingIdea.strategy === 'Bear Put Spread' && tradingIdea.strikes) {
-      setActiveTab('strategy');
+      setActiveTab('analyse');setAnalyseSubTab('strategy');
       const newLegs = [
         { id: 1, position: 'buy', optionType: 'put', strike: tradingIdea.strikes.buy, premium: 150, quantity: 1 },
         { id: 2, position: 'sell', optionType: 'put', strike: tradingIdea.strikes.sell, premium: 80, quantity: 1 }
       ];
       setLegs(newLegs);
     } else if (tradingIdea.strategy === 'Bull Call Spread' && tradingIdea.strikes) {
-      setActiveTab('strategy');
+      setActiveTab('analyse');setAnalyseSubTab('strategy');
       const newLegs = [
         { id: 1, position: 'buy', optionType: 'call', strike: tradingIdea.strikes.buy, premium: 150, quantity: 1 },
         { id: 2, position: 'sell', optionType: 'call', strike: tradingIdea.strikes.sell, premium: 80, quantity: 1 }
@@ -2934,7 +2936,7 @@ Respond ONLY with valid JSON:
 
   // Auto-refresh expiry tools when on expiry tab (uses backend per-symbol fetch)
   useEffect(() => {
-    if (activeTab === 'expiry' && !expiryData && !expiryLoading) fetchExpiryData(expirySymbol);
+    if ((activeTab === 'trades' && tradesSubTab === 'expiry') && !expiryData && !expiryLoading) fetchExpiryData(expirySymbol);
   }, [activeTab, expirySymbol]);
 
 
@@ -3211,7 +3213,7 @@ Respond ONLY with valid JSON:
     return breakEvens;
   };
 
-  const breakEvenPoints = activeTab === 'strategy' ? findBreakEvenPoints() : [];
+  const breakEvenPoints = (activeTab === 'analyse' && analyseSubTab === 'strategy') ? findBreakEvenPoints() : [];
 
   const calculatePositionSize = () => {
     const riskAmount = accountSize * (riskPercent / 100);
@@ -3247,17 +3249,12 @@ Respond ONLY with valid JSON:
           {/* Nav links  -  desktop only, scrollable */}
           <div className="nav-links">
             {[
-              ['markets',      '📊 Markets'],
-              ['intelligence', '🧠 Intel'],
-              ['strategy',     '🎯 Strategy'],
-              ['scanner',      '🔍 Scanner'],
-              ['backtest',     '📈 Backtest'],
-              ['single',       '🧮 Calc'],
-              ['journal',      '📓 Journal'],
-              ['paper',        '📝 Paper'],
-              ['portfolio',    '💼 Portfolio'],
-              ['expiry',       '⏰ Expiry'],
-              ['gex',          '🎯 GEX'],
+              ['markets',     '📊 Markets'],
+              ['intelligence','🧠 AI Intel'],
+              ['analyse',     '🎯 Analyse'],
+              ['trades',      '📓 My Trades'],
+              ['portfolio',   '💼 Portfolio'],
+              ['gex',         '⚡ GEX'],
               ...(isAdmin ? [['admin', '🛡️ Admin']] : []),
             ].map(([tab,label])=>(
               <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}>
@@ -3318,17 +3315,12 @@ Respond ONLY with valid JSON:
           overflowY:'auto',
         }}>
           {[
-            ['markets',      '📊 Markets'],
-            ['intelligence', '🧠 Intelligence'],
-            ['strategy',     '🎯 Strategy'],
-            ['backtest',     '📈 Backtest'],
-            ['single',       '🧮 Calculator'],
-            ['scanner',      '🔍 Scanner'],
-            ['journal',      '📓 Journal'],
-            ['paper',        '📝 Paper Trade'],
-            ['portfolio',    '💼 Portfolio'],
-            ['expiry',       '⏰ Expiry Day'],
-            ['gex',          '🎯 GEX / Greeks'],
+            ['markets',     '📊 Markets'],
+            ['intelligence','🧠 AI Intel'],
+            ['analyse',     '🎯 Analyse'],
+            ['trades',      '📓 My Trades'],
+            ['portfolio',   '💼 Portfolio'],
+            ['gex',         '⚡ GEX'],
             ...(isAdmin ? [['admin', '🛡️ Admin']] : []),
           ].map(([tab,label])=>(
             <div key={tab}
@@ -4284,7 +4276,7 @@ Respond ONLY with valid JSON:
                         <span>💼</span>
                         <span style={{fontWeight:700,fontSize:'0.95rem'}}>Open Positions</span>
                       </div>
-                      <button onClick={() => setActiveTab('journal')} style={{background:'none',border:'1px solid var(--border)',color:'var(--accent)',borderRadius:'5px',padding:'2px 10px',fontSize:'0.75rem',cursor:'pointer'}}>Journal →</button>
+                      <button onClick={() => setActiveTab('trades');setTradesSubTab('journal')} style={{background:'none',border:'1px solid var(--border)',color:'var(--accent)',borderRadius:'5px',padding:'2px 10px',fontSize:'0.75rem',cursor:'pointer'}}>Journal →</button>
                     </div>
                     {openTrades.length === 0 ? (
                       <div style={{textAlign:'center',padding:'0.75rem',color:'var(--text-muted)'}}>
@@ -4509,7 +4501,7 @@ Respond ONLY with valid JSON:
             </div>
           </div>
           </>
-        ) : activeTab === 'single' ? (
+              ) : analyseSubTab === 'single' ? (
           <>
             <div className="page-header">
               <h1>Options Calculator</h1>
@@ -4823,7 +4815,15 @@ Respond ONLY with valid JSON:
               </div>
             </div>
           </>
-        ) : activeTab === 'strategy' ? (
+        ) : activeTab === 'analyse' ? (() => {
+          return (
+            <div>
+              <div className="home-tabs" style={{marginBottom:'1.5rem'}}>
+                {[['strategy','🎯 Strategy Builder'],['scanner','🔍 Scanner'],['single','🧮 Calculator']].map(([t,l])=>(
+                  <button key={t} className={`home-tab-btn ${analyseSubTab===t?'active':''}`} onClick={()=>setAnalyseSubTab(t)}>{l}</button>
+                ))}
+              </div>
+              {analyseSubTab === 'strategy' ? (
           (() => {
             // ── Strategy helper: find closest actual strike from chain ──────
             const atmStrike = liveOptionChain.length > 0
@@ -5954,20 +5954,7 @@ Respond ONLY with valid JSON:
                         </div>
                       </div>
 
-                      {/* Signal Breakdown */}
-                      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.6rem',marginBottom:'1.25rem'}}>
-                        {[
-                          {label:'FII Equity', bull: equityBull, val: fii.net},
-                          {label:'FII Futures', bull: futBull,   val: futNet},
-                          {label:'FII Options', bull: optBull,   val: optNet},
-                        ].map((seg,i) => (
-                          <div key={i} style={{background:'var(--bg-dark)',borderRadius:'10px',padding:'0.75rem',textAlign:'center',border:`1px solid ${seg.bull?'rgba(74,222,128,0.25)':'rgba(248,113,113,0.25)'}`}}>
-                            <div style={{fontSize:'0.7rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'0.3rem'}}>{seg.label}</div>
-                            <div style={{fontSize:'1.3rem',fontWeight:900,color:seg.bull?'#4ade80':'#f87171'}}>{seg.bull?'BUY':'SELL'}</div>
-                            {seg.val !== 0 && <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.2rem'}}>{seg.val>=0?'+':''}{(seg.val||0).toFixed(0)} Cr</div>}
-                          </div>
-                        ))}
-                      </div>
+
 
                       {/* FII Long/Short Interpretation */}
                       <div style={{background:'var(--bg-dark)',borderRadius:'10px',padding:'1rem',marginBottom:'1rem',border:'1px solid var(--border)'}}>
@@ -5987,42 +5974,7 @@ Respond ONLY with valid JSON:
                         </div>
                       </div>
 
-                      {/* Full Matrix Reference */}
-                      <details style={{background:'var(--bg-dark)',borderRadius:'10px',border:'1px solid var(--border)'}}>
-                        <summary style={{padding:'0.75rem 1rem',cursor:'pointer',fontWeight:700,fontSize:'0.82rem',color:'var(--text-dim)'}}>
-                          📋 View Full FII Signal Matrix
-                        </summary>
-                        <div style={{padding:'0.75rem 1rem',overflowX:'auto'}}>
-                          <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.75rem'}}>
-                            <thead>
-                              <tr style={{background:'var(--bg-surface)'}}>
-                                {['#','Equity','Futures','Options','Prediction'].map(h=>(
-                                  <th key={h} style={{padding:'0.4rem 0.6rem',textAlign:'left',color:'var(--text-muted)',borderBottom:'1px solid var(--border)',fontWeight:700,textTransform:'uppercase',fontSize:'0.65rem'}}>{h}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {[
-                                [1,'BUY','BUY','BUY','🚀 SUPER BULLISH','#4ade80'],
-                                [2,'BUY','BUY','SELL','📈 BULLISH','#86efac'],
-                                [3,'BUY','SELL','SELL','➡️ SIDEWAYS','#fbbf24'],
-                                [4,'SELL','SELL','BUY','📉 BEARISH','#fca5a5'],
-                                [5,'SELL','SELL','SELL','🔻 SUPER BEARISH','#f87171'],
-                                [6,'SELL','BUY','BUY','💰 PROFIT BOOKING','#fb923c'],
-                                [7,'SELL','BUY','SELL','🔄 BOTTOM OUT','#a78bfa'],
-                              ].map(([num,eq,fut,opt,pred,col])=>(
-                                <tr key={num} style={{borderBottom:'1px solid rgba(255,255,255,0.04)',background: (equityBull===(eq==='BUY') && futBull===(fut==='BUY') && optBull===(opt==='BUY'))?'rgba(255,255,255,0.04)':'transparent'}}>
-                                  <td style={{padding:'0.45rem 0.6rem',color:'var(--text-muted)'}}>{num}</td>
-                                  <td style={{padding:'0.45rem 0.6rem',color:eq==='BUY'?'#4ade80':'#f87171',fontWeight:700}}>{eq}</td>
-                                  <td style={{padding:'0.45rem 0.6rem',color:fut==='BUY'?'#4ade80':'#f87171',fontWeight:700}}>{fut}</td>
-                                  <td style={{padding:'0.45rem 0.6rem',color:opt==='BUY'?'#4ade80':'#f87171',fontWeight:700}}>{opt}</td>
-                                  <td style={{padding:'0.45rem 0.6rem',color:col,fontWeight:700}}>{pred}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </details>
+
                     </div>
                   );
                 })()}
@@ -6340,7 +6292,7 @@ Respond ONLY with valid JSON:
             })()}
           </div>
 
-        ) : activeTab === 'backtest' ? (
+              ) : tradesSubTab === 'backtest' ? (
           <ProGate isActive={isPro} onUpgrade={openUpgrade}
             feature="Strategy Backtester"
             description="Test any options strategy on historical data before risking real money. Uses NSE OHLCV + Black-Scholes pricing. See win rate, max drawdown, P&L curve across months.">
@@ -6756,7 +6708,7 @@ Respond ONLY with valid JSON:
             </div>
           </div>
           </ProGate>
-        ) : activeTab === 'scanner' ? (
+              ) : analyseSubTab === 'scanner' ? (
           <ProGate isActive={isPro} onUpgrade={openUpgrade}
             feature="Live F&O Scanner"
             description="Real-time scanner for IV Crush, PCR Extremes, Gamma Squeeze, unusual OI buildup and more. Catches setups as they form — before retail traders notice.">
@@ -6867,7 +6819,7 @@ Respond ONLY with valid JSON:
                           <span style={{fontSize:'0.7rem',color:'var(--text-muted)'}}>→</span>
                           <span style={{fontSize:'0.78rem',fontWeight:700,color:'var(--accent)'}}>{r.action}</span>
                           {r.strategy && (
-                            <button onClick={()=>{ loadStrategyTemplate(r.strategy); setActiveTab('strategy'); }}
+                            <button onClick={()=>{ loadStrategyTemplate(r.strategy); setActiveTab('analyse');setAnalyseSubTab('strategy'); }}
                               style={{background:'rgba(0,255,136,0.1)',color:'var(--accent)',border:'1px solid rgba(0,255,136,0.25)',borderRadius:'5px',padding:'2px 8px',fontSize:'0.7rem',fontWeight:700,cursor:'pointer'}}>
                               Open in Builder →
                             </button>
@@ -7054,7 +7006,19 @@ Respond ONLY with valid JSON:
             })()}
           </>
           </ProGate>
-        ) : activeTab === 'journal' ? (
+              ) : null}
+            </div>
+          );
+        })()
+        ) : activeTab === 'trades' ? (() => {
+          return (
+            <div>
+              <div className="home-tabs" style={{marginBottom:'1.5rem'}}>
+                {[['paper','📝 Paper Trade'],['journal','📓 Journal'],['backtest','📈 Backtest'],['expiry','⏰ Expiry']].map(([t,l])=>(
+                  <button key={t} className={`home-tab-btn ${tradesSubTab===t?'active':''}`} onClick={()=>setTradesSubTab(t)}>{l}</button>
+                ))}
+              </div>
+              {tradesSubTab === 'journal' ? (
           <div>
             {/* Sign-in prompt for journal sync */}
             {!currentUser && (
@@ -7245,7 +7209,7 @@ Respond ONLY with valid JSON:
               </div>
             ))}
           </div>
-        ) : activeTab === 'paper' ? (
+              ) : tradesSubTab === 'paper' ? (
           <div className="main-content">
             <div className="page-header">
               <h1>📝 Paper Trading</h1>
@@ -7395,6 +7359,10 @@ Respond ONLY with valid JSON:
               </div>
             )}
           </div>
+              ) : null}
+            </div>
+          );
+        })()
         ) : activeTab === 'portfolio' ? (
           <div>
             {/* Header */}
@@ -7805,7 +7773,7 @@ Respond ONLY with valid JSON:
               </div>
             )}
           </div>
-        ) : activeTab === 'expiry' ? (
+              ) : tradesSubTab === 'expiry' ? (
           <div>
             {/* Header */}
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem'}}>
