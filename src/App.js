@@ -4901,6 +4901,12 @@ Respond ONLY with valid JSON:
 
             return (
               <>
+            <div className="home-tabs" style={{marginBottom:'1.5rem'}}>
+              {[['strategy','🎯 Strategy Builder'],['scanner','🔍 Scanner'],['single','🧮 Calculator']].map(([t,l])=>(
+                <button key={t} className={`home-tab-btn ${activeTab===t?'active':''}`} onClick={()=>setActiveTab(t)}>{l}</button>
+              ))}
+            </div>
+
                 {/* ── Top Bar ───────────────────────────────────────── */}
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'0.75rem',marginBottom:'1.25rem'}}>
                   <div>
@@ -7017,8 +7023,6 @@ Respond ONLY with valid JSON:
           );
         })()
         ) : activeTab === 'journal' ? (
-              </div>
-
           <div>
             {/* Sign-in prompt for journal sync */}
             {!currentUser && (
