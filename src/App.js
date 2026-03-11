@@ -2936,7 +2936,7 @@ Respond ONLY with valid JSON:
 
   // Auto-refresh expiry tools when on expiry tab (uses backend per-symbol fetch)
   useEffect(() => {
-    if ((activeTab === 'trades' && tradesSubTab === 'expiry') && !expiryData && !expiryLoading) fetchExpiryData(expirySymbol);
+    if (activeTab === 'expiry' && !expiryData && !expiryLoading) fetchExpiryData(expirySymbol);
   }, [activeTab, expirySymbol]);
 
 
@@ -3213,7 +3213,7 @@ Respond ONLY with valid JSON:
     return breakEvens;
   };
 
-  const breakEvenPoints = (activeTab === 'analyse' && analyseSubTab === 'strategy') ? findBreakEvenPoints() : [];
+  const breakEvenPoints = activeTab === 'strategy' ? findBreakEvenPoints() : [];
 
   const calculatePositionSize = () => {
     const riskAmount = accountSize * (riskPercent / 100);
@@ -3248,19 +3248,24 @@ Respond ONLY with valid JSON:
 
           {/* Nav links  -  desktop only, scrollable */}
           <div className="nav-links">
-            {[
-              ['markets',     '📊 Markets'],
-              ['intelligence','🧠 AI Intel'],
-              ['analyse',     '🎯 Analyse'],
-              ['trades',      '📓 My Trades'],
-              ['portfolio',   '💼 Portfolio'],
-              ['gex',         '⚡ GEX'],
-              ...(isAdmin ? [['admin', '🛡️ Admin']] : []),
-            ].map(([tab,label])=>(
-              <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}>
-                {label}
-              </span>
-            ))}
+            {(() => {
+              const navTabs = [
+                {label:'📊 Markets',   tabs:['markets']},
+                {label:'🧠 AI Intel',  tabs:['intelligence']},
+                {label:'🎯 Analyse',   tabs:['strategy','scanner','single']},
+                {label:'📓 My Trades', tabs:['paper','journal','backtest','expiry']},
+                {label:'💼 Portfolio', tabs:['portfolio']},
+                {label:'⚡ GEX',       tabs:['gex']},
+                ...(isAdmin ? [{label:'🛡️ Admin', tabs:['admin']}] : []),
+              ];
+              return navTabs.map(({label, tabs}) => (
+                <span key={label}
+                  className={tabs.includes(activeTab) ? 'active' : ''}
+                  onClick={()=>{setActiveTab(tabs[0]);setShowMobileMenu(false);}}>
+                  {label}
+                </span>
+              ));
+            })()}
           </div>
 
           {/* Right controls */}
@@ -3317,8 +3322,8 @@ Respond ONLY with valid JSON:
           {[
             ['markets',     '📊 Markets'],
             ['intelligence','🧠 AI Intel'],
-            ['analyse',     '🎯 Analyse'],
-            ['trades',      '📓 My Trades'],
+            ['strategy',    '🎯 Analyse'],
+            ['paper',       '📓 My Trades'],
             ['portfolio',   '💼 Portfolio'],
             ['gex',         '⚡ GEX'],
             ...(isAdmin ? [['admin', '🛡️ Admin']] : []),
@@ -4501,8 +4506,13 @@ Respond ONLY with valid JSON:
             </div>
           </div>
           </>
-              ) : analyseSubTab === 'single' ? (
+        ) : activeTab === 'single' ? (
           <>
+          <div className="home-tabs" style={{marginBottom:'1.5rem'}}>
+            {[['strategy','🎯 Strategy Builder'],['scanner','🔍 Scanner'],['single','🧮 Calculator']].map(([t,l])=>(
+              <button key={t} className={`home-tab-btn ${activeTab===t?'active':''}`} onClick={()=>setActiveTab(t)}>{l}</button>
+            ))}
+          </div>
             <div className="page-header">
               <h1>Options Calculator</h1>
               <p className="subtitle">Analyze your options positions with Greeks and P&L visualization</p>
@@ -4815,15 +4825,7 @@ Respond ONLY with valid JSON:
               </div>
             </div>
           </>
-        ) : activeTab === 'analyse' ? ((() => {
-          return (
-            <div>
-              <div className="home-tabs" style={{marginBottom:'1.5rem'}}>
-                {[['strategy','🎯 Strategy Builder'],['scanner','🔍 Scanner'],['single','🧮 Calculator']].map(([t,l])=>(
-                  <button key={t} className={`home-tab-btn ${analyseSubTab===t?'active':''}`} onClick={()=>setAnalyseSubTab(t)}>{l}</button>
-                ))}
-              </div>
-              {analyseSubTab === 'strategy' ? (
+        ) : activeTab === 'strategy' ? (
           (() => {
             // ── Strategy helper: find closest actual strike from chain ──────
             const atmStrike = liveOptionChain.length > 0
@@ -5328,9 +5330,7 @@ Respond ONLY with valid JSON:
                     ))}
                   </div>
                 </div>
-              </>
-            );
-          })())
+
         ) : activeTab === 'markets' ? (
           <div>
             {/* -- STOCK DEEP DIVE -- */}
@@ -6292,7 +6292,7 @@ Respond ONLY with valid JSON:
             })()}
           </div>
 
-              ) : tradesSubTab === 'backtest' ? (
+        ) : activeTab === 'backtest' ? (
           <ProGate isActive={isPro} onUpgrade={openUpgrade}
             feature="Strategy Backtester"
             description="Test any options strategy on historical data before risking real money. Uses NSE OHLCV + Black-Scholes pricing. See win rate, max drawdown, P&L curve across months.">
@@ -6708,8 +6708,14 @@ Respond ONLY with valid JSON:
             </div>
           </div>
           </ProGate>
-              ) : analyseSubTab === 'scanner' ? (
-          <ProGate isActive={isPro} onUpgrade={openUpgrade}
+        ) : activeTab === 'scanner' ? (
+          <>
+          <div className="home-tabs" style={{marginBottom:'1.5rem'}}>
+            {[['strategy','🎯 Strategy Builder'],['scanner','🔍 Scanner'],['single','🧮 Calculator']].map(([t,l])=>(
+              <button key={t} className={`home-tab-btn ${activeTab===t?'active':''}`} onClick={()=>setActiveTab(t)}>{l}</button>
+            ))}
+          </div>
+                    <ProGate isActive={isPro} onUpgrade={openUpgrade}
             feature="Live F&O Scanner"
             description="Real-time scanner for IV Crush, PCR Extremes, Gamma Squeeze, unusual OI buildup and more. Catches setups as they form — before retail traders notice.">
           <>
@@ -7002,19 +7008,13 @@ Respond ONLY with valid JSON:
                     </div>
                   )}
                 </div>
-              ) : null}
-            </div>
+
+          </>
           );
         })()
-        ) : activeTab === 'trades' ? ((() => {
-          return (
-            <div>
-              <div className="home-tabs" style={{marginBottom:'1.5rem'}}>
-                {[['paper','📝 Paper Trade'],['journal','📓 Journal'],['backtest','📈 Backtest'],['expiry','⏰ Expiry']].map(([t,l])=>(
-                  <button key={t} className={`home-tab-btn ${tradesSubTab===t?'active':''}`} onClick={()=>setTradesSubTab(t)}>{l}</button>
-                ))}
+        ) : activeTab === 'journal' ? (
               </div>
-              {tradesSubTab === 'journal' ? (
+
           <div>
             {/* Sign-in prompt for journal sync */}
             {!currentUser && (
@@ -7205,7 +7205,7 @@ Respond ONLY with valid JSON:
               </div>
             ))}
           </div>
-              ) : tradesSubTab === 'paper' ? (
+        ) : activeTab === 'paper' ? (
           <div className="main-content">
             <div className="page-header">
               <h1>📝 Paper Trading</h1>
@@ -7355,10 +7355,8 @@ Respond ONLY with valid JSON:
               </div>
             )}
           </div>
-              ) : null}
-            </div>
-          );
-        })())
+
+          </div>
         ) : activeTab === 'portfolio' ? (
           <div>
             {/* Header */}
@@ -7769,8 +7767,13 @@ Respond ONLY with valid JSON:
               </div>
             )}
           </div>
-              ) : tradesSubTab === 'expiry' ? (
+        ) : activeTab === 'expiry' ? (
           <div>
+          <div className="home-tabs" style={{marginBottom:'1.5rem'}}>
+            {[['paper','📝 Paper Trade'],['journal','📓 Journal'],['backtest','📈 Backtest'],['expiry','⏰ Expiry']].map(([t,l])=>(
+              <button key={t} className={`home-tab-btn ${activeTab===t?'active':''}`} onClick={()=>setActiveTab(t)}>{l}</button>
+            ))}
+          </div>
             {/* Header */}
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem'}}>
               <div>
