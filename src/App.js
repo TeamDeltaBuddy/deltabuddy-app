@@ -4815,7 +4815,7 @@ Respond ONLY with valid JSON:
               </div>
             </div>
           </>
-        ) : activeTab === 'analyse' ? (() => {
+        ) : activeTab === 'analyse' ? ((() => {
           return (
             <div>
               <div className="home-tabs" style={{marginBottom:'1.5rem'}}>
@@ -5330,7 +5330,7 @@ Respond ONLY with valid JSON:
                 </div>
               </>
             );
-          })()
+          })())
         ) : activeTab === 'markets' ? (
           <div>
             {/* -- STOCK DEEP DIVE -- */}
@@ -7006,7 +7006,7 @@ Respond ONLY with valid JSON:
             </div>
           );
         })()
-        ) : activeTab === 'trades' ? (() => {
+        ) : activeTab === 'trades' ? ((() => {
           return (
             <div>
               <div className="home-tabs" style={{marginBottom:'1.5rem'}}>
@@ -7358,7 +7358,7 @@ Respond ONLY with valid JSON:
               ) : null}
             </div>
           );
-        })()
+        })())
         ) : activeTab === 'portfolio' ? (
           <div>
             {/* Header */}
