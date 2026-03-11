@@ -5331,6 +5331,9 @@ Respond ONLY with valid JSON:
                   </div>
                 </div>
 
+              </>
+            );
+          })()
         ) : activeTab === 'markets' ? (
           <div>
             {/* -- STOCK DEEP DIVE -- */}
@@ -7009,6 +7012,7 @@ Respond ONLY with valid JSON:
                   )}
                 </div>
 
+          </ProGate>
           </>
           );
         })()
@@ -7354,8 +7358,6 @@ Respond ONLY with valid JSON:
                 <div style={{fontSize:'0.9rem'}}>Place your first order above. You start with ₹5,00,000 virtual balance.</div>
               </div>
             )}
-          </div>
-
           </div>
         ) : activeTab === 'portfolio' ? (
           <div>
@@ -7768,7 +7770,6 @@ Respond ONLY with valid JSON:
             )}
           </div>
         ) : activeTab === 'expiry' ? (
-          <div>
           <div className="home-tabs" style={{marginBottom:'1.5rem'}}>
             {[['paper','📝 Paper Trade'],['journal','📓 Journal'],['backtest','📈 Backtest'],['expiry','⏰ Expiry']].map(([t,l])=>(
               <button key={t} className={`home-tab-btn ${activeTab===t?'active':''}`} onClick={()=>setActiveTab(t)}>{l}</button>
@@ -7918,6 +7919,7 @@ Respond ONLY with valid JSON:
             )}
           </div>
 
+          </div>
         ) : activeTab === 'gex' ? (
           <ProGate isActive={isPro} onUpgrade={openUpgrade}
             feature="GEX + Greeks Analysis"
