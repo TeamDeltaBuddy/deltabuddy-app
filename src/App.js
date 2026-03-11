@@ -4276,7 +4276,7 @@ Respond ONLY with valid JSON:
                         <span>💼</span>
                         <span style={{fontWeight:700,fontSize:'0.95rem'}}>Open Positions</span>
                       </div>
-                      <button onClick={() => setActiveTab('trades');setTradesSubTab('journal')} style={{background:'none',border:'1px solid var(--border)',color:'var(--accent)',borderRadius:'5px',padding:'2px 10px',fontSize:'0.75rem',cursor:'pointer'}}>Journal →</button>
+                      <button onClick={()=>{setActiveTab('trades');setTradesSubTab('journal');}} style={{background:'none',border:'1px solid var(--border)',color:'var(--accent)',borderRadius:'5px',padding:'2px 10px',fontSize:'0.75rem',cursor:'pointer'}}>Journal →</button>
                     </div>
                     {openTrades.length === 0 ? (
                       <div style={{textAlign:'center',padding:'0.75rem',color:'var(--text-muted)'}}>
