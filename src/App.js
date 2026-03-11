@@ -3248,24 +3248,24 @@ Respond ONLY with valid JSON:
 
           {/* Nav links  -  desktop only, scrollable */}
           <div className="nav-links">
-            {(() => {
-              const navTabs = [
-                {label:'📊 Markets',   tabs:['markets']},
-                {label:'🧠 AI Intel',  tabs:['intelligence']},
-                {label:'🎯 Analyse',   tabs:['strategy','scanner','single']},
-                {label:'📓 My Trades', tabs:['paper','journal','backtest','expiry']},
-                {label:'💼 Portfolio', tabs:['portfolio']},
-                {label:'⚡ GEX',       tabs:['gex']},
-                ...(isAdmin ? [{label:'🛡️ Admin', tabs:['admin']}] : []),
-              ];
-              return navTabs.map(({label, tabs}) => (
-                <span key={label}
-                  className={tabs.includes(activeTab) ? 'active' : ''}
-                  onClick={()=>{setActiveTab(tabs[0]);setShowMobileMenu(false);}}>
-                  {label}
-                </span>
-              ));
-            })()}
+            {[
+              ['markets',      '📊 Markets'],
+              ['intelligence', '🧠 Intel'],
+              ['strategy',     '🎯 Strategy'],
+              ['scanner',      '🔍 Scanner'],
+              ['backtest',     '📈 Backtest'],
+              ['single',       '🧮 Calc'],
+              ['journal',      '📓 Journal'],
+              ['paper',        '📝 Paper'],
+              ['portfolio',    '💼 Portfolio'],
+              ['expiry',       '⏰ Expiry'],
+              ['gex',          '🎯 GEX'],
+              ...(isAdmin ? [['admin', '🛡️ Admin']] : []),
+            ].map(([tab,label])=>(
+              <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}>
+                {label}
+              </span>
+            ))}
           </div>
 
           {/* Right controls */}
@@ -3320,12 +3320,17 @@ Respond ONLY with valid JSON:
           overflowY:'auto',
         }}>
           {[
-            ['markets',     '📊 Markets'],
-            ['intelligence','🧠 AI Intel'],
-            ['strategy',    '🎯 Analyse'],
-            ['paper',       '📓 My Trades'],
-            ['portfolio',   '💼 Portfolio'],
-            ['gex',         '⚡ GEX'],
+            ['markets',      '📊 Markets'],
+            ['intelligence', '🧠 Intelligence'],
+            ['strategy',     '🎯 Strategy'],
+            ['backtest',     '📈 Backtest'],
+            ['single',       '🧮 Calculator'],
+            ['scanner',      '🔍 Scanner'],
+            ['journal',      '📓 Journal'],
+            ['paper',        '📝 Paper Trade'],
+            ['portfolio',    '💼 Portfolio'],
+            ['expiry',       '⏰ Expiry Day'],
+            ['gex',          '🎯 GEX / Greeks'],
             ...(isAdmin ? [['admin', '🛡️ Admin']] : []),
           ].map(([tab,label])=>(
             <div key={tab}
@@ -4508,11 +4513,6 @@ Respond ONLY with valid JSON:
           </>
         ) : activeTab === 'single' ? (
           <>
-          <div className="home-tabs" style={{marginBottom:'1.5rem'}}>
-            {[['strategy','🎯 Strategy Builder'],['scanner','🔍 Scanner'],['single','🧮 Calculator']].map(([t,l])=>(
-              <button key={t} className={`home-tab-btn ${activeTab===t?'active':''}`} onClick={()=>setActiveTab(t)}>{l}</button>
-            ))}
-          </div>
             <div className="page-header">
               <h1>Options Calculator</h1>
               <p className="subtitle">Analyze your options positions with Greeks and P&L visualization</p>
@@ -6718,12 +6718,6 @@ Respond ONLY with valid JSON:
           </div>
           </ProGate>
         ) : activeTab === 'scanner' ? (
-          <>
-          <div className="home-tabs" style={{marginBottom:'1.5rem'}}>
-            {[['strategy','🎯 Strategy Builder'],['scanner','🔍 Scanner'],['single','🧮 Calculator']].map(([t,l])=>(
-              <button key={t} className={`home-tab-btn ${activeTab===t?'active':''}`} onClick={()=>setActiveTab(t)}>{l}</button>
-            ))}
-          </div>
                     <ProGate isActive={isPro} onUpgrade={openUpgrade}
             feature="Live F&O Scanner"
             description="Real-time scanner for IV Crush, PCR Extremes, Gamma Squeeze, unusual OI buildup and more. Catches setups as they form — before retail traders notice.">
@@ -7021,7 +7015,6 @@ Respond ONLY with valid JSON:
             })()}
           </>
           </ProGate>
-          </>
         ) : activeTab === 'journal' ? (
           <div>
             {/* Sign-in prompt for journal sync */}
@@ -7775,11 +7768,6 @@ Respond ONLY with valid JSON:
           </div>
         ) : activeTab === 'expiry' ? (
           <div>
-          <div className="home-tabs" style={{marginBottom:'1.5rem'}}>
-            {[['paper','📝 Paper Trade'],['journal','📓 Journal'],['backtest','📈 Backtest'],['expiry','⏰ Expiry']].map(([t,l])=>(
-              <button key={t} className={`home-tab-btn ${activeTab===t?'active':''}`} onClick={()=>setActiveTab(t)}>{l}</button>
-            ))}
-          </div>
             {/* Header */}
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem'}}>
               <div>
