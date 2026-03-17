@@ -3901,7 +3901,126 @@ Respond ONLY with valid JSON:
 
 
             
-            {/* == TRACK YOUR INDICES & STOCKS == */}
+            {/* == SHOULD I TRADE TODAY? == */}
+            {(() => {
+              const vix    = parseFloat(marketData.vix?.value || 0);
+              const niftyChg = parseFloat(marketData.nifty?.change || 0);
+              const ceOI   = liveOptionChain.reduce((a,r)=>a+(r.ce?.oi||0),0);
+              const peOI   = liveOptionChain.reduce((a,r)=>a+(r.pe?.oi||0),0);
+              const pcr    = ceOI>0 ? peOI/ceOI : null;
+
+              // Score each factor: +1 favours trading, -1 against, 0 neutral
+              const factors = [];
+
+              // VIX factor
+              if (vix > 0) {
+                if (vix < 14)      factors.push({ name:'India VIX', score: 1,  icon:'😌', msg:`VIX ${vix.toFixed(1)} — Low volatility, calm market` });
+                else if (vix < 20) factors.push({ name:'India VIX', score: 1,  icon:'✅', msg:`VIX ${vix.toFixed(1)} — Healthy volatility for options` });
+                else if (vix < 25) factors.push({ name:'India VIX', score: 0,  icon:'⚠️', msg:`VIX ${vix.toFixed(1)} — Elevated, use smaller size` });
+                else               factors.push({ name:'India VIX', score:-1,  icon:'🚨', msg:`VIX ${vix.toFixed(1)} — Danger zone, premium inflated` });
+              } else {
+                factors.push({ name:'India VIX', score:0, icon:'⏳', msg:'VIX data loading...' });
+              }
+
+              // Nifty trend factor
+              if (marketData.nifty?.value > 0) {
+                const abs = Math.abs(niftyChg);
+                if (abs < 0.3)      factors.push({ name:'Nifty Trend', score: 0, icon:'➡️', msg:`Nifty ${niftyChg>=0?'+':''}${niftyChg.toFixed(2)}% — Flat day, scalpers may struggle` });
+                else if (abs < 1.0) factors.push({ name:'Nifty Trend', score: 1, icon:'✅', msg:`Nifty ${niftyChg>=0?'+':''}${niftyChg.toFixed(2)}% — Ideal directional range` });
+                else                factors.push({ name:'Nifty Trend', score:-1, icon:'⚠️', msg:`Nifty ${niftyChg>=0?'+':''}${niftyChg.toFixed(2)}% — High move, gap-risk on options` });
+              } else {
+                factors.push({ name:'Nifty Trend', score:0, icon:'⏳', msg:'Market data loading...' });
+              }
+
+              // PCR factor
+              if (pcr !== null) {
+                if (pcr >= 0.8 && pcr <= 1.4) factors.push({ name:'PCR Zone',    score: 1,  icon:'✅', msg:`PCR ${pcr.toFixed(2)} — Balanced market, good for both sides` });
+                else if (pcr > 1.6)            factors.push({ name:'PCR Zone',    score: 0,  icon:'⚠️', msg:`PCR ${pcr.toFixed(2)} — Overbought, avoid fresh CE buys` });
+                else if (pcr < 0.6)            factors.push({ name:'PCR Zone',    score:-1,  icon:'🚨', msg:`PCR ${pcr.toFixed(2)} — Extreme fear, market unstable` });
+                else                           factors.push({ name:'PCR Zone',    score: 0,  icon:'➡️', msg:`PCR ${pcr.toFixed(2)} — Slightly skewed, trade cautiously` });
+              } else {
+                factors.push({ name:'PCR Zone', score:0, icon:'⏳', msg:'Load option chain for PCR' });
+              }
+
+              // FII factor (use institutionalActivity if loaded)
+              if (institutionalActivity?.fii?.net != null) {
+                const fiiNet = institutionalActivity.fii.net;
+                if (fiiNet >  500)  factors.push({ name:'FII Flow',  score: 1,  icon:'🟢', msg:`FII bought ₹${fiiNet.toFixed(0)}Cr — Institutional support` });
+                else if (fiiNet > 0) factors.push({ name:'FII Flow', score: 1,  icon:'✅', msg:`FII net buyers ₹${fiiNet.toFixed(0)}Cr — Mildly bullish` });
+                else if (fiiNet > -500) factors.push({ name:'FII Flow', score:0, icon:'⚠️', msg:`FII sold ₹${Math.abs(fiiNet).toFixed(0)}Cr — Mild caution` });
+                else                factors.push({ name:'FII Flow',  score:-1,  icon:'🚨', msg:`FII sold ₹${Math.abs(fiiNet).toFixed(0)}Cr — Heavy selling` });
+              } else {
+                factors.push({ name:'FII Flow', score:0, icon:'⏳', msg:'Load FII/DII tab for data' });
+              }
+
+              // Global cues factor
+              if (globalCues?.prediction) {
+                const pred = globalCues.predictionColor;
+                if (pred === 'bullish')       factors.push({ name:'Global Cues', score: 1,  icon:'🌍', msg:`Global: ${globalCues.prediction} — Positive overnight cues` });
+                else if (pred === 'bearish')  factors.push({ name:'Global Cues', score:-1,  icon:'🌍', msg:`Global: ${globalCues.prediction} — Negative cues, trade light` });
+                else                          factors.push({ name:'Global Cues', score: 0,  icon:'🌍', msg:`Global: ${globalCues.prediction} — Mixed signals` });
+              } else {
+                factors.push({ name:'Global Cues', score:0, icon:'⏳', msg:'Load Global Cues tab for data' });
+              }
+
+              // Calculate overall score
+              const totalScore  = factors.reduce((a,f)=>a+f.score, 0);
+              const maxScore    = factors.length;
+              const pct         = (totalScore + maxScore) / (2 * maxScore); // 0 to 1
+
+              let verdict, verdictColor, verdictBg, verdictIcon, verdictDesc;
+              if (totalScore >= 3) {
+                verdict='YES — GOOD DAY TO TRADE'; verdictIcon='🟢'; verdictColor='#4ade80'; verdictBg='rgba(74,222,128,0.08)';
+                verdictDesc='Most factors are aligned. Market conditions favour retail traders today.';
+              } else if (totalScore >= 1) {
+                verdict='PROCEED WITH CAUTION'; verdictIcon='🟡'; verdictColor='#fbbf24'; verdictBg='rgba(251,191,36,0.08)';
+                verdictDesc='Mixed signals. Trade smaller size, stick to defined strategies.';
+              } else if (totalScore >= -1) {
+                verdict='NEUTRAL — STAY SELECTIVE'; verdictIcon='🟠'; verdictColor='#fb923c'; verdictBg='rgba(249,115,22,0.08)';
+                verdictDesc='Conditions are uncertain. Only high-conviction setups worth taking.';
+              } else {
+                verdict='NO — AVOID TRADING TODAY'; verdictIcon='🔴'; verdictColor='#f87171'; verdictBg='rgba(248,113,113,0.08)';
+                verdictDesc='Multiple risk factors active. Protect your capital — sit on hands.';
+              }
+
+              return (
+                <div style={{background:'var(--bg-card)',border:`2px solid ${verdictColor}44`,borderRadius:'16px',padding:'1.25rem',marginBottom:'1.5rem'}}>
+                  {/* Header */}
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:'0.5rem'}}>
+                    <div style={{fontWeight:800,fontSize:'1rem',color:'var(--text-main)'}}>🎯 Should I Trade Today?</div>
+                    <div style={{fontSize:'0.7rem',color:'var(--text-muted)'}}>Live · Updates with market data</div>
+                  </div>
+
+                  {/* Verdict */}
+                  <div style={{background:verdictBg,border:`1px solid ${verdictColor}44`,borderRadius:'12px',padding:'1rem 1.25rem',marginBottom:'1rem',display:'flex',alignItems:'center',gap:'1rem',flexWrap:'wrap'}}>
+                    <div style={{fontSize:'2rem'}}>{verdictIcon}</div>
+                    <div>
+                      <div style={{fontWeight:900,fontSize:'1.05rem',color:verdictColor,marginBottom:'0.2rem'}}>{verdict}</div>
+                      <div style={{fontSize:'0.8rem',color:'var(--text-dim)',lineHeight:1.5}}>{verdictDesc}</div>
+                    </div>
+                    <div style={{marginLeft:'auto',textAlign:'center',minWidth:'50px'}}>
+                      <div style={{fontSize:'1.8rem',fontWeight:900,color:verdictColor}}>{totalScore > 0 ? '+' : ''}{totalScore}</div>
+                      <div style={{fontSize:'0.65rem',color:'var(--text-muted)'}}>/{maxScore}</div>
+                    </div>
+                  </div>
+
+                  {/* Factor breakdown */}
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:'0.5rem'}}>
+                    {factors.map((f,i) => (
+                      <div key={i} style={{background:'var(--bg-dark)',borderRadius:'9px',padding:'0.6rem 0.8rem',border:`1px solid ${f.score===1?'rgba(74,222,128,0.2)':f.score===-1?'rgba(248,113,113,0.2)':'rgba(255,255,255,0.06)'}`,display:'flex',gap:'0.6rem',alignItems:'flex-start'}}>
+                        <span style={{fontSize:'1rem',flexShrink:0,marginTop:'1px'}}>{f.icon}</span>
+                        <div>
+                          <div style={{fontSize:'0.68rem',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'0.15rem'}}>{f.name}</div>
+                          <div style={{fontSize:'0.75rem',color:f.score===1?'#4ade80':f.score===-1?'#f87171':'var(--text-dim)',lineHeight:1.4}}>{f.msg}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+                        {/* == TRACK YOUR INDICES & STOCKS == */}
             <div className="panel" style={{marginBottom:'1.5rem'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem'}}>
                 <h3 style={{margin:0}}>📊 Track Your Indices &amp; Stocks</h3>
