@@ -1292,6 +1292,8 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   // INSTITUTIONAL ACTIVITY — fetched from NSE EOD
   const [institutionalActivity, setInstitutionalActivity] = useState(null);
   const [fiiDiiLoading, setFiiDiiLoading] = useState(false);
+  const [globalCues, setGlobalCues]       = useState(null);
+  const [globalCuesLoading, setGlobalCuesLoading] = useState(false);
   const [fiiDiiError, setFiiDiiError] = useState('');
   const [bulkDeals, setBulkDeals] = useState([]);
   const [blockDeals, setBlockDeals] = useState([]);
@@ -2916,6 +2918,12 @@ Respond ONLY with valid JSON:
     if (activeTab !== 'markets') return;
     if (activeMarketsTab === 'option-chain') {
       if (liveOptionChain.length === 0) generateLiveOptionChain(selectedUnderlying);
+    }
+    if (activeMarketsTab === 'global-cues' && !globalCues) {
+      setGlobalCuesLoading(true);
+      fetch(`${BACKEND_URL}/api/global-cues`)
+        .then(r=>r.json()).then(j=>{ if(j.ok) setGlobalCues(j); })
+        .catch(()=>{}).finally(()=>setGlobalCuesLoading(false));
     }
     if (activeMarketsTab === 'fii-dii') {
       fetchFiiDii();
@@ -5547,6 +5555,7 @@ Respond ONLY with valid JSON:
                 ['pcr','⚡ PCR'],
                 ['max-pain','🎯 Max Pain'],
                 ['fii-dii','🏦 FII/DII'],
+                ['global-cues','🌍 Global Cues'],
                 ['events','📅 Events'],
               ].map(([tab,label])=>(
                 <button key={tab} className={`home-tab-btn ${activeMarketsTab===tab?'active':''}`} onClick={()=>setActiveMarketsTab(tab)}>{label}</button>
@@ -5991,7 +6000,117 @@ Respond ONLY with valid JSON:
               </div>
             )}
 
-            {activeMarketsTab === 'events' && (
+            {activeMarketsTab === 'global-cues' && (
+              <div className="panel">
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem',flexWrap:'wrap',gap:'0.5rem'}}>
+                  <div>
+                    <h2 style={{margin:0}}>🌍 Global Cues</h2>
+                    <p style={{color:'var(--text-dim)',margin:'0.25rem 0 0',fontSize:'0.82rem'}}>Overnight global markets → Indian open prediction</p>
+                  </div>
+                  <button onClick={()=>{ setGlobalCues(null); setGlobalCuesLoading(true); fetch(`${BACKEND_URL}/api/global-cues`).then(r=>r.json()).then(j=>{if(j.ok)setGlobalCues(j);}).catch(()=>{}).finally(()=>setGlobalCuesLoading(false)); }}
+                    style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
+                    {globalCuesLoading ? '⏳ Loading...' : '🔄 Refresh'}
+                  </button>
+                </div>
+
+                {globalCuesLoading && <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>⏳ Fetching global markets...</div>}
+
+                {globalCues && (() => {
+                  const { data, prediction, predictionColor, gapEst, alerts } = globalCues;
+                  const predClr = predictionColor === 'bullish' ? '#4ade80' : predictionColor === 'bearish' ? '#f87171' : '#fbbf24';
+                  const predIcon = predictionColor === 'bullish' ? '📈' : predictionColor === 'bearish' ? '📉' : '➡️';
+
+                  const categories = [
+                    { id:'us',          label:'🇺🇸 US Markets' },
+                    { id:'asia',        label:'🌏 Asia Pacific' },
+                    { id:'europe',      label:'🇪🇺 Europe' },
+                    { id:'commodities', label:'🛢️ Commodities' },
+                    { id:'fx',          label:'💱 FX / Currency' },
+                    { id:'bonds',       label:'🏦 Bonds' },
+                  ];
+
+                  return (
+                    <>
+                      {/* Prediction Banner */}
+                      <div style={{background:`${predClr}11`,border:`2px solid ${predClr}44`,borderRadius:'14px',padding:'1.25rem 1.5rem',marginBottom:'1.25rem',display:'flex',alignItems:'center',gap:'1.25rem',flexWrap:'wrap'}}>
+                        <div style={{fontSize:'2.5rem'}}>{predIcon}</div>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:'0.72rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'0.2rem'}}>Indian Market Open Prediction</div>
+                          <div style={{fontSize:'1.6rem',fontWeight:900,color:predClr,lineHeight:1}}>{prediction}</div>
+                          <div style={{fontSize:'0.82rem',color:'var(--text-dim)',marginTop:'0.3rem'}}>Estimated gap: <strong style={{color:predClr}}>{gapEst}</strong></div>
+                        </div>
+                        <div style={{fontSize:'0.75rem',color:'var(--text-muted)',textAlign:'right'}}>
+                          Updated<br/>{new Date(globalCues.fetchedAt).toLocaleTimeString('en-IN')}
+                        </div>
+                      </div>
+
+                      {/* Alerts */}
+                      {alerts && alerts.length > 0 && (
+                        <div style={{marginBottom:'1.25rem',display:'flex',flexDirection:'column',gap:'0.5rem'}}>
+                          {alerts.map((a,i) => (
+                            <div key={i} style={{
+                              padding:'0.65rem 1rem',borderRadius:'9px',fontSize:'0.82rem',lineHeight:1.5,
+                              background: a.type==='danger'?'rgba(248,113,113,0.08)':a.type==='warning'?'rgba(251,191,36,0.08)':'rgba(96,165,250,0.08)',
+                              border: `1px solid ${a.type==='danger'?'rgba(248,113,113,0.25)':a.type==='warning'?'rgba(251,191,36,0.25)':'rgba(96,165,250,0.25)'}`,
+                              color: a.type==='danger'?'#f87171':a.type==='warning'?'#fbbf24':'#60a5fa',
+                            }}>
+                              {a.type==='danger'?'🚨':a.type==='warning'?'⚠️':'ℹ️'} {a.msg}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Market Cards by Category */}
+                      {categories.map(cat => {
+                        const items = Object.values(data).filter(d => d.category === cat.id && !d.error);
+                        if (!items.length) return null;
+                        return (
+                          <div key={cat.id} style={{marginBottom:'1.25rem'}}>
+                            <div style={{fontSize:'0.75rem',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'0.6rem'}}>{cat.label}</div>
+                            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:'0.6rem'}}>
+                              {items.map((item,i) => {
+                                const up = item.changePct >= 0;
+                                const clr = item.changePct > 0 ? '#4ade80' : item.changePct < 0 ? '#f87171' : '#fbbf24';
+                                return (
+                                  <div key={i} style={{background:'var(--bg-dark)',borderRadius:'10px',padding:'0.75rem',border:`1px solid ${clr}22`}}>
+                                    <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginBottom:'0.3rem'}}>{item.label}</div>
+                                    <div style={{fontSize:'1.1rem',fontWeight:800,color:'var(--text-main)'}}>{item.price?.toLocaleString('en-IN')}</div>
+                                    <div style={{fontSize:'0.75rem',fontWeight:700,color:clr,marginTop:'0.2rem'}}>
+                                      {up?'▲':'▼'} {Math.abs(item.change).toFixed(2)} ({Math.abs(item.changePct).toFixed(2)}%)
+                                    </div>
+                                    {item.marketState && item.marketState !== 'REGULAR' && (
+                                      <div style={{fontSize:'0.62rem',color:'var(--text-muted)',marginTop:'0.2rem',textTransform:'uppercase'}}>{item.marketState}</div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Disclaimer */}
+                      <div style={{fontSize:'0.72rem',color:'var(--text-muted)',marginTop:'0.5rem',borderTop:'1px solid var(--border)',paddingTop:'0.75rem'}}>
+                        ⚡ Data from Yahoo Finance · Prediction is algorithmic, not financial advice · Refresh before 9:15 AM for best accuracy
+                      </div>
+                    </>
+                  );
+                })()}
+
+                {!globalCues && !globalCuesLoading && (
+                  <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>
+                    <div style={{fontSize:'2.5rem',marginBottom:'0.75rem'}}>🌍</div>
+                    <div style={{marginBottom:'1rem',fontSize:'0.88rem'}}>Click Refresh to load global market data</div>
+                    <button onClick={()=>{ setGlobalCuesLoading(true); fetch(`${BACKEND_URL}/api/global-cues`).then(r=>r.json()).then(j=>{if(j.ok)setGlobalCues(j);}).catch(()=>{}).finally(()=>setGlobalCuesLoading(false)); }}
+                      style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1.5rem',fontWeight:700,cursor:'pointer'}}>
+                      Load Global Cues
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+                        {activeMarketsTab === 'events' && (
               <div className="panel">
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem',flexWrap:'wrap',gap:'0.5rem'}}>
                   <div>
