@@ -42,7 +42,7 @@ const loadLWC = () => {
   return lwcPromise;
 };
 
-function TradingViewChart({ data, indicators, candleType, symbol, timeframe }) {
+function TradingViewChart({ data, indicators, candleType, symbol, timeframe, showLevels=true }) {
   const mainRef  = React.useRef(null);
   const rsiRef   = React.useRef(null);
   const macdRef  = React.useRef(null);
@@ -78,6 +78,191 @@ function TradingViewChart({ data, indicators, candleType, symbol, timeframe }) {
   const calcATR  = (c, p=14) => { const tr=c.map((x,i)=>i===0?x.high-x.low:Math.max(x.high-x.low,Math.abs(x.high-c[i-1].close),Math.abs(x.low-c[i-1].close))); return c.map((x,i)=>{ if(i<p)return null; return{time:x.time,value:tr.slice(i-p+1,i+1).reduce((s,v)=>s+v,0)/p}; }).filter(Boolean); };
   const calcSuperTrend = (c, p=10, m=3) => { const atr=calcATR(c,p); const res=[]; let trend=1,lastST=0; c.slice(p).forEach((x,i)=>{ const a=atr[i]?.value||0; const ub=(x.high+x.low)/2+m*a; const lb=(x.high+x.low)/2-m*a; if(trend===1&&x.close<lastST){trend=-1;lastST=ub;} else if(trend===-1&&x.close>lastST){trend=1;lastST=lb;} else{lastST=trend===1?lb:ub;} res.push({time:x.time,value:lastST,color:trend===1?'#4ade80':'#f87171'}); }); return res; };
   const calcIchimoku = (c) => { const high=(sl)=>Math.max(...sl.map(x=>x.high)); const low=(sl)=>Math.min(...sl.map(x=>x.low)); const conv=[],base=[],sA=[],sB=[]; c.forEach((x,i)=>{ if(i>=8){const h=high(c.slice(i-8,i+1)),l=low(c.slice(i-8,i+1));conv.push({time:x.time,value:(h+l)/2});} if(i>=25){const h=high(c.slice(i-25,i+1)),l=low(c.slice(i-25,i+1));base.push({time:x.time,value:(h+l)/2});} if(i>=25){sA.push({time:x.time,value:((conv[i-9]?.value||0)+(base[i-25]?.value||0))/2});} if(i>=51){const h=high(c.slice(i-51,i+1)),l=low(c.slice(i-51,i+1));sB.push({time:x.time,value:(h+l)/2});} }); return{conv,base,sA,sB}; };
+
+  // ── S/R & Levels — Production Quality ────────────────────────────────────
+  // 1. Pivot: uses prior FULL DAY's H/L/C (standard institutional formula)
+  //    For intraday charts: groups candles into days, uses previous day
+  //    For daily+ charts:   uses the candle before the last complete session
+  const calcPivotLevels = (candles) => {
+    if (candles.length < 2) return null;
+
+    // Group candles by calendar day to find prior day H/L/C
+    const days = {};
+    candles.forEach(c => {
+      const d = new Date(c.time * 1000).toISOString().slice(0, 10);
+      if (!days[d]) days[d] = { high: c.high, low: c.low, close: c.close, open: c.open };
+      else {
+        days[d].high  = Math.max(days[d].high,  c.high);
+        days[d].low   = Math.min(days[d].low,   c.low);
+        days[d].close = c.close; // last candle of the day
+      }
+    });
+
+    const dayKeys = Object.keys(days).sort();
+    // Use second-to-last completed day as "prior day" (last day may be incomplete)
+    const priorKey = dayKeys.length >= 2 ? dayKeys[dayKeys.length - 2] : dayKeys[0];
+    const prior    = days[priorKey];
+
+    const H = prior.high, L = prior.low, C = prior.close;
+    const P  = (H + L + C) / 3;
+    const R1 = (2 * P) - L;
+    const S1 = (2 * P) - H;
+    const R2 = P + (H - L);
+    const S2 = P - (H - L);
+    const R3 = H + 2 * (P - L);
+    const S3 = L  - 2 * (H - P);
+
+    // Weekly levels — use full available range for context
+    const allH = Math.max(...candles.map(c => c.high));
+    const allL = Math.min(...candles.map(c => c.low));
+    const WR1  = allH;   // recent swing high = key weekly resistance
+    const WS1  = allL;   // recent swing low  = key weekly support
+
+    // ATR (14-period) for no-trade zone and zone width
+    const atrPeriod = 14;
+    const trs = candles.map((c, i) =>
+      i === 0 ? c.high - c.low
+              : Math.max(c.high - c.low,
+                         Math.abs(c.high - candles[i-1].close),
+                         Math.abs(c.low  - candles[i-1].close))
+    );
+    const atr = trs.slice(-atrPeriod).reduce((s, v) => s + v, 0) / atrPeriod;
+
+    return { P, R1, R2, R3, S1, S2, S3, WR1, WS1, atr, priorH: H, priorL: L, priorC: C };
+  };
+
+  // 2. Average volume over last N candles
+  const avgVolume = (candles, n = 20) => {
+    const slice = candles.slice(-n);
+    const total = slice.reduce((s, c) => s + (c.volume || 0), 0);
+    return total / slice.length || 1;
+  };
+
+  // 3. Trap detection — 3-condition confirmation required:
+  //    (a) Price action: wick through level + close back on wrong side
+  //    (b) Volume: trap candle volume > 1.3× 20-period average (institutions active)
+  //    (c) Confirmation: NEXT candle moves strongly in reversal direction
+  const detectTraps = (candles, levels) => {
+    const traps = [];
+    if (!levels || candles.length < 10) return traps;
+    const { R1, R2, S1, S2 } = levels;
+    const keyLevels = [
+      { price: R1, type: 'resistance', label: 'R1' },
+      { price: R2, type: 'resistance', label: 'R2' },
+      { price: S1, type: 'support',    label: 'S1' },
+      { price: S2, type: 'support',    label: 'S2' },
+    ];
+    const volAvg = avgVolume(candles, 20);
+
+    for (let i = 5; i < candles.length - 1; i++) {
+      const trap  = candles[i];       // potential trap candle
+      const conf  = candles[i + 1];  // confirmation candle (next)
+      const body  = Math.abs(trap.close - trap.open);
+      const vol   = trap.volume || 0;
+
+      keyLevels.forEach(({ price: lvl, type, label }) => {
+
+        // ── BULL TRAP at resistance ─────────────────────────────────────
+        // Price wicks ABOVE resistance, closes BELOW → trapped bulls
+        if (type === 'resistance') {
+          const wickAbove    = trap.high - lvl;           // how far above level
+          const closeBelow   = lvl - trap.close;          // close below level
+          const prevBelow    = candles[i-1].close < lvl;  // prev candle was below
+          const confirmBear  = conf.close < conf.open && conf.close < trap.close; // next candle bearish
+          const volSpike     = vol > volAvg * 1.3;        // volume confirmation
+          const wickSignif   = wickAbove > 0.3 * body;    // wick meaningful vs body
+
+          if (wickAbove > 0 && closeBelow > 0 && prevBelow && confirmBear && volSpike && wickSignif) {
+            traps.push({
+              time    : trap.time,
+              type    : 'bull_trap',
+              label   : `🪤 Bull Trap @ ${label}`,
+              color   : '#f87171',
+              position: 'aboveBar',
+              shape   : 'arrowDown',
+              vol     : vol, volAvg,
+            });
+          }
+        }
+
+        // ── BEAR TRAP at support ────────────────────────────────────────
+        // Price wicks BELOW support, closes ABOVE → trapped bears / stop hunt
+        if (type === 'support') {
+          const wickBelow    = lvl - trap.low;
+          const closeAbove   = trap.close - lvl;
+          const prevAbove    = candles[i-1].close > lvl;
+          const confirmBull  = conf.close > conf.open && conf.close > trap.close;
+          const volSpike     = vol > volAvg * 1.3;
+          const wickSignif   = wickBelow > 0.3 * body;
+
+          if (wickBelow > 0 && closeAbove > 0 && prevAbove && confirmBull && volSpike && wickSignif) {
+            traps.push({
+              time    : trap.time,
+              type    : 'bear_trap',
+              label   : `🪤 Bear Trap @ ${label}`,
+              color   : '#4ade80',
+              position: 'belowBar',
+              shape   : 'arrowUp',
+              vol     : vol, volAvg,
+            });
+          }
+        }
+      });
+
+      // ── LIQUIDITY SWEEP ─────────────────────────────────────────────
+      // Requires: swing high/low taken out, HIGH volume, strong reversal candle
+      // Look for 5-bar swing high/low (more reliable than 3-bar)
+      if (i >= 5) {
+        const lookback = candles.slice(i - 5, i);
+        const swingH   = Math.max(...lookback.map(c => c.high));
+        const swingL   = Math.min(...lookback.map(c => c.low));
+        const volSpike = vol > volAvg * 1.5; // higher bar for sweeps
+
+        // Sweep high: wick above prior swing high, bearish close, confirmation
+        if (
+          trap.high > swingH &&
+          trap.close < swingH &&             // closed back below
+          trap.close < trap.open &&          // bearish candle
+          volSpike &&
+          conf.close < conf.open &&          // confirmed by next bearish candle
+          conf.close < trap.low              // breaks below trap candle low
+        ) {
+          traps.push({
+            time: trap.time, type: 'sweep_high',
+            label: '⚡ Stop Hunt High', color: '#fb923c',
+            position: 'aboveBar', shape: 'arrowDown',
+          });
+        }
+
+        // Sweep low: wick below prior swing low, bullish close, confirmation
+        if (
+          trap.low < swingL &&
+          trap.close > swingL &&             // closed back above
+          trap.close > trap.open &&          // bullish candle
+          volSpike &&
+          conf.close > conf.open &&          // confirmed by next bullish candle
+          conf.close > trap.high             // breaks above trap candle high
+        ) {
+          traps.push({
+            time: trap.time, type: 'sweep_low',
+            label: '⚡ Stop Hunt Low', color: '#a78bfa',
+            position: 'belowBar', shape: 'arrowUp',
+          });
+        }
+      }
+    }
+
+    // Final dedup: remove signals within 5 candles of each other (same type)
+    const deduped = [];
+    traps.sort((a, b) => a.time - b.time).forEach(t => {
+      const last = deduped.filter(d => d.type === t.type).slice(-1)[0];
+      const candleSeconds = (candles[1]?.time - candles[0]?.time) || 300;
+      if (!last || (t.time - last.time) > candleSeconds * 5) {
+        deduped.push(t);
+      }
+    });
+    return deduped;
+  };
 
   const createSubChart = (container, LWC, h=120) => LWC.createChart(container, {
     width: container.clientWidth, height: h,
@@ -186,7 +371,64 @@ function TradingViewChart({ data, indicators, candleType, symbol, timeframe }) {
 
       chart.timeScale().fitContent();
 
-      // -- RSI sub-chart ------------------------------------------------─
+      // ── S/R Levels, ATR No-Trade Zone & Volume-Confirmed Traps ─────────────
+      if (showLevels && candles.length >= 10) {
+        const levels = calcPivotLevels(candles);
+        if (levels) {
+          const { P, R1, R2, R3, S1, S2, S3, atr, priorH, priorL } = levels;
+
+          const addLine = (price, color, title, style=0, width=1) => {
+            try { mainSeries.createPriceLine({ price, color, lineWidth: width, lineStyle: style, axisLabelVisible: true, title }); } catch(e) {}
+          };
+
+          // Prior Day High / Low — most important intraday reference
+          addLine(priorH, 'rgba(251,191,36,0.9)',  'PDH ──', 2, 1);
+          addLine(priorL, 'rgba(96,165,250,0.9)',  'PDL ──', 2, 1);
+
+          // Resistance
+          addLine(R3, 'rgba(248,113,113,0.35)', 'R3', 3, 1);
+          addLine(R2, 'rgba(248,113,113,0.65)', 'R2', 2, 1);
+          addLine(R1, '#f87171',                'R1', 0, 2);
+
+          // Pivot Point
+          addLine(P, 'rgba(226,232,240,0.7)', 'PP', 1, 1);
+
+          // Support
+          addLine(S1, '#4ade80',                'S1', 0, 2);
+          addLine(S2, 'rgba(74,222,128,0.65)',  'S2', 2, 1);
+          addLine(S3, 'rgba(74,222,128,0.35)',  'S3', 3, 1);
+
+          // ATR No-Trade Zone = PP ± 0.5×ATR
+          // Dynamic: widens in volatile sessions, tightens in calm ones
+          const ntUpper = P + 0.5 * atr;
+          const ntLower = P - 0.5 * atr;
+          addLine(ntUpper, 'rgba(251,191,36,0.5)', 'NTZ▲', 1, 1);
+          addLine(ntLower, 'rgba(251,191,36,0.5)', 'NTZ▼', 1, 1);
+
+          // Shade no-trade zone
+          try {
+            const ntArea = chart.addAreaSeries({
+              lineColor: 'rgba(0,0,0,0)', topColor: 'rgba(251,191,36,0.08)',
+              bottomColor: 'rgba(251,191,36,0.08)', lineWidth: 0,
+              lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+            });
+            ntArea.setData(candles.map(c => ({ time: c.time, value: ntUpper })));
+          } catch(e) {}
+        }
+
+        // Volume-confirmed trap markers
+        const traps = detectTraps(candles, levels);
+        if (traps.length > 0) {
+          const markers = traps.map(t => ({
+            time: t.time, position: t.position, color: t.color,
+            shape: t.shape, text: t.label, size: 1.5,
+          }));
+          markers.sort((a, b) => a.time - b.time);
+          try { mainSeries.setMarkers(markers); } catch(e) {}
+        }
+      }
+
+            // -- RSI sub-chart ------------------------------------------------─
       if (showRSI && rsiRef.current) {
         const rsiChart = createSubChart(rsiRef.current, LWC, 110);
         rsiChartRef.current = rsiChart;
@@ -232,6 +474,27 @@ function TradingViewChart({ data, indicators, candleType, symbol, timeframe }) {
       <div ref={mainRef} style={{width:'100%'}}/>
       {showRSI  && <><div style={{height:'1px',background:'#1e293b'}}/><div style={{padding:'2px 8px',fontSize:'0.65rem',color:'#a78bfa',background:'#070d1a',fontWeight:700}}>RSI 14</div><div ref={rsiRef}  style={{width:'100%'}}/></>}
       {showMACD && <><div style={{height:'1px',background:'#1e293b'}}/><div style={{padding:'2px 8px',fontSize:'0.65rem',color:'#60a5fa',background:'#070d1a',fontWeight:700}}>MACD (12,26,9)</div><div ref={macdRef} style={{width:'100%'}}/></>}
+      {showLevels && (
+        <div style={{padding:'0.5rem 0.85rem',background:'#070d1a',borderTop:'1px solid rgba(255,255,255,0.06)',display:'flex',flexWrap:'wrap',gap:'0.65rem',alignItems:'center'}}>
+          <span style={{fontSize:'0.6rem',color:'var(--text-muted)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',marginRight:'2px'}}>Levels:</span>
+          {[
+            {color:'rgba(251,191,36,0.9)', dash:true,  label:'PDH / PDL  Prior Day'},
+            {color:'#f87171',             dash:false, label:'R1–R3  Resistance'},
+            {color:'rgba(226,232,240,0.7)',dash:true,  label:'PP  Pivot'},
+            {color:'#4ade80',             dash:false, label:'S1–S3  Support'},
+            {color:'rgba(251,191,36,0.5)',dash:true,  label:'⬛ No-Trade Zone (PP±½ATR)'},
+            {color:'#f87171',             dash:false, label:'▼ Bull Trap (vol confirmed)'},
+            {color:'#4ade80',             dash:false, label:'▲ Bear Trap (vol confirmed)'},
+            {color:'#fb923c',             dash:false, label:'▼ Stop Hunt High'},
+            {color:'#a78bfa',             dash:false, label:'▲ Stop Hunt Low'},
+          ].map((item,i) => (
+            <div key={i} style={{display:'flex',alignItems:'center',gap:'0.3rem'}}>
+              <div style={{width:'12px',height:'2px',background:item.color,borderRadius:'1px',borderTop:item.dash?'1px dashed '+item.color:'none'}}/>
+              <span style={{fontSize:'0.6rem',color:'var(--text-muted)'}}>{item.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1282,6 +1545,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [chartTimeframe, setChartTimeframe] = useState('15m');
   const [candlestickType, setCandlestickType] = useState('candlestick');
   const [chartIndicators, setChartIndicators] = useState(['EMA20', 'RSI']);
+  const [showChartLevels, setShowChartLevels] = useState(true);
   const [lastChartUpdate, setLastChartUpdate] = useState(new Date());
   const [candlestickData, setCandlestickData] = useState([]);
 
@@ -6416,6 +6680,10 @@ Respond ONLY with valid JSON:
                         ✕ Clear all
                       </button>
                     )}
+                    <button onClick={()=>setShowChartLevels(p=>!p)}
+                      style={{marginLeft: chartIndicators.length > 0 ? '0.5rem' : 'auto', padding:'0.25rem 0.7rem',borderRadius:'99px',border:`1px solid ${showChartLevels?'#f59e0b':'var(--border)'}`,cursor:'pointer',fontSize:'0.72rem',fontWeight:showChartLevels?700:400,background:showChartLevels?'rgba(245,158,11,0.12)':'transparent',color:showChartLevels?'#f59e0b':'var(--text-dim)'}}>
+                      📐 S/R Levels
+                    </button>
                   </div>
                 </div>
 
@@ -6427,6 +6695,7 @@ Respond ONLY with valid JSON:
                     candleType={candlestickType}
                     symbol={selectedChartSymbol}
                     timeframe={chartTimeframe}
+                    showLevels={showChartLevels}
                   />
                 ) : (
                   <div style={{textAlign:'center',padding:'4rem 2rem',color:'var(--text-dim)'}}>
