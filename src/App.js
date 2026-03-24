@@ -6404,6 +6404,7 @@ Respond ONLY with valid JSON:
                   const predIcon = predictionColor === 'bullish' ? '📈' : predictionColor === 'bearish' ? '📉' : '➡️';
 
                   const categories = [
+                    { id:'gift',        label:'🎯 GIFT Nifty (Primary Signal)' },
                     { id:'us',          label:'🇺🇸 US Markets' },
                     { id:'asia',        label:'🌏 Asia Pacific' },
                     { id:'europe',      label:'🇪🇺 Europe' },
@@ -6415,17 +6416,36 @@ Respond ONLY with valid JSON:
                   return (
                     <>
                       {/* Prediction Banner */}
-                      <div style={{background:`${predClr}11`,border:`2px solid ${predClr}44`,borderRadius:'14px',padding:'1.25rem 1.5rem',marginBottom:'1.25rem',display:'flex',alignItems:'center',gap:'1.25rem',flexWrap:'wrap'}}>
+                      <div style={{background:`${predClr}11`,border:`2px solid ${predClr}44`,borderRadius:'14px',padding:'1.25rem 1.5rem',marginBottom:'1rem',display:'flex',alignItems:'center',gap:'1.25rem',flexWrap:'wrap'}}>
                         <div style={{fontSize:'2.5rem'}}>{predIcon}</div>
                         <div style={{flex:1}}>
-                          <div style={{fontSize:'0.72rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'0.2rem'}}>Indian Market Open Prediction</div>
+                          <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.2rem',flexWrap:'wrap'}}>
+                            <span style={{fontSize:'0.72rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Indian Market Open Prediction</span>
+                            {globalCues.giftOverride && <span style={{fontSize:'0.65rem',fontWeight:700,padding:'1px 6px',borderRadius:'99px',background:'rgba(251,191,36,0.15)',color:'#fbbf24'}}>GIFT NIFTY OVERRIDE</span>}
+                            {globalCues.dataStale && <span style={{fontSize:'0.65rem',fontWeight:700,padding:'1px 6px',borderRadius:'99px',background:'rgba(248,113,113,0.15)',color:'#f87171'}}>US DATA STALE</span>}
+                          </div>
                           <div style={{fontSize:'1.6rem',fontWeight:900,color:predClr,lineHeight:1}}>{prediction}</div>
-                          <div style={{fontSize:'0.82rem',color:'var(--text-dim)',marginTop:'0.3rem'}}>Estimated gap: <strong style={{color:predClr}}>{gapEst}</strong></div>
+                          <div style={{fontSize:'0.82rem',color:'var(--text-dim)',marginTop:'0.3rem'}}>
+                            Estimated gap: <strong style={{color:predClr}}>{gapEst}</strong>
+                          </div>
+                          {globalCues.giftPct != null && Math.abs(globalCues.giftPct) >= 0.5 && (
+                            <div style={{marginTop:'0.4rem',fontSize:'0.8rem',color:globalCues.giftPct>0?'#4ade80':'#f87171',fontWeight:700}}>
+                              GIFT Nifty: {globalCues.giftPct>0?'+':''}{globalCues.giftPct}%
+                              {Math.abs(globalCues.giftPct) >= 1.5 && <span style={{marginLeft:'0.4rem',fontSize:'0.72rem',opacity:0.8}}>← Primary signal</span>}
+                            </div>
+                          )}
                         </div>
-                        <div style={{fontSize:'0.75rem',color:'var(--text-muted)',textAlign:'right'}}>
+                        <div style={{fontSize:'0.72rem',color:'var(--text-muted)',textAlign:'right',flexShrink:0}}>
                           Updated<br/>{new Date(globalCues.fetchedAt).toLocaleTimeString('en-IN')}
                         </div>
                       </div>
+
+                      {/* Stale data warning */}
+                      {globalCues.dataStale && !globalCues.giftOverride && (
+                        <div style={{background:'rgba(248,113,113,0.06)',border:'1px solid rgba(248,113,113,0.2)',borderRadius:'9px',padding:'0.6rem 0.85rem',marginBottom:'1rem',fontSize:'0.78rem',color:'#fca5a5',lineHeight:1.5}}>
+                          ⚠️ <strong>US markets are currently closed.</strong> The US figures shown are yesterday's closing prices. For the most accurate Indian open prediction right now, GIFT Nifty is the only live signal.
+                        </div>
+                      )}
 
                       {/* Alerts */}
                       {alerts && alerts.length > 0 && (
