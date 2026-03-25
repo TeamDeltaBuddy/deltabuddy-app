@@ -1557,6 +1557,8 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [institutionalActivity, setInstitutionalActivity] = useState(null);
   const [fiiDiiLoading, setFiiDiiLoading] = useState(false);
   const [globalCues, setGlobalCues]       = useState(null);
+  const [yieldIntel, setYieldIntel]       = useState(null);
+  const [yieldLoading, setYieldLoading]   = useState(false);
   const [globalCuesLoading, setGlobalCuesLoading] = useState(false);
   const [fiiDiiError, setFiiDiiError] = useState('');
   const [bulkDeals, setBulkDeals] = useState([]);
@@ -3183,6 +3185,12 @@ Respond ONLY with valid JSON:
     if (activeMarketsTab === 'option-chain') {
       if (liveOptionChain.length === 0) generateLiveOptionChain(selectedUnderlying);
     }
+    if (activeMarketsTab === 'yield-intel' && !yieldIntel) {
+      setYieldLoading(true);
+      fetch(`${BACKEND_URL}/api/yield-intel`)
+        .then(r=>r.json()).then(j=>{ if(j.ok) setYieldIntel(j); })
+        .catch(()=>{}).finally(()=>setYieldLoading(false));
+    }
     if (activeMarketsTab === 'global-cues' && !globalCues) {
       setGlobalCuesLoading(true);
       fetch(`${BACKEND_URL}/api/global-cues`)
@@ -3518,26 +3526,23 @@ Respond ONLY with valid JSON:
             <span>DeltaBuddy</span>
           </div>
 
-          {/* Nav links  -  desktop only, scrollable */}
+          {/* Nav links - 3 segments desktop */}
           <div className="nav-links">
             {[
-              ['markets',      '📊 Markets'],
-              ['intelligence', '🧠 Intel'],
-              ['strategy',     '🎯 Strategy'],
-              ['scanner',      '🔍 Scanner'],
-              ['backtest',     '📈 Backtest'],
-              ['single',       '🧮 Calc'],
-              ['journal',      '📓 Journal'],
-              ['paper',        '📝 Paper'],
-              ['portfolio',    '💼 Portfolio'],
-              ['expiry',       '⏰ Expiry'],
-              ['gex',          '🎯 GEX'],
-              ...(isAdmin ? [['admin', '🛡️ Admin']] : []),
-            ].map(([tab,label])=>(
-              <span key={tab} className={activeTab===tab?'active':''} onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}>
-                {label}
-              </span>
-            ))}
+              {id:'pulse', label:'🔴 Pulse',  tabs:['home','markets','intelligence'], def:'markets'},
+              {id:'lab',   label:'🧪 Lab',    tabs:['strategy','scanner','single','gex','backtest','expiry'], def:'strategy'},
+              {id:'desk',  label:'📋 Desk',   tabs:['paper','journal','portfolio'], def:'paper'},
+              ...(isAdmin ? [{id:'admin', label:'🛡️ Admin', tabs:['admin'], def:'admin'}] : []),
+            ].map(({id, label, tabs, def}) => {
+              const isActive = tabs.includes(activeTab);
+              return (
+                <span key={id}
+                  className={isActive ? 'active' : ''}
+                  onClick={()=>{ if(!tabs.includes(activeTab)) setActiveTab(def); setShowMobileMenu(false); }}>
+                  {label}
+                </span>
+              );
+            })}
           </div>
 
           {/* Right controls */}
@@ -3582,6 +3587,59 @@ Respond ONLY with valid JSON:
         </div>
       </nav>
 
+      {/* -- SEGMENT SUB-NAV  -  tab pills for active segment -- */}
+      {(() => {
+        const segmentMap = [
+          {tabs:['home','markets','intelligence'], items:[
+            ['home','🏠 Home'],['markets','📊 Markets'],['intelligence','🧠 AI Intel'],
+          ]},
+          {tabs:['strategy','scanner','single','gex','backtest','expiry'], items:[
+            ['strategy','🎯 Strategy'],['scanner','🔍 Scanner'],['single','🧮 Calc'],
+            ['gex','⚡ GEX'],['backtest','📈 Backtest'],['expiry','⏰ Expiry'],
+          ]},
+          {tabs:['paper','journal','portfolio'], items:[
+            ['paper','📝 Paper'],['journal','📓 Journal'],['portfolio','💼 Portfolio'],
+          ]},
+        ];
+        const seg = segmentMap.find(s => s.tabs.includes(activeTab));
+        if (!seg || showMobileMenu) return null;
+        return (
+          <div style={{
+            background:'var(--bg-dark)',
+            borderBottom:'1px solid var(--border)',
+            padding:'0 1rem',
+            display:'flex',
+            gap:'0.25rem',
+            overflowX:'auto',
+            scrollbarWidth:'none',
+            position:'sticky',
+            top:'56px',
+            zIndex:99,
+          }}>
+            {seg.items.map(([tab, label]) => (
+              <button key={tab}
+                onClick={()=>setActiveTab(tab)}
+                style={{
+                  padding:'0.5rem 0.85rem',
+                  background:'none',
+                  border:'none',
+                  borderBottom: activeTab===tab ? '2px solid var(--accent)' : '2px solid transparent',
+                  color: activeTab===tab ? 'var(--accent)' : 'var(--text-dim)',
+                  fontWeight: activeTab===tab ? 700 : 400,
+                  fontSize:'0.8rem',
+                  cursor:'pointer',
+                  whiteSpace:'nowrap',
+                  fontFamily:'inherit',
+                  transition:'all 0.15s',
+                  marginBottom:'-1px',
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* -- MOBILE MENU  -  rendered outside navbar to avoid clipping -- */}
       {showMobileMenu && (
         <div style={{
@@ -3592,33 +3650,32 @@ Respond ONLY with valid JSON:
           overflowY:'auto',
         }}>
           {[
-            ['markets',      '📊 Markets'],
-            ['intelligence', '🧠 Intelligence'],
-            ['strategy',     '🎯 Strategy'],
-            ['backtest',     '📈 Backtest'],
-            ['single',       '🧮 Calculator'],
-            ['scanner',      '🔍 Scanner'],
-            ['journal',      '📓 Journal'],
-            ['paper',        '📝 Paper Trade'],
-            ['portfolio',    '💼 Portfolio'],
-            ['expiry',       '⏰ Expiry Day'],
-            ['gex',          '🎯 GEX / Greeks'],
-            ...(isAdmin ? [['admin', '🛡️ Admin']] : []),
-          ].map(([tab,label])=>(
-            <div key={tab}
-              onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}
-              style={{
-                padding:'1.1rem 1.5rem',
-                borderBottom:'1px solid rgba(255,255,255,0.07)',
-                fontSize:'1.05rem',
-                fontWeight: activeTab===tab ? 700 : 500,
-                color: activeTab===tab ? '#f97316' : '#e2e8f0',
-                background: activeTab===tab ? 'rgba(249,115,22,0.08)' : 'transparent',
-                cursor:'pointer',
-                display:'flex', alignItems:'center', gap:'0.5rem',
-              }}>
-              {label}
-              {activeTab===tab && <span style={{marginLeft:'auto',color:'#f97316'}}>●</span>}
+            {group:'🔴 Pulse',  items:[['markets','📊 Markets'],['intelligence','🧠 AI Intel']]},
+            {group:'🧪 Lab',    items:[['strategy','🎯 Strategy'],['scanner','🔍 Scanner'],['single','🧮 Calculator'],['gex','⚡ GEX'],['backtest','📈 Backtest'],['expiry','⏰ Expiry']]},
+            {group:'📋 Desk',   items:[['paper','📝 Paper Trade'],['journal','📓 Journal'],['portfolio','💼 Portfolio']]},
+            ...(isAdmin ? [{group:'🛡️ Admin', items:[['admin','🛡️ Admin']]}] : []),
+          ].map(({group, items}) => (
+            <div key={group}>
+              <div style={{padding:'0.6rem 1.5rem',fontSize:'0.7rem',fontWeight:800,color:'var(--accent)',textTransform:'uppercase',letterSpacing:'0.1em',background:'rgba(0,255,136,0.04)',borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
+                {group}
+              </div>
+              {items.map(([tab,label]) => (
+                <div key={tab}
+                  onClick={()=>{setActiveTab(tab);setShowMobileMenu(false);}}
+                  style={{
+                    padding:'0.9rem 1.5rem 0.9rem 2rem',
+                    borderBottom:'1px solid rgba(255,255,255,0.05)',
+                    fontSize:'0.95rem',
+                    fontWeight: activeTab===tab ? 700 : 400,
+                    color: activeTab===tab ? '#f97316' : '#e2e8f0',
+                    background: activeTab===tab ? 'rgba(249,115,22,0.08)' : 'transparent',
+                    cursor:'pointer',
+                    display:'flex', alignItems:'center', gap:'0.5rem',
+                  }}>
+                  {label}
+                  {activeTab===tab && <span style={{marginLeft:'auto',color:'#f97316'}}>●</span>}
+                </div>
+              ))}
             </div>
           ))}
         </div>
@@ -5939,6 +5996,7 @@ Respond ONLY with valid JSON:
                 ['max-pain','🎯 Max Pain'],
                 ['fii-dii','🏦 FII/DII'],
                 ['global-cues','🌍 Global Cues'],
+                ['yield-intel','📊 Yield Intel'],
                 ['events','📅 Events'],
               ].map(([tab,label])=>(
                 <button key={tab} className={`home-tab-btn ${activeMarketsTab===tab?'active':''}`} onClick={()=>setActiveMarketsTab(tab)}>{label}</button>
@@ -6510,6 +6568,146 @@ Respond ONLY with valid JSON:
                     </button>
                   </div>
                 )}
+              </div>
+            )}
+
+                        {activeMarketsTab === 'yield-intel' && (
+              <div className="panel">
+                {/* Header */}
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem',flexWrap:'wrap',gap:'0.5rem'}}>
+                  <div>
+                    <h2 style={{margin:0}}>📊 US Yield Intelligence</h2>
+                    <p style={{color:'var(--text-dim)',margin:'0.25rem 0 0',fontSize:'0.82rem'}}>Yield curve signals → Indian market impact · 6–18 hour lag edge</p>
+                  </div>
+                  <button onClick={()=>{ setYieldIntel(null); setYieldLoading(true); fetch(`${BACKEND_URL}/api/yield-intel`).then(r=>r.json()).then(j=>{if(j.ok)setYieldIntel(j);}).catch(()=>{}).finally(()=>setYieldLoading(false)); }}
+                    style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
+                    {yieldLoading?'⏳ Loading...':'🔄 Refresh'}
+                  </button>
+                </div>
+
+                {yieldLoading && <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>⏳ Fetching yield data...</div>}
+
+                {!yieldIntel && !yieldLoading && (
+                  <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>
+                    <div style={{fontSize:'2.5rem',marginBottom:'0.75rem'}}>📊</div>
+                    <div style={{marginBottom:'1rem',fontSize:'0.88rem'}}>Click Refresh to load US Treasury yield intelligence</div>
+                    <button onClick={()=>{ setYieldLoading(true); fetch(`${BACKEND_URL}/api/yield-intel`).then(r=>r.json()).then(j=>{if(j.ok)setYieldIntel(j);}).catch(()=>{}).finally(()=>setYieldLoading(false)); }}
+                      style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.6rem 1.5rem',fontWeight:700,cursor:'pointer'}}>
+                      Load Yield Intel
+                    </button>
+                  </div>
+                )}
+
+                {yieldIntel && (() => {
+                  const { yields, spread_10_2, curveStatus, curveDesc, curveColor, signals, overallBias, biasColor, related } = yieldIntel;
+                  const biasClr = biasColor==='bullish'?'#4ade80':biasColor==='bearish'?'#f87171':biasColor==='warning'?'#fbbf24':'#94a3b8';
+                  const curveClr = curveColor==='bullish'?'#4ade80':curveColor==='danger'?'#f87171':curveColor==='warning'?'#fbbf24':'#94a3b8';
+
+                  return (
+                    <>
+                      {/* Overall Bias Banner */}
+                      <div style={{background:`${biasClr}11`,border:`2px solid ${biasClr}44`,borderRadius:'12px',padding:'1rem 1.25rem',marginBottom:'1.25rem',display:'flex',alignItems:'center',gap:'1rem',flexWrap:'wrap'}}>
+                        <div style={{fontSize:'1.8rem'}}>{biasColor==='bullish'?'🟢':biasColor==='bearish'?'🔴':biasColor==='warning'?'🟡':'⚪'}</div>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:'0.7rem',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'0.15rem'}}>Yield-Based Market Bias</div>
+                          <div style={{fontSize:'1.1rem',fontWeight:900,color:biasClr}}>{overallBias}</div>
+                        </div>
+                        <div style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>
+                          Updated {new Date(yieldIntel.fetchedAt).toLocaleTimeString('en-IN')}
+                        </div>
+                      </div>
+
+                      {/* Yield Curve Visual */}
+                      <div style={{background:'var(--bg-dark)',borderRadius:'12px',padding:'1rem',marginBottom:'1.25rem',border:'1px solid var(--border)'}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.85rem',flexWrap:'wrap',gap:'0.5rem'}}>
+                          <div style={{fontWeight:700,fontSize:'0.88rem'}}>Treasury Yield Curve</div>
+                          <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
+                            <span style={{fontSize:'0.72rem',fontWeight:700,padding:'2px 8px',borderRadius:'99px',background:`${curveClr}22`,color:curveClr}}>{curveStatus}</span>
+                            <span style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>10Y−2Y: {spread_10_2 > 0 ? '+' : ''}{spread_10_2}%</span>
+                          </div>
+                        </div>
+
+                        {/* Yield bars */}
+                        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'0.5rem',marginBottom:'0.75rem'}}>
+                          {Object.values(yields).map((y, i) => {
+                            const chgClr = y.change > 0 ? '#f87171' : y.change < 0 ? '#4ade80' : '#94a3b8';
+                            const barH = Math.min(80, Math.max(20, (y.price / 6) * 80));
+                            return (
+                              <div key={i} style={{textAlign:'center'}}>
+                                <div style={{fontSize:'0.68rem',color:'var(--text-muted)',marginBottom:'0.3rem'}}>{y.label}</div>
+                                <div style={{display:'flex',alignItems:'flex-end',justifyContent:'center',height:'60px',marginBottom:'0.3rem'}}>
+                                  <div style={{width:'24px',background:`${chgClr}88`,borderRadius:'3px 3px 0 0',height:`${barH}%`,minHeight:'4px',transition:'height 0.3s'}}/>
+                                </div>
+                                <div style={{fontSize:'0.82rem',fontWeight:800,color:'var(--text-main)'}}>{y.price.toFixed(2)}%</div>
+                                <div style={{fontSize:'0.65rem',color:chgClr,fontWeight:700}}>{y.change > 0 ? '▲' : '▼'} {Math.abs(y.change).toFixed(2)}%</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div style={{fontSize:'0.78rem',color:'var(--text-dim)',lineHeight:1.5,borderTop:'1px solid var(--border)',paddingTop:'0.6rem'}}>{curveDesc}</div>
+                      </div>
+
+                      {/* Related Assets */}
+                      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:'0.5rem',marginBottom:'1.25rem'}}>
+                        {[
+                          {label:'USD/INR',  val:related.usdinr?.price,  chg:related.usdinr?.change, inv:true  },
+                          {label:'Dollar',   val:related.dxy?.price,     chg:related.dxy?.change,    inv:true  },
+                          {label:'Gold',     val:related.gold?.price,    chg:related.gold?.change,   inv:false },
+                          {label:'US VIX',   val:related.vix?.price,     chg:related.vix?.change,    inv:true  },
+                        ].map((item,i) => {
+                          const clr = item.inv
+                            ? (item.chg > 0 ? '#f87171' : '#4ade80')
+                            : (item.chg > 0 ? '#4ade80' : '#f87171');
+                          return (
+                            <div key={i} style={{background:'var(--bg-dark)',borderRadius:'9px',padding:'0.65rem 0.75rem',border:'1px solid var(--border)'}}>
+                              <div style={{fontSize:'0.68rem',color:'var(--text-muted)',marginBottom:'0.2rem'}}>{item.label}</div>
+                              <div style={{fontSize:'1rem',fontWeight:800,color:'var(--text-main)'}}>{item.val?.toFixed(2) || '—'}</div>
+                              <div style={{fontSize:'0.7rem',color:clr,fontWeight:700}}>{item.chg > 0 ? '▲' : '▼'} {Math.abs(item.chg || 0).toFixed(2)}%</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Signal Cards */}
+                      <div style={{display:'flex',flexDirection:'column',gap:'0.75rem'}}>
+                        {signals.map((sig, i) => {
+                          const isActive = sig.status === 'ACTIVE';
+                          const isWatch  = sig.status === 'WATCH';
+                          const stClr    = isActive ? (sig.direction === 'bullish' ? '#4ade80' : '#f87171') : isWatch ? '#fbbf24' : '#4ade80';
+                          const stBg     = isActive ? (sig.direction === 'bullish' ? 'rgba(74,222,128,0.08)' : 'rgba(248,113,113,0.08)') : isWatch ? 'rgba(251,191,36,0.06)' : 'rgba(74,222,128,0.04)';
+                          return (
+                            <div key={i} style={{background:stBg,border:`1px solid ${stClr}33`,borderRadius:'12px',padding:'1rem',borderLeft:`3px solid ${stClr}`}}>
+                              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'0.5rem',flexWrap:'wrap',gap:'0.4rem'}}>
+                                <div style={{fontWeight:700,fontSize:'0.9rem',color:'var(--text-main)'}}>{sig.name}</div>
+                                <span style={{fontSize:'0.65rem',fontWeight:800,padding:'2px 8px',borderRadius:'99px',background:`${stClr}22`,color:stClr,textTransform:'uppercase',letterSpacing:'0.06em'}}>
+                                  {isActive ? '⚡ ACTIVE' : isWatch ? '👁 WATCH' : '✅ CLEAR'}
+                                </span>
+                              </div>
+                              <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginBottom:'0.5rem',fontFamily:'monospace'}}>{sig.trigger}</div>
+                              <div style={{fontSize:'0.8rem',color:'var(--text-dim)',lineHeight:1.5,marginBottom: sig.actions?.length ? '0.6rem' : 0}}>{sig.impact}</div>
+                              {sig.actions?.length > 0 && isActive && (
+                                <div style={{display:'flex',flexDirection:'column',gap:'0.25rem'}}>
+                                  {sig.actions.map((a,j) => (
+                                    <div key={j} style={{fontSize:'0.75rem',color:stClr,display:'flex',gap:'0.4rem',alignItems:'flex-start'}}>
+                                      <span style={{flexShrink:0}}>→</span><span>{a}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {sig.lag && (
+                                <div style={{marginTop:'0.5rem',fontSize:'0.68rem',color:'var(--text-muted)'}}>⏱ Lag: {sig.lag}</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div style={{fontSize:'0.7rem',color:'var(--text-muted)',marginTop:'1rem',borderTop:'1px solid var(--border)',paddingTop:'0.6rem',lineHeight:1.6}}>
+                        ⚡ Data: Yahoo Finance · Yield signals work best for positional trades (2–10 days), not intraday · Not financial advice
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             )}
 
