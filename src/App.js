@@ -3191,11 +3191,20 @@ Respond ONLY with valid JSON:
         .then(r=>r.json()).then(j=>{ if(j.ok) setYieldIntel(j); })
         .catch(()=>{}).finally(()=>setYieldLoading(false));
     }
-    if (activeMarketsTab === 'global-cues' && !globalCues) {
-      setGlobalCuesLoading(true);
-      fetch(`${BACKEND_URL}/api/global-cues`)
-        .then(r=>r.json()).then(j=>{ if(j.ok) setGlobalCues(j); })
-        .catch(()=>{}).finally(()=>setGlobalCuesLoading(false));
+    if (activeMarketsTab === 'global-cues') {
+      // Fetch immediately if no data
+      const doFetch = () => {
+        fetch(`${BACKEND_URL}/api/global-cues`)
+          .then(r=>r.json()).then(j=>{ if(j.ok) setGlobalCues(j); })
+          .catch(()=>{}).finally(()=>setGlobalCuesLoading(false));
+      };
+      if (!globalCues) { setGlobalCuesLoading(true); doFetch(); }
+      // Auto-refresh every 5 minutes while tab is open
+      if (globalCuesTimerRef.current) clearInterval(globalCuesTimerRef.current);
+      globalCuesTimerRef.current = setInterval(doFetch, 5 * 60 * 1000);
+    } else {
+      // Clear interval when user leaves global-cues tab
+      if (globalCuesTimerRef.current) { clearInterval(globalCuesTimerRef.current); globalCuesTimerRef.current = null; }
     }
     if (activeMarketsTab === 'fii-dii') {
       fetchFiiDii();
@@ -6443,15 +6452,32 @@ Respond ONLY with valid JSON:
 
             {activeMarketsTab === 'global-cues' && (
               <div className="panel">
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem',flexWrap:'wrap',gap:'0.5rem'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.5rem',flexWrap:'wrap',gap:'0.5rem'}}>
                   <div>
                     <h2 style={{margin:0}}>🌍 Global Cues</h2>
-                    <p style={{color:'var(--text-dim)',margin:'0.25rem 0 0',fontSize:'0.82rem'}}>Overnight global markets → Indian open prediction</p>
+                    <p style={{color:'var(--text-dim)',margin:'0.25rem 0 0',fontSize:'0.82rem'}}>Overnight global markets → Indian open prediction · Auto-refreshes every 5 min</p>
                   </div>
-                  <button onClick={()=>{ setGlobalCues(null); setGlobalCuesLoading(true); fetch(`${BACKEND_URL}/api/global-cues`).then(r=>r.json()).then(j=>{if(j.ok)setGlobalCues(j);}).catch(()=>{}).finally(()=>setGlobalCuesLoading(false)); }}
-                    style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
-                    {globalCuesLoading ? '⏳ Loading...' : '🔄 Refresh'}
-                  </button>
+                  <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
+                    {globalCues && (() => {
+                      const ageMs  = Date.now() - new Date(globalCues.fetchedAt).getTime();
+                      const ageMins = Math.floor(ageMs / 60000);
+                      const stale  = ageMins >= 6;
+                      return (
+                        <span style={{fontSize:'0.7rem',color:stale?'#f87171':'var(--text-muted)',fontWeight:stale?700:400,padding:'2px 7px',borderRadius:'99px',background:stale?'rgba(248,113,113,0.1)':'transparent',border:stale?'1px solid rgba(248,113,113,0.3)':'none'}}>
+                          {stale ? '⚠️ ' : '🕐 '}{ageMins < 1 ? 'just now' : `${ageMins}m ago`}
+                        </span>
+                      );
+                    })()}
+                    <button onClick={()=>{ setGlobalCuesLoading(true); fetch(`${BACKEND_URL}/api/global-cues`).then(r=>r.json()).then(j=>{if(j.ok)setGlobalCues(j);}).catch(()=>{}).finally(()=>setGlobalCuesLoading(false)); }}
+                      style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem'}}>
+                      {globalCuesLoading ? '⏳' : '🔄 Refresh'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Proxy disclaimer */}
+                <div style={{background:'rgba(251,191,36,0.06)',border:'1px solid rgba(251,191,36,0.2)',borderRadius:'8px',padding:'0.5rem 0.85rem',marginBottom:'0.85rem',fontSize:'0.75rem',color:'#fbbf24',lineHeight:1.5}}>
+                  ⚠️ <strong>GIFT Nifty shown is a Yahoo Finance proxy (15-min delayed cash index), not live futures.</strong> Always verify on <a href="https://www.nseindia.com/global/content/gift_nifty/gift_nifty.htm" target="_blank" rel="noreferrer" style={{color:'#fbbf24'}}>NSE IFSC</a> or your broker before trading.
                 </div>
 
                 {globalCuesLoading && <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>⏳ Fetching global markets...</div>}
