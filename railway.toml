@@ -1,0 +1,6 @@
+[build]
+builder = "nixpacks"
+buildCommand = "cd frontend && npm install --legacy-peer-deps && npm run build"
+
+[deploy]
+startCommand = "cd frontend && npx serve -s build -l 3000"
