@@ -2580,14 +2580,28 @@ Respond ONLY with valid JSON:
 
     const trySource = async (url) => {
       const ctrl  = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 15000);
+      const timer = setTimeout(() => ctrl.abort(), 20000);
       try {
         const r = await fetch(url, { headers: { 'Accept': 'application/json' }, signal: ctrl.signal });
-        if (!r.ok) return null;
+        if (!r.ok) {
+          console.warn('[OC] HTTP error:', r.status, url);
+          return null;
+        }
         const j = await r.json();
-        if (!j?.error && j?.records?.data?.length > 0) return j;
+        if (j?.error) {
+          console.warn('[OC] API error:', j.error, url);
+          return null;
+        }
+        if (j?.records?.data?.length > 0) {
+          console.log('[OC] Got data:', j.records.data.length, 'rows from', url);
+          return j;
+        }
+        console.warn('[OC] Empty data from:', url, 'keys:', Object.keys(j));
         return null;
-      } catch(e) { return null; }
+      } catch(e) {
+        console.warn('[OC] Fetch error:', e.message, url);
+        return null;
+      }
       finally { clearTimeout(timer); }
     };
 
@@ -3192,7 +3206,8 @@ Respond ONLY with valid JSON:
   useEffect(() => {
     if (activeTab !== 'markets') return;
     if (activeMarketsTab === 'option-chain') {
-      if (liveOptionChain.length === 0) generateLiveOptionChain(selectedUnderlying);
+      // Always refresh when switching to option chain tab
+      generateLiveOptionChain(selectedUnderlying);
     }
     if (activeMarketsTab === 'yield-intel' && !yieldIntel) {
       setYieldLoading(true);
@@ -6546,9 +6561,9 @@ Respond ONLY with valid JSON:
                 ) : liveOptionChain.length===0 ? (
                   <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>
                     <div style={{fontSize:'2rem',marginBottom:'0.75rem'}}>📡</div>
-                    <div style={{fontWeight:700,marginBottom:'0.5rem'}}>Connecting to NSE...</div>
+                    <div style={{fontWeight:700,marginBottom:'0.5rem'}}>Loading Option Chain...</div>
                     <div style={{fontSize:'0.82rem',color:'#64748b',marginBottom:'1.25rem'}}>
-                      Fetching live option chain. NSE sometimes needs a moment.<br/>
+                      Fetching live data from Dhan API.<br/>
                       Market hours: 9:15 AM – 3:30 PM IST
                     </div>
                     <button onClick={()=>generateLiveOptionChain(selectedUnderlying)}
