@@ -1557,6 +1557,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [institutionalActivity, setInstitutionalActivity] = useState(null);
   const [fiiDiiLoading, setFiiDiiLoading] = useState(false);
   const [globalCues, setGlobalCues]       = useState(null);
+  const globalCuesTimerRef = React.useRef(null);
   const [yieldIntel, setYieldIntel]       = useState(null);
   const [morningBrief, setMorningBrief]   = useState(null);
   const [tradeInput, setTradeInput]       = useState({ strike: '', type: 'CE', lots: '1' });
