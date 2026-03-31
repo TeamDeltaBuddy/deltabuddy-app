@@ -3,4 +3,4 @@ builder = "nixpacks"
 buildCommand = "npm install --legacy-peer-deps && npm run build"
 
 [deploy]
-startCommand = "npx serve -s build -l 3000"
+startCommand = "npx serve -s build -p 3000"
