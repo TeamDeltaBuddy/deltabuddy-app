@@ -2577,7 +2577,8 @@ Respond ONLY with valid JSON:
 
   const generateLiveOptionChain = async (underlying = 'NIFTY', forceExpiry = null, _isRetry = false) => {
     setIsLoadingChain(true);
-    setLiveOptionChain([]);
+    // Don't clear existing chain on background refresh - only on symbol change
+    if (underlying !== selectedUnderlying) setLiveOptionChain([]);
 
     const trySource = async (url) => {
       const ctrl  = new AbortController();
@@ -3116,7 +3117,7 @@ Respond ONLY with valid JSON:
       const indiaInterval = setInterval(fetchLivePrices, 15000);
 
       // Option chain: NSE every 10 seconds
-      const chainInterval = setInterval(() => generateLiveOptionChain(selectedUnderlying), 10000);
+      const chainInterval = setInterval(() => generateLiveOptionChain(selectedUnderlying), 60000);
 
       // News: NewsAPI + AI every 5 minutes (top 10 only)
       const newsInterval = setInterval(() => { fetchIntelligentNews(); fetchBusinessNews(); }, 300000);
@@ -3207,8 +3208,8 @@ Respond ONLY with valid JSON:
   useEffect(() => {
     if (activeTab !== 'markets') return;
     if (activeMarketsTab === 'option-chain') {
-      // Always refresh when switching to option chain tab
-      generateLiveOptionChain(selectedUnderlying);
+      // Only fetch if chain is empty
+      if (liveOptionChain.length === 0) generateLiveOptionChain(selectedUnderlying);
     }
     if (activeMarketsTab === 'yield-intel' && !yieldIntel) {
       setYieldLoading(true);
