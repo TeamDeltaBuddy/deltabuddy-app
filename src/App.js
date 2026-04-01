@@ -4027,7 +4027,7 @@ Respond ONLY with valid JSON:
                   <strong style={{color:'var(--text-main)'}}>Welcome to DeltaBuddy</strong><br/>
                   Sign in to save watchlists, get Telegram alerts, and unlock AI features.
                 </div>
-                <button onClick={()=>setShowAuth(true)} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:800,fontSize:'0.78rem',cursor:'pointer',whiteSpace:'nowrap'}}>Sign In Free →</button>
+                <button onClick={()=>setShowAuthModal(true)} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:800,fontSize:'0.78rem',cursor:'pointer',whiteSpace:'nowrap'}}>Sign In Free →</button>
               </div>
             )}
 
