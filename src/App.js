@@ -998,20 +998,21 @@ function App() {
     const pcr = totalCE>0 ? (totalPE/totalCE).toFixed(2) : '-';
     const pcrSentiment = parseFloat(pcr)>1.2?'Bullish':parseFloat(pcr)<0.8?'Bearish':'Neutral';
 
-    // AI strategy suggestion
+    // AI strategy: simple rule-based when no API key available
     let strategy = null;
-    if (groqApiKey) {
-      try {
-        const prompt = `You are an expert options trader. Analyze this FnO stock: ${SYM} (${meta.name}), Sector: ${meta.sector}.
-PCR: ${pcr} (${pcrSentiment}). Top CE OI strikes (resistance): ${ceTop.map(r=>r.strike).join(', ')}. Top PE OI strikes (support): ${peTop.map(r=>r.strike).join(', ')}.
-Suggest ONE specific options strategy for a retail trader. Respond ONLY in this JSON:
-{"strategy":"strategy name","action":"exact trade eg Buy 25500CE","reasoning":"2 sentences max","risk":"Low/Medium/High","timeframe":"intraday/weekly/monthly","sentiment":"Bullish/Bearish/Neutral"}`;
-        const r = await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+groqApiKey.trim()},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],max_tokens:200,temperature:0.3})});
-        const j = await r.json();
-        const text = j?.choices?.[0]?.message?.content||'';
-        const clean = text.replace(/```json|```/g,'').trim();
-        strategy = JSON.parse(clean);
-      } catch(e) { strategy = null; }
+    const pcrNum = parseFloat(pcr);
+    if (pcrNum > 0) {
+      const sentiment = pcrNum > 1.2 ? 'Bullish' : pcrNum < 0.8 ? 'Bearish' : 'Neutral';
+      const topResistance = ceTop[0]?.strike;
+      const topSupport = peTop[0]?.strike;
+      strategy = {
+        sentiment,
+        strategy: sentiment==='Bullish' ? 'Bull Call Spread' : sentiment==='Bearish' ? 'Bear Put Spread' : 'Iron Condor',
+        action: sentiment==='Bullish' && topResistance ? `Buy ${topSupport}CE, Sell ${topResistance}CE` : sentiment==='Bearish' && topSupport ? `Buy ${topResistance}PE, Sell ${topSupport}PE` : `Sell ${topResistance}CE + ${topSupport}PE`,
+        reasoning: sentiment==='Bullish' ? `PCR of ${pcr} shows put writers are active — bullish signal. Max CE OI at ${topResistance} acts as resistance.` : sentiment==='Bearish' ? `PCR of ${pcr} shows call writers dominating — bearish. Max PE OI at ${topSupport} is support.` : `PCR ${pcr} indicates balanced market. Sell premium at both extremes.`,
+        risk: 'Medium',
+        timeframe: 'weekly',
+      };
     }
 
     setDeepDiveData({ meta, chainData, ceTop, peTop, pcr, pcrSentiment, strategy, symbol: SYM, price: stockPrice, change: stockChange });
