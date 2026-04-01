@@ -3088,11 +3088,7 @@ Respond ONLY with valid JSON:
   useEffect(() => {
     // Register PWA service worker
     // Unregister old service workers to prevent stale cache
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(regs => {
-        regs.forEach(reg => reg.unregister());
-      });
-    }
+
     // Re-subscribe to backend alert engine on every load
     const chatId = localStorage.getItem('db_tg_chatid');
     if (chatId) {
@@ -3769,7 +3765,6 @@ Respond ONLY with valid JSON:
           </div>
         )}
 
-</div>{/* end main content wrapper */}
 
         {/* AUTH MODAL */}
         {/* -- TELEGRAM SETUP MODAL  -  for regular users -- */}
@@ -3987,7 +3982,6 @@ Respond ONLY with valid JSON:
             </div>
           </div>
         )}
-<div style={{paddingTop:'98px', minHeight:'100vh', boxSizing:'border-box'}}>
 {activeTab === 'home' ? (
           <>
             {/* -- TELEGRAM ONBOARDING BANNER  -  shown if not connected -- */}
@@ -9795,6 +9789,8 @@ Respond ONLY with valid JSON:
 
             /* Main content padding */
             .main-content { padding: 0.75rem !important; }
+            /* Subnav overlap fix */
+            .App > *:not(.navbar):not(style) { margin-top: 0; }
             .panel { padding: 0.75rem !important; border-radius: 8px !important; }
 
             /* Tables scroll horizontally */
