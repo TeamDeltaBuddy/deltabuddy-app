@@ -1973,7 +1973,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
               if (row.CE) { map[k].ceOI+=row.CE.openInterest||0; map[k].ceLTP=row.CE.lastPrice||0; map[k].ceIV=row.CE.impliedVolatility||0; map[k].ceVol+=row.CE.totalTradedVolume||0; }
               if (row.PE) { map[k].peOI+=row.PE.openInterest||0; map[k].peLTP=row.PE.lastPrice||0; map[k].peIV=row.PE.impliedVolatility||0; map[k].peVol+=row.PE.totalTradedVolume||0; }
             });
-            chain = Object.values(map).filter(r=>r.ceOI>0||r.peOI>0).sort((a,b)=>a.strike-b.strike);
+            chain = Object.values(map).filter(r=>r.ceOI>0||r.peOI>0||r.ceIV>0||r.peIV>0).sort((a,b)=>a.strike-b.strike);
           }
         }
       } catch(nseErr) { console.warn('Expiry NSE fetch failed:', nseErr.message); }
@@ -5332,7 +5332,7 @@ Respond ONLY with valid JSON:
               {(()=>{
                 const spot = marketData.nifty?.value || 23500;
                 const unusual = liveOptionChain
-                  .filter(r => r.strike && (r.ce?.oi > 0 || r.pe?.oi > 0))
+                  .filter(r => r.strike && (r.ce?.iv > 0 || r.pe?.iv > 0 || r.ce?.oi > 0 || r.pe?.oi > 0))
                   .map(r => {
                     const pr    = prevOI[r.strike];
                     const ceOI  = r.ce?.oi || 0;
