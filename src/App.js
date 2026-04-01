@@ -1558,6 +1558,7 @@ Suggest ONE specific options strategy for a retail trader. Respond ONLY in this 
   const [fiiDiiLoading, setFiiDiiLoading] = useState(false);
   const [globalCues, setGlobalCues]       = useState(null);
   const globalCuesTimerRef = React.useRef(null);
+  const atmRowRef = React.useRef(null);
   const [yieldIntel, setYieldIntel]       = useState(null);
   const [morningBrief, setMorningBrief]   = useState(null);
   const [tradeInput, setTradeInput]       = useState({ strike: '', type: 'CE', lots: '1' });
@@ -3116,7 +3117,7 @@ Respond ONLY with valid JSON:
       const indiaInterval = setInterval(fetchLivePrices, 15000);
 
       // Option chain: NSE every 10 seconds
-      const chainInterval = setInterval(() => generateLiveOptionChain(selectedUnderlying), 60000);
+      const chainInterval = setInterval(() => generateLiveOptionChain(selectedUnderlying), 15000);
 
       // News: NewsAPI + AI every 5 minutes (top 10 only)
       const newsInterval = setInterval(() => { fetchIntelligentNews(); fetchBusinessNews(); }, 300000);
@@ -3150,6 +3151,15 @@ Respond ONLY with valid JSON:
   useEffect(() => {
     generateLiveOptionChain(selectedUnderlying);
   }, [currentUser]);
+
+  // Auto-scroll to ATM row when chain loads
+  useEffect(() => {
+    if (liveOptionChain.length > 0 && atmRowRef.current) {
+      setTimeout(() => {
+        atmRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 400);
+    }
+  }, [liveOptionChain, selectedExpiry]);
 
   // Calculate PCR from option chain data
   useEffect(() => {
@@ -6626,7 +6636,7 @@ Respond ONLY with valid JSON:
                             const ceBarW = ((ceOI/maxOI)*100).toFixed(0);
                             const peBarW = ((peOI/maxOI)*100).toFixed(0);
                             return (
-                              <tr key={idx} style={{borderBottom:'1px solid rgba(255,255,255,0.03)',background:rowBg}}>
+                              <tr key={idx} ref={isATM ? atmRowRef : null} style={{borderBottom:'1px solid rgba(255,255,255,0.03)',background:rowBg}}>
                                 <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,position:'relative'}}>
                                   <div style={{position:'absolute',right:0,top:0,bottom:0,width:`${ceBarW}%`,background:'rgba(74,222,128,0.08)',pointerEvents:'none'}}/>
                                   <span style={{position:'relative',fontWeight:ceOI>500000?700:400,color:ceOI>500000?'#4ade80':'#94a3b8'}}>{fmt(ceOI)}</span>
