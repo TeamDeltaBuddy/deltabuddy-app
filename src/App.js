@@ -2584,24 +2584,23 @@ Respond ONLY with valid JSON:
       const ctrl  = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 20000);
       try {
+        console.log('[OC] Fetching:', url);
         const r = await fetch(url, { headers: { 'Accept': 'application/json' }, signal: ctrl.signal });
+        console.log('[OC] Status:', r.status, 'ok:', r.ok);
         if (!r.ok) {
-          console.warn('[OC] HTTP error:', r.status, url);
+          const text = await r.text();
+          console.warn('[OC] HTTP error:', r.status, text.substring(0,100));
           return null;
         }
         const j = await r.json();
-        if (j?.error) {
-          console.warn('[OC] API error:', j.error, url);
-          return null;
-        }
-        if (j?.records?.data?.length > 0) {
-          console.log('[OC] Got data:', j.records.data.length, 'rows from', url);
-          return j;
-        }
-        console.warn('[OC] Empty data from:', url, 'keys:', Object.keys(j));
+        console.log('[OC] Response keys:', Object.keys(j));
+        if (j?.records) console.log('[OC] Records data length:', j.records?.data?.length, 'expiries:', j.records?.expiryDates);
+        if (j?.error) { console.warn('[OC] API error:', j.error); return null; }
+        if (j?.records?.data?.length > 0) return j;
+        console.warn('[OC] No data in response:', JSON.stringify(j).substring(0,200));
         return null;
       } catch(e) {
-        console.warn('[OC] Fetch error:', e.message, url);
+        console.warn('[OC] Fetch error:', e.message);
         return null;
       }
       finally { clearTimeout(timer); }
