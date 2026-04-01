@@ -6565,8 +6565,9 @@ Respond ONLY with valid JSON:
                     <div style={{fontSize:'2rem',marginBottom:'0.75rem'}}>📡</div>
                     <div style={{fontWeight:700,marginBottom:'0.5rem'}}>Loading Option Chain...</div>
                     <div style={{fontSize:'0.82rem',color:'#64748b',marginBottom:'1.25rem'}}>
-                      Fetching live data from Dhan API.<br/>
-                      Market hours: 9:15 AM – 3:30 PM IST
+                      Chain rows: {liveOptionChain.length} | Loading: {isLoadingChain?'yes':'no'}<br/>
+                      Expiry: {selectedExpiry || nseExpiryDates[0] || 'none'}<br/>
+                      Source: Dhan API | Spot: {marketData.nifty?.value}
                     </div>
                     <button onClick={()=>generateLiveOptionChain(selectedUnderlying)}
                       style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.5rem 1.4rem',fontWeight:700,cursor:'pointer',fontSize:'0.88rem'}}>
