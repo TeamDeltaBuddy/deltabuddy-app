@@ -3087,8 +3087,11 @@ Respond ONLY with valid JSON:
   // Auto-refresh news and prices - LIVE MODE
   useEffect(() => {
     // Register PWA service worker
+    // Unregister old service workers to prevent stale cache
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(reg => reg.unregister());
+      });
     }
     // Re-subscribe to backend alert engine on every load
     const chatId = localStorage.getItem('db_tg_chatid');
@@ -3658,7 +3661,10 @@ Respond ONLY with valid JSON:
             scrollbarWidth:'none',
             position:'sticky',
             top:'56px',
-            zIndex:99,
+            zIndex:98,
+            height:'42px',
+            alignItems:'center',
+            flexShrink:0,
           }}>
             {seg.items.map(([tab, label]) => (
               <button key={tab}
@@ -3762,6 +3768,8 @@ Respond ONLY with valid JSON:
             </div>
           </div>
         )}
+
+</div>{/* end main content wrapper */}
 
         {/* AUTH MODAL */}
         {/* -- TELEGRAM SETUP MODAL  -  for regular users -- */}
@@ -3979,6 +3987,7 @@ Respond ONLY with valid JSON:
             </div>
           </div>
         )}
+<div style={{paddingTop:'98px', minHeight:'100vh', boxSizing:'border-box'}}>
 {activeTab === 'home' ? (
           <>
             {/* -- TELEGRAM ONBOARDING BANNER  -  shown if not connected -- */}
