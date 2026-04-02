@@ -932,20 +932,60 @@ function App() {
     setDeepDiveData(null);
     const SYM = symbol.toUpperCase().trim();
 
-    // FnO company meta
+    // FnO company meta — comprehensive list
     const FNO_META = {
-      RELIANCE:  { name:'Reliance Industries', sector:'Energy / Refining', lot:250, desc:'India largest company by revenue. Oil-to-chemicals, retail (JioMart), Jio telecom.' },
-      TCS:       { name:'Tata Consultancy Services', sector:'IT Services', lot:150, desc:'Largest IT exporter. Consistent dividend payer, low leverage, global clients.' },
-      HDFCBANK:  { name:'HDFC Bank', sector:'Private Banking', lot:550, desc:'Largest private bank by assets. Known for low NPAs and consistent growth.' },
-      ICICIBANK: { name:'ICICI Bank', sector:'Private Banking', lot:700, desc:'Second largest private bank. Strong retail lending and digital banking push.' },
-      INFY:      { name:'Infosys', sector:'IT Services', lot:400, desc:'Second largest IT exporter. Volatile on US tech spending cycles.' },
-      SBIN:      { name:'State Bank of India', sector:'PSU Banking', lot:1500, desc:'Largest PSU bank. Sensitive to government policy and NPA cycles.' },
-      AXISBANK:  { name:'Axis Bank', sector:'Private Banking', lot:1200, desc:'Third largest private bank. Beneficiary of credit growth cycle.' },
-      ITC:       { name:'ITC Limited', sector:'FMCG / Tobacco', lot:3200, desc:'Dominant cigarettes market share. Growing FMCG and hotels businesses.' },
-      BAJFINANCE:{ name:'Bajaj Finance', sector:'NBFC', lot:125, desc:'Largest NBFC. Premium valuation. Sensitive to rate cycles.' },
-      WIPRO:     { name:'Wipro', sector:'IT Services', lot:3000, desc:'IT services with global delivery. Slower growth vs TCS/Infy.' },
-      NIFTY:     { name:'Nifty 50 Index', sector:'Index', lot:75, desc:'Benchmark index of 50 large-cap Indian stocks.' },
-      BANKNIFTY: { name:'Bank Nifty Index', sector:'Banking Index', lot:15, desc:'Index of the 12 most liquid banking stocks on NSE.' },
+      // Indices
+      NIFTY:       { name:'Nifty 50 Index',          sector:'Index',            lot:75,   desc:'Benchmark index of 50 large-cap Indian stocks.' },
+      BANKNIFTY:   { name:'Bank Nifty Index',         sector:'Banking Index',    lot:15,   desc:'Index of 12 most liquid banking stocks.' },
+      FINNIFTY:    { name:'Nifty Financial Services', sector:'Fin Index',        lot:40,   desc:'Financial services sector index.' },
+      MIDCPNIFTY:  { name:'Nifty Midcap Select',      sector:'Midcap Index',     lot:50,   desc:'Midcap select index.' },
+      SENSEX:      { name:'BSE Sensex',                sector:'Index',            lot:10,   desc:'BSE benchmark index of 30 stocks.' },
+      // Large Cap
+      RELIANCE:    { name:'Reliance Industries',       sector:'Energy',           lot:250,  desc:'Largest Indian company. Oil, retail, telecom.' },
+      TCS:         { name:'Tata Consultancy Services', sector:'IT Services',      lot:150,  desc:'Largest IT exporter. Defensive, consistent dividends.' },
+      HDFCBANK:    { name:'HDFC Bank',                 sector:'Private Banking',  lot:550,  desc:'Largest private bank. Low NPAs, consistent growth.' },
+      ICICIBANK:   { name:'ICICI Bank',                sector:'Private Banking',  lot:700,  desc:'2nd largest private bank. Strong digital push.' },
+      INFY:        { name:'Infosys',                   sector:'IT Services',      lot:400,  desc:'2nd largest IT. Volatile on US tech spending.' },
+      SBIN:        { name:'State Bank of India',       sector:'PSU Banking',      lot:1500, desc:'Largest PSU bank. Policy sensitive.' },
+      AXISBANK:    { name:'Axis Bank',                 sector:'Private Banking',  lot:1200, desc:'3rd largest private bank.' },
+      ITC:         { name:'ITC Limited',               sector:'FMCG',             lot:3200, desc:'Cigarettes + FMCG + Hotels.' },
+      BAJFINANCE:  { name:'Bajaj Finance',             sector:'NBFC',             lot:125,  desc:'Largest NBFC. Rate cycle sensitive.' },
+      WIPRO:       { name:'Wipro',                     sector:'IT Services',      lot:3000, desc:'IT services, global delivery.' },
+      LT:          { name:'Larsen & Toubro',           sector:'Infrastructure',   lot:150,  desc:'Largest infra & engineering conglomerate.' },
+      HINDUNILVR:  { name:'Hindustan Unilever',        sector:'FMCG',             lot:300,  desc:'FMCG giant. Defensive, dividend payer.' },
+      KOTAKBANK:   { name:'Kotak Mahindra Bank',       sector:'Private Banking',  lot:400,  desc:'Premium private bank. High valuation.' },
+      BHARTIARTL:  { name:'Bharti Airtel',             sector:'Telecom',          lot:500,  desc:'2nd largest telecom. Strong ARPU growth.' },
+      ASIANPAINT:  { name:'Asian Paints',              sector:'Paints',           lot:200,  desc:'Market leader in paints. Expensive valuation.' },
+      MARUTI:      { name:'Maruti Suzuki',             sector:'Auto',             lot:100,  desc:'Market leader in passenger vehicles.' },
+      TATAMOTORS:  { name:'Tata Motors',               sector:'Auto',             lot:1400, desc:'Tata + JLR. EV pivot underway.' },
+      TATASTEEL:   { name:'Tata Steel',                sector:'Metals',           lot:5500, desc:'Largest steel producer. Cyclical.' },
+      ADANIPORTS:  { name:'Adani Ports',               sector:'Logistics',        lot:400,  desc:'Largest port operator in India.' },
+      POWERGRID:   { name:'Power Grid',                sector:'Utilities',        lot:2700, desc:'PSU power transmission monopoly.' },
+      NTPC:        { name:'NTPC',                      sector:'Utilities',        lot:2250, desc:'Largest power generator PSU.' },
+      ONGC:        { name:'ONGC',                      sector:'Oil & Gas',        lot:1925, desc:'PSU oil exploration giant.' },
+      JSWSTEEL:    { name:'JSW Steel',                 sector:'Metals',           lot:600,  desc:'2nd largest steel producer.' },
+      SUNPHARMA:   { name:'Sun Pharma',                sector:'Pharma',           lot:350,  desc:'Largest pharma company. US generics.' },
+      DRREDDY:     { name:'Dr Reddys Labs',            sector:'Pharma',           lot:125,  desc:'Pharma, strong US business.' },
+      CIPLA:       { name:'Cipla',                     sector:'Pharma',           lot:650,  desc:'Respiratory + HIV generics leader.' },
+      HCLTECH:     { name:'HCL Technologies',          sector:'IT Services',      lot:700,  desc:'3rd largest IT. Strong in infra services.' },
+      TECHM:       { name:'Tech Mahindra',             sector:'IT Services',      lot:600,  desc:'Telecom-focused IT services.' },
+      BAJAJ_AUTO:  { name:'Bajaj Auto',                sector:'Auto',             lot:125,  desc:'2-wheeler leader. Export focused.' },
+      BAJAJFINSV:  { name:'Bajaj Finserv',             sector:'NBFC/Insurance',   lot:500,  desc:'Financial services holding company.' },
+      TITAN:       { name:'Titan Company',             sector:'Consumer',         lot:375,  desc:'Watches + Jewellery. Tanishq brand.' },
+      ULTRACEMCO:  { name:'UltraTech Cement',          sector:'Cement',           lot:100,  desc:'Largest cement company in India.' },
+      NESTLEIND:   { name:'Nestle India',              sector:'FMCG',             lot:50,   desc:'Premium FMCG. Maggi brand.' },
+      HINDALCO:    { name:'Hindalco Industries',       sector:'Metals/Aluminium', lot:700,  desc:'Aluminium + copper. Novelis exposure.' },
+      COALINDIA:   { name:'Coal India',                sector:'Mining',           lot:3500, desc:'World largest coal miner. PSU.' },
+      DIVISLAB:    { name:'Divi's Laboratories',      sector:'Pharma',           lot:150,  desc:'CDMO + API manufacturer.' },
+      APOLLOHOSP:  { name:'Apollo Hospitals',          sector:'Healthcare',       lot:125,  desc:'Largest hospital chain.' },
+      EICHERMOT:   { name:'Eicher Motors',             sector:'Auto',             lot:175,  desc:'Royal Enfield + VECV.' },
+      GRASIM:      { name:'Grasim Industries',         sector:'Diversified',      lot:475,  desc:'VSF + Cement (UltraTech parent).' },
+      INDUSINDBK:  { name:'IndusInd Bank',             sector:'Private Banking',  lot:800,  desc:'Mid-size private bank.' },
+      TATACONSUM:  { name:'Tata Consumer Products',    sector:'FMCG',             lot:650,  desc:'Tea, salt, Starbucks India.' },
+      VEDL:        { name:'Vedanta',                   sector:'Metals',           lot:2900, desc:'Diversified natural resources.' },
+      BPCL:        { name:'BPCL',                      sector:'Oil & Gas',        lot:2200, desc:'PSU oil marketing company.' },
+      HEROMOTOCO:  { name:'Hero MotoCorp',             sector:'Auto',             lot:300,  desc:'Largest 2-wheeler maker.' },
+      SHREECEM:    { name:'Shree Cement',              sector:'Cement',           lot:25,   desc:'2nd largest cement company.' },
     };
 
     const meta = FNO_META[SYM] || { name: SYM, sector: 'FnO Stock', lot: 1, desc: 'FnO stock on NSE.' };
@@ -955,22 +995,24 @@ function App() {
     let stockChange = 0;
     let chainData = selectedUnderlying === SYM ? liveOptionChain : [];
 
-    // For indices use Dhan chain
-    const indexSymbols = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY'];
-    if (indexSymbols.includes(SYM) && selectedUnderlying !== SYM) {
+    // Try Dhan option chain for any supported symbol
+    if (selectedUnderlying !== SYM) {
       try {
         const r = await fetch(`${BACKEND_URL}/api/dhan/option-chain?symbol=${SYM}`);
         if (r.ok) {
           const j = await r.json();
-          const data = j?.records?.data || [];
-          stockPrice = j?.records?.underlyingValue || 0;
-          chainData = data.slice(0,30).map(row=>({
-            strike: row.strikePrice,
-            ce: { oi: row.CE?.openInterest||0, ltp: row.CE?.lastPrice||0, iv: row.CE?.impliedVolatility||0 },
-            pe: { oi: row.PE?.openInterest||0, ltp: row.PE?.lastPrice||0, iv: row.PE?.impliedVolatility||0 },
-          }));
+          if (!j?.error && j?.records?.data?.length > 0) {
+            const data = j.records.data;
+            stockPrice = j.records.underlyingValue || 0;
+            chainData = data.map(row=>({
+              strike: row.strikePrice,
+              ce: { oi: row.CE?.openInterest||0, ltp: row.CE?.lastPrice||0, iv: row.CE?.impliedVolatility||0 },
+              pe: { oi: row.PE?.openInterest||0, ltp: row.PE?.lastPrice||0, iv: row.PE?.impliedVolatility||0 },
+            }));
+            console.log(`[DeepDive] Dhan data for ${SYM}: ${chainData.length} strikes, spot=${stockPrice}`);
+          }
         }
-      } catch(e) {}
+      } catch(e) { console.warn('[DeepDive] Dhan fetch failed:', e.message); }
     }
 
     // For stocks or if chain unavailable, get price from Yahoo
@@ -5329,7 +5371,7 @@ Respond ONLY with valid JSON:
               </div>
               {/* Quick picks */}
               <div style={{display:'flex',gap:'0.4rem',flexWrap:'wrap',marginTop:'0.75rem'}}>
-                {['NIFTY','BANKNIFTY','RELIANCE','TCS','HDFCBANK','ICICIBANK','SBIN','INFY'].map(s=>(
+                {['NIFTY','BANKNIFTY','RELIANCE','TCS','HDFCBANK','ICICIBANK','SBIN','INFY','AXISBANK','ITC','LT','BAJFINANCE','TATAMOTORS','SUNPHARMA','KOTAKBANK','BHARTIARTL'].map(s=>(
                   <button key={s} onClick={()=>{setDeepDiveSymbol(s);runDeepDive(s);}}
                     style={{background:'rgba(255,255,255,0.06)',color:'var(--text-dim)',border:'1px solid var(--border)',borderRadius:'99px',padding:'2px 10px',fontSize:'0.75rem',cursor:'pointer'}}>
                     {s}
@@ -5360,12 +5402,19 @@ Respond ONLY with valid JSON:
                       <p style={{color:'var(--text-dim)',fontSize:'0.82rem',maxWidth:'500px',lineHeight:1.5}}>{deepDiveData.meta.desc}</p>
                     </div>
                     <div style={{display:'flex',flexDirection:'column',gap:'0.35rem',minWidth:'140px'}}>
+                      {deepDiveData.price>0 && (
+                        <div style={{background:'#0f172a',borderRadius:'8px',padding:'0.5rem 0.75rem',textAlign:'center'}}>
+                          <div style={{fontSize:'0.7rem',color:'#64748b'}}>LTP</div>
+                          <div style={{fontSize:'1.1rem',fontWeight:700,color:'var(--text-main)'}}>₹{deepDiveData.price?.toLocaleString('en-IN',{maximumFractionDigits:2})}</div>
+                          <div style={{fontSize:'0.72rem',color:deepDiveData.change>=0?'#4ade80':'#f87171'}}>{deepDiveData.change>=0?'▲ +':'▼ '}{Math.abs(deepDiveData.change).toFixed(2)}%</div>
+                        </div>
+                      )}
                       <div style={{background:'#0f172a',borderRadius:'8px',padding:'0.5rem 0.75rem',textAlign:'center'}}>
                         <div style={{fontSize:'0.7rem',color:'#64748b'}}>LOT SIZE</div>
                         <div style={{fontSize:'1.1rem',fontWeight:700,color:'var(--accent)'}}>{deepDiveData.meta.lot}</div>
                       </div>
                       <div style={{background:'#0f172a',borderRadius:'8px',padding:'0.5rem 0.75rem',textAlign:'center'}}>
-                        <div style={{fontSize:'0.7rem',color:'#64748b'}}>PCR</div>
+                        <div style={{fontSize:'0.7rem',color:'#64748b'}}>PCR (Nifty Proxy)</div>
                         <div style={{fontSize:'1.1rem',fontWeight:700,color:deepDiveData.pcrSentiment==='Bullish'?'#4ade80':deepDiveData.pcrSentiment==='Bearish'?'#f87171':'#fbbf24'}}>{deepDiveData.pcr}</div>
                         <div style={{fontSize:'0.7rem',color:'#64748b'}}>{deepDiveData.pcrSentiment}</div>
                       </div>
