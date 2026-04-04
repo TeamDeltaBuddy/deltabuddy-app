@@ -976,7 +976,7 @@ function App() {
       NESTLEIND:   { name:'Nestle India',              sector:'FMCG',             lot:50,   desc:'Premium FMCG. Maggi brand.' },
       HINDALCO:    { name:'Hindalco Industries',       sector:'Metals/Aluminium', lot:700,  desc:'Aluminium + copper. Novelis exposure.' },
       COALINDIA:   { name:'Coal India',                sector:'Mining',           lot:3500, desc:'World largest coal miner. PSU.' },
-      DIVISLAB:    { name:'Divi's Laboratories',      sector:'Pharma',           lot:150,  desc:'CDMO + API manufacturer.' },
+      DIVISLAB:    { name:"Divi's Laboratories",      sector:'Pharma',           lot:150,  desc:'CDMO + API manufacturer.' },
       APOLLOHOSP:  { name:'Apollo Hospitals',          sector:'Healthcare',       lot:125,  desc:'Largest hospital chain.' },
       EICHERMOT:   { name:'Eicher Motors',             sector:'Auto',             lot:175,  desc:'Royal Enfield + VECV.' },
       GRASIM:      { name:'Grasim Industries',         sector:'Diversified',      lot:475,  desc:'VSF + Cement (UltraTech parent).' },
