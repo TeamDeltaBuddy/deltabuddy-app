@@ -6518,7 +6518,7 @@ Respond ONLY with valid JSON:
               const spot = selectedUnderlying==='NIFTY' ? marketData.nifty.value : marketData.bankNifty.value;
               const chain = liveOptionChain.length > 0 ? liveOptionChain : [];
               const oiRows = chain
-                .filter(d => d.strike && (d.ce?.oi > 0 || d.pe?.oi > 0))
+                .filter(d => d.strike)
                 .map(d => ({
                   strike : d.strike,
                   ce     : Math.round((d.ce?.oi     || 0) / 1000),
