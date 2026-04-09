@@ -24,7 +24,7 @@ const storage     = getStorage(firebaseApp);
 const googleProvider = new GoogleAuthProvider();
 
 // Railway backend URL  -  update after deploying
-const BACKEND_URL   = process.env.REACT_APP_BACKEND_URL || 'https://deltabuddy-backend-production-ab17.up.railway.app';
+const BACKEND_URL   = process.env.REACT_APP_BACKEND_URL || 'https://deltabuddy-backend-production-24eb.up.railway.app';
 const ADMIN_EMAIL   = 'mirza.hassanuzzaman@gmail.com';
 
 
