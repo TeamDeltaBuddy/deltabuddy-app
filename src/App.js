@@ -3280,8 +3280,7 @@ Respond ONLY with valid JSON:
   useEffect(() => {
     if (activeTab !== 'markets') return;
     if (activeMarketsTab === 'option-chain') {
-      // Only fetch if chain is empty
-      if (liveOptionChain.length === 0) generateLiveOptionChain(selectedUnderlying);
+      generateLiveOptionChain(selectedUnderlying);
     }
     if (activeMarketsTab === 'yield-intel' && !yieldIntel) {
       setYieldLoading(true);
@@ -5663,8 +5662,15 @@ Respond ONLY with valid JSON:
                         {(()=>{
                           const spot = selectedUnderlying==='NIFTY'?marketData.nifty.value:selectedUnderlying==='BANKNIFTY'?marketData.bankNifty.value:selectedUnderlying==='FINNIFTY'?(livePrices['NIFTY FINANCIAL SERVICES']||marketData.nifty.value):(livePrices['NIFTY MIDCAP SELECT']||marketData.nifty.value)||25500;
                           const gap = selectedUnderlying==='BANKNIFTY'?51:selectedUnderlying==='MIDCPNIFTY'?13:26;
-                          const maxOI = Math.max(1,...liveOptionChain.map(r=>Math.max(r.ce?.oi||0,r.pe?.oi||0)));
-                          return liveOptionChain.map((row,idx)=>{
+                          // Only show strikes with actual data (IV > 0 or OI > 0 or near ATM)
+                          const atm = Math.round((spot||25000)/gap)*gap;
+                          const visibleChain = liveOptionChain.filter(r => {
+                            const hasData = (parseFloat(r.ce?.iv||0) > 0) || (parseFloat(r.pe?.iv||0) > 0) || (r.ce?.oi||0) > 0 || (r.pe?.oi||0) > 0;
+                            const nearATM = Math.abs(r.strike - atm) <= gap * 15;
+                            return hasData && nearATM;
+                          });
+                          const maxOI = Math.max(1,...visibleChain.map(r=>Math.max(r.ce?.oi||0,r.pe?.oi||0)));
+                          return visibleChain.map((row,idx)=>{
                             const isATM = Math.abs(row.strike-spot)<gap;
                             const itmCE = row.strike < spot;
                             const itmPE = row.strike > spot;
