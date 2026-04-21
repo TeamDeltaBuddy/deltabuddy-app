@@ -4047,54 +4047,43 @@ Respond ONLY with valid JSON:
         )}
 {activeTab === 'home' ? (
           <>
-            {/* ── WRAPPER ── */}
-            <div style={{padding:'1.25rem',maxWidth:'860px',margin:'0 auto'}}>
+            <div style={{padding:'1.5rem',maxWidth:'960px',margin:'0 auto'}}>
 
-            {/* ── TELEGRAM BANNER ── */}
-            {!tgChatId && currentUser && (
-              <div style={{background:'linear-gradient(135deg,rgba(34,158,217,0.12),rgba(0,255,136,0.06))',border:'1px solid rgba(34,158,217,0.25)',borderRadius:'14px',padding:'0.85rem 1.25rem',display:'flex',alignItems:'center',gap:'1rem',flexWrap:'wrap',marginBottom:'1.25rem'}}>
-                <span style={{fontSize:'1.5rem'}}>📲</span>
-                <div style={{flex:1,fontSize:'0.82rem',color:'var(--text-dim)',lineHeight:1.5}}>
-                  <strong style={{color:'var(--text-main)'}}>Alerts on Telegram</strong><br/>
-                  Pre-market 8:45 AM · Regime change · GIFT Nifty spike
-                </div>
-                <button onClick={()=>setShowTgSetup(true)} style={{background:'#229ED9',color:'#fff',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:700,fontSize:'0.78rem',cursor:'pointer',whiteSpace:'nowrap'}}>🔔 Connect</button>
-              </div>
-            )}
+            {/* ── WELCOME BANNER ── */}
             {!currentUser && (
-              <div style={{background:'linear-gradient(135deg,rgba(249,115,22,0.1),rgba(0,255,136,0.05))',border:'1px solid rgba(249,115,22,0.25)',borderRadius:'14px',padding:'0.85rem 1.25rem',display:'flex',alignItems:'center',gap:'1rem',flexWrap:'wrap',marginBottom:'1.25rem'}}>
-                <span style={{fontSize:'1.5rem'}}>👋</span>
-                <div style={{flex:1,fontSize:'0.82rem',color:'var(--text-dim)',lineHeight:1.5}}>
-                  <strong style={{color:'var(--text-main)'}}>Welcome to DeltaBuddy</strong><br/>
-                  Sign in to save watchlists, get Telegram alerts, and unlock AI features.
+              <div style={{background:'rgba(0,201,122,0.08)',border:'1px solid rgba(0,201,122,0.2)',borderRadius:'var(--radius)',padding:'0.85rem 1.25rem',display:'flex',alignItems:'center',gap:'1rem',flexWrap:'wrap',marginBottom:'1.5rem'}}>
+                <span style={{fontSize:'1.4rem'}}>👋</span>
+                <div style={{flex:1,fontSize:'0.85rem',color:'var(--dim)',lineHeight:1.5}}>
+                  <strong style={{color:'var(--ink)'}}>Welcome to DeltaBuddy</strong> — Sign in to save watchlists, get Telegram alerts, and unlock AI features.
                 </div>
-                <button onClick={()=>setShowAuthModal(true)} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:800,fontSize:'0.78rem',cursor:'pointer',whiteSpace:'nowrap'}}>Sign In Free →</button>
+                <button onClick={()=>setShowAuthModal(true)} style={{background:'var(--ink)',color:'var(--paper)',border:'none',borderRadius:'9px',padding:'0.5rem 1.25rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem',fontFamily:'var(--font-head)',whiteSpace:'nowrap'}}>Sign In Free →</button>
               </div>
             )}
 
-            {/* ── LIVE TICKER ── */}
+            {/* ── LIVE TICKERS ── */}
             {(() => {
-              const tickers = [
-                { label:'Nifty 50',   val:marketData.nifty?.value,     chg:marketData.nifty?.change },
-                { label:'BankNifty',  val:marketData.bankNifty?.value,  chg:marketData.bankNifty?.change },
-                { label:'India VIX',  val:marketData.vix?.value,        chg:marketData.vix?.change,  warn:parseFloat(marketData.vix?.value)>18 },
-                { label:'PCR',        val:(()=>{ const ce=liveOptionChain.reduce((a,r)=>a+(r.ce?.oi||0),0); const pe=liveOptionChain.reduce((a,r)=>a+(r.pe?.oi||0),0); return ce>0?(pe/ce).toFixed(2):null; })(), chg:null },
-                { label:'FII Net',    val:institutionalActivity?.fii?.net!=null?'₹'+Math.round(institutionalActivity.fii.net)+'Cr':null, chg:null, raw:institutionalActivity?.fii?.net },
-                { label:'GIFT Nifty', val:globalCues?.giftPct!=null?(globalCues.giftPct>0?'+':'')+globalCues.giftPct+'%':null, chg:null, raw:globalCues?.giftPct },
+              const items = [
+                {label:'Nifty 50',   val:marketData.nifty?.value,    chg:marketData.nifty?.change},
+                {label:'BankNifty',  val:marketData.bankNifty?.value, chg:marketData.bankNifty?.change},
+                {label:'India VIX',  val:marketData.vix?.value,       chg:marketData.vix?.change, warn:parseFloat(marketData.vix?.value)>18},
+                {label:'PCR',        val:(()=>{const c=liveOptionChain.reduce((a,r)=>a+(r.ce?.oi||0),0);const p=liveOptionChain.reduce((a,r)=>a+(r.pe?.oi||0),0);return c>0?(p/c).toFixed(2):null;})(), chg:null},
+                {label:'FII Net',    val:institutionalActivity?.fii?.net!=null?'₹'+Math.round(Math.abs(institutionalActivity.fii.net))+'Cr':null, chg:null, raw:institutionalActivity?.fii?.net},
+                {label:'GIFT Nifty', val:globalCues?.giftPct!=null?(globalCues.giftPct>0?'+':'')+globalCues.giftPct?.toFixed(2)+'%':null, chg:null, raw:globalCues?.giftPct},
               ];
               return (
-                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:'0.5rem',marginBottom:'1.25rem'}}>
-                  {tickers.map((t,i)=>{
-                    if (!t.val && t.val !== 0) return null;
-                    const chg = parseFloat(t.chg);
-                    const raw = t.raw;
-                    const isUp = t.chg!=null ? chg>0 : raw!=null ? raw>0 : null;
-                    const color = t.warn ? '#fbbf24' : isUp===true ? '#4ade80' : isUp===false ? '#f87171' : '#94a3b8';
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:'1px',background:'var(--line)',borderRadius:'var(--radius)',overflow:'hidden',marginBottom:'1.5rem'}}>
+                  {items.map((t,i)=>{
+                    if(!t.val && t.val!==0) return null;
+                    const chg=parseFloat(t.chg);
+                    const raw=t.raw;
+                    const isUp=t.chg!=null?chg>0:raw!=null?raw>0:null;
+                    const color=t.warn?'var(--amber)':isUp===true?'var(--green)':isUp===false?'var(--red)':'var(--muted)';
                     return (
-                      <div key={i} style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'10px',padding:'0.6rem 0.75rem'}}>
-                        <div style={{fontSize:'0.6rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.07em',color:'var(--text-muted)',marginBottom:'0.25rem'}}>{t.label}</div>
-                        <div style={{fontFamily:'monospace',fontSize:'0.95rem',fontWeight:700,color:t.warn?'#fbbf24':'var(--text-main)'}}>{typeof t.val==='number'?t.val.toLocaleString('en-IN'):t.val}</div>
-                        {t.chg!=null && <div style={{fontFamily:'monospace',fontSize:'0.68rem',marginTop:'0.1rem',color}}>{chg>=0?'▲ +':'▼ '}{Math.abs(chg).toFixed(2)}%</div>}
+                      <div key={i} style={{background:'var(--card)',padding:'0.9rem 1rem'}}>
+                        <div style={{fontFamily:'var(--font-mono)',fontSize:'0.6rem',textTransform:'uppercase',letterSpacing:'0.08em',color:'var(--muted)',marginBottom:'0.35rem'}}>{t.label}</div>
+                        <div style={{fontFamily:'var(--font-mono)',fontSize:'1rem',fontWeight:500,color:t.warn?'var(--amber)':'var(--ink)',marginBottom:'0.1rem'}}>{typeof t.val==='number'?t.val.toLocaleString('en-IN'):t.val}</div>
+                        {t.chg!=null&&<div style={{fontFamily:'var(--font-mono)',fontSize:'0.7rem',color}}>{chg>=0?'▲ +':'▼ '}{Math.abs(chg).toFixed(2)}%</div>}
+                        {t.chg==null&&raw!=null&&<div style={{fontFamily:'var(--font-mono)',fontSize:'0.7rem',color}}>{raw>=0?'↑ Buying':'↓ Selling'}</div>}
                       </div>
                     );
                   })}
@@ -4102,348 +4091,153 @@ Respond ONLY with valid JSON:
               );
             })()}
 
-            {/* ── GIFT NIFTY BANNER ── */}
-            {globalCues?.giftPct!=null && (
-              <div style={{background:'linear-gradient(135deg,rgba(74,222,128,0.07),rgba(0,255,136,0.03))',border:'1px solid rgba(74,222,128,0.2)',borderRadius:'14px',padding:'1rem 1.25rem',display:'flex',alignItems:'center',gap:'1.25rem',flexWrap:'wrap',marginBottom:'1.25rem',position:'relative',overflow:'hidden'}}>
-                <div style={{position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,#4ade80,transparent)'}}/>
-                <span style={{fontSize:'1.5rem'}}>🎯</span>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:'0.62rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'var(--text-muted)',marginBottom:'0.2rem'}}>GIFT Nifty — Pre-Market Signal</div>
-                  <div style={{fontFamily:'monospace',fontSize:'1.6rem',fontWeight:800,color:'#4ade80',lineHeight:1}}>{globalCues.giftPct>0?'+':''}{globalCues.giftPct}% <span style={{fontSize:'0.9rem',color:'var(--text-dim)',fontFamily:'inherit',fontWeight:400}}>{globalCues.giftVal?.toLocaleString('en-IN')}</span></div>
-                  <div style={{fontSize:'0.72rem',color:'var(--text-dim)',marginTop:'0.2rem'}}>Yahoo proxy · 15-min delayed · Verify on NSE IFSC</div>
-                </div>
-                <div style={{background:'rgba(74,222,128,0.12)',border:'1px solid rgba(74,222,128,0.25)',borderRadius:'10px',padding:'0.5rem 1rem',textAlign:'center'}}>
-                  <div style={{fontSize:'0.6rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:'var(--text-muted)'}}>Expected Open</div>
-                  <div style={{fontFamily:'var(--font-head,sans-serif)',fontSize:'0.95rem',fontWeight:800,color:'#4ade80',marginTop:'0.15rem'}}>{globalCues.giftPct>0.3?'GAP UP':globalCues.giftPct<-0.3?'GAP DOWN':'FLAT'}</div>
-                </div>
-              </div>
-            )}
-
-            {/* == MARKET REGIME DETECTOR == */}
-            {(()=>{
-              const vix      = parseFloat(marketData.vix?.value||0);
-              const niftyChg = parseFloat(marketData.nifty?.change||0);
-              const fiiNet   = institutionalActivity?.fii?.net ?? null;
-              const ceOI     = liveOptionChain.reduce((a,r)=>a+(r.ce?.oi||0),0);
-              const peOI     = liveOptionChain.reduce((a,r)=>a+(r.pe?.oi||0),0);
-              const pcr      = ceOI > 0 ? peOI/ceOI : null;
-              const giftPct  = globalCues?.giftPct || 0;
-              let score = 0;
-              if (vix>0)          score += vix<14?1:vix<20?0:-1;
-              if (fiiNet!=null)   score += fiiNet>500?1:fiiNet>-500?0:-1;
-              if (pcr!=null)      score += pcr>1.2?1:pcr>0.8?0:-1;
-              if (niftyChg)       score += niftyChg>0.3?1:niftyChg>-0.3?0:-1;
-              if (giftPct)        score += giftPct>0.5?1:giftPct>-0.5?0:-1;
-              const regime = score>=3?'BULL TREND':score>=1?'VOLATILE BULL':score>=-1?'BEAR PRESSURE':'CHAOS';
-              const regColor = regime==='BULL TREND'?'#4ade80':regime==='VOLATILE BULL'?'#fbbf24':regime==='BEAR PRESSURE'?'#fb923c':'#f87171';
-              const regBg    = regime==='BULL TREND'?'rgba(74,222,128,0.06)':regime==='VOLATILE BULL'?'rgba(251,191,36,0.06)':regime==='BEAR PRESSURE'?'rgba(251,146,60,0.06)':'rgba(248,113,113,0.08)';
-              const regIcon  = regime==='BULL TREND'?'🟢':regime==='VOLATILE BULL'?'🟡':regime==='BEAR PRESSURE'?'🟠':'🔴';
-              const strategy = regime==='BULL TREND'?'Full size. Trend-following strategies.':regime==='VOLATILE BULL'?'50% size. Spreads only — no naked buying.':regime==='BEAR PRESSURE'?'25% size. Hedge mandatory. Avoid longs.':'Stay out. Cash is a position.';
-              const sizeColor= regime==='BULL TREND'?'#4ade80':regime==='VOLATILE BULL'?'#fbbf24':'#f87171';
-              const votes = [
-                {icon:'😌',name:'India VIX',  val:vix>0?`${vix.toFixed(1)} — ${vix<14?'Healthy':vix<20?'Elevated':'Danger'}`:'-',  col:vix>20?'#f87171':vix>14?'#fbbf24':'#4ade80'},
-                {icon:'🏦',name:'FII Flow',   val:fiiNet!=null?`${fiiNet>0?'+':''}₹${Math.round(fiiNet)}Cr`:'-', col:fiiNet>500?'#4ade80':fiiNet>-500?'#fbbf24':'#f87171'},
-                {icon:'📊',name:'PCR',         val:pcr!=null?pcr.toFixed(2)+' — '+(pcr>1.2?'Bullish':pcr>0.8?'Neutral':'Bearish'):'-', col:pcr>1.2?'#4ade80':pcr>0.8?'#94a3b8':'#f87171'},
-                {icon:'📈',name:'Nifty Trend', val:niftyChg?(niftyChg>0?'+':'')+niftyChg.toFixed(2)+'%':'-', col:niftyChg>0.3?'#4ade80':niftyChg>-0.3?'#94a3b8':'#f87171'},
-                {icon:'🌍',name:'Global Cue',  val:giftPct?(giftPct>0?'+':'')+giftPct.toFixed(2)+'%':'-', col:giftPct>0.5?'#4ade80':giftPct>-0.5?'#94a3b8':'#f87171'},
+            {/* ── REGIME ── */}
+            {(() => {
+              const vix=parseFloat(marketData.vix?.value||0), niftyChg=parseFloat(marketData.nifty?.change||0);
+              const fiiNet=institutionalActivity?.fii?.net??null;
+              const ceOI=liveOptionChain.reduce((a,r)=>a+(r.ce?.oi||0),0), peOI=liveOptionChain.reduce((a,r)=>a+(r.pe?.oi||0),0);
+              const pcr=ceOI>0?peOI/ceOI:null, giftPct=globalCues?.giftPct||0;
+              let score=0;
+              if(vix>0) score+=vix<14?1:vix<20?0:-1;
+              if(fiiNet!=null) score+=fiiNet>500?1:fiiNet>-500?0:-1;
+              if(pcr!=null) score+=pcr>1.2?1:pcr>0.8?0:-1;
+              if(niftyChg) score+=niftyChg>0.3?1:niftyChg>-0.3?0:-1;
+              if(giftPct) score+=giftPct>0.5?1:giftPct>-0.5?0:-1;
+              const regime=score>=3?'Bull Trend':score>=1?'Volatile Bull':score>=-1?'Bear Pressure':'Chaos';
+              const regColor=score>=3?'var(--green)':score>=1?'var(--amber)':score>=-1?'var(--orange)':'var(--red)';
+              const strategy=score>=3?'Full size. Trend-following.':score>=1?'50% size. Spreads only.':score>=-1?'25% size. Hedge mandatory.':'Stay out. Cash only.';
+              const sizing=score>=3?'Full (100%)':score>=1?'Half (50%)':score>=-1?'Quarter (25%)':'Zero';
+              const votes=[
+                {icon:'😌',name:'India VIX', val:vix>0?`${vix.toFixed(1)} — ${vix<14?'Healthy':vix<20?'Elevated':'Danger'}`:'-', ok:vix>0&&vix<20, warn:vix>=20},
+                {icon:'🏦',name:'FII Flow',  val:fiiNet!=null?`${fiiNet>0?'+':''}₹${Math.round(fiiNet)}Cr`:'-', ok:fiiNet>0, warn:fiiNet<-1000},
+                {icon:'📊',name:'PCR',       val:pcr!=null?pcr.toFixed(2)+' '+(pcr>1.2?'Bullish':pcr>0.8?'Neutral':'Bearish'):'-', ok:pcr>0.8, warn:pcr<0.6},
+                {icon:'📈',name:'Nifty',     val:niftyChg?(niftyChg>0?'+':'')+niftyChg.toFixed(2)+'%':'-', ok:niftyChg>0.2, warn:niftyChg<-0.5},
+                {icon:'🌍',name:'Global',    val:giftPct?(giftPct>0?'+':'')+giftPct.toFixed(2)+'%':'-', ok:giftPct>0, warn:giftPct<-0.5},
               ];
               return (
-                <div style={{background:'var(--bg-card)',border:`1px solid ${regColor}33`,borderRadius:'14px',padding:'1.25rem',marginBottom:'1.25rem',position:'relative',overflow:'hidden'}}>
-                  <div style={{position:'absolute',top:0,left:0,right:0,height:'2px',background:`linear-gradient(90deg,transparent,${regColor},transparent)`}}/>
-                  <div style={{display:'flex',alignItems:'center',gap:'1rem',flexWrap:'wrap',marginBottom:'0.85rem'}}>
-                    <div style={{fontSize:'2rem'}}>{regIcon}</div>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:'0.6rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)',marginBottom:'0.1rem'}}>Market Regime · Dalio All-Weather</div>
-                      <div style={{fontFamily:'var(--font-head,sans-serif)',fontSize:'1.25rem',fontWeight:800,color:regColor,lineHeight:1}}>{regime}</div>
-                    </div>
-                    <div style={{fontFamily:'monospace',fontSize:'1.5rem',fontWeight:800,color:regColor}}>{score>0?'+':''}{score}<span style={{fontSize:'0.75rem',color:'var(--text-muted)',fontWeight:400}}>/5</span></div>
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.5rem',marginBottom:'0.75rem'}}>
-                    <div style={{background:'var(--bg-dark)',borderRadius:'9px',padding:'0.65rem 0.85rem',border:'1px solid var(--border)'}}>
-                      <div style={{fontSize:'0.6rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.07em',color:'var(--text-muted)',marginBottom:'0.25rem'}}>Strategy</div>
-                      <div style={{fontSize:'0.78rem',color:'var(--text-main)',lineHeight:1.4}}>{strategy}</div>
-                    </div>
-                    <div style={{background:'var(--bg-dark)',borderRadius:'9px',padding:'0.65rem 0.85rem',border:`1px solid ${sizeColor}33`}}>
-                      <div style={{fontSize:'0.6rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.07em',color:'var(--text-muted)',marginBottom:'0.25rem'}}>Position Size</div>
-                      <div style={{fontSize:'0.9rem',fontWeight:800,color:sizeColor}}>{regime==='BULL TREND'?'Full (100%)':regime==='VOLATILE BULL'?'Half (50%)':regime==='BEAR PRESSURE'?'Quarter (25%)':'Zero — Stay Out'}</div>
-                    </div>
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(125px,1fr))',gap:'0.4rem'}}>
-                    {votes.map((v,i)=>(
-                      <div key={i} style={{background:'var(--bg-dark)',borderRadius:'8px',padding:'0.45rem 0.6rem',display:'flex',gap:'0.4rem',border:'1px solid var(--border)'}}>
-                        <span style={{fontSize:'0.82rem',flexShrink:0}}>{v.icon}</span>
-                        <div>
-                          <div style={{fontSize:'0.58rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',color:'var(--text-muted)'}}>{v.name}</div>
-                          <div style={{fontSize:'0.7rem',fontWeight:600,marginTop:'2px',color:v.col}}>{v.val}</div>
-                        </div>
+                <div style={{marginBottom:'1.5rem'}}>
+                  <div style={{fontFamily:'var(--font-mono)',fontSize:'0.62rem',textTransform:'uppercase',letterSpacing:'0.12em',color:'var(--muted)',marginBottom:'0.85rem',display:'flex',alignItems:'center',gap:'0.75rem'}}>Market Regime<span style={{flex:1,height:'1px',background:'var(--line)',display:'block'}}/></div>
+                  <div style={{background:'var(--card)',border:'1px solid var(--line)',borderRadius:'var(--radius)',overflow:'hidden'}}>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:'1.5rem',alignItems:'start',padding:'1.5rem'}}>
+                      <div>
+                        <div style={{fontFamily:'var(--font-mono)',fontSize:'0.62rem',textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--muted)',marginBottom:'0.4rem'}}>Current Regime · Dalio All-Weather</div>
+                        <div style={{fontFamily:'var(--font-serif)',fontSize:'2rem',fontStyle:'italic',letterSpacing:'-0.02em',lineHeight:1,marginBottom:'0.4rem',color:regColor}}>{regime}</div>
+                        <div style={{fontSize:'0.85rem',color:'var(--dim)',lineHeight:1.6,maxWidth:'400px'}}>{strategy}</div>
                       </div>
-                    ))}
+                      <div style={{textAlign:'right'}}>
+                        <div style={{fontFamily:'var(--font-mono)',fontSize:'2.8rem',fontWeight:500,lineHeight:1,color:regColor}}>{score>0?'+':''}{score}</div>
+                        <div style={{fontFamily:'var(--font-mono)',fontSize:'0.6rem',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginTop:'0.2rem'}}>Score /5</div>
+                        <div style={{fontFamily:'var(--font-mono)',fontSize:'0.72rem',fontWeight:600,color:regColor,marginTop:'0.4rem'}}>{sizing}</div>
+                      </div>
+                    </div>
+                    <div style={{display:'flex',gap:'0.45rem',flexWrap:'wrap',padding:'0.85rem 1.5rem',borderTop:'1px solid var(--line)',background:'rgba(0,0,0,0.01)'}}>
+                      {votes.map((v,i)=>(
+                        <span key={i} style={{display:'flex',alignItems:'center',gap:'0.35rem',fontSize:'0.75rem',fontWeight:600,padding:'0.28rem 0.65rem',borderRadius:'99px',border:'1px solid var(--line)',background:'var(--card)',color:v.warn?'var(--red)':v.ok?'var(--green)':'var(--dim)'}}>
+                          {v.icon} {v.name}: {v.val}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               );
             })()}
 
-            {/* == AI MORNING BRIEF == */}
-            {(()=>{
-              const vix=parseFloat(marketData.vix?.value||0); const niftyChg=parseFloat(marketData.nifty?.change||0);
-              const fiiNet=institutionalActivity?.fii?.net??null; const giftPct=globalCues?.giftPct||0;
-              const ceOI=liveOptionChain.reduce((a,r)=>a+(r.ce?.oi||0),0); const peOI=liveOptionChain.reduce((a,r)=>a+(r.pe?.oi||0),0);
-              const pcr=ceOI>0?(peOI/ceOI).toFixed(2):null;
-              let s=0; if(vix>0)s+=vix<14?1:vix<20?0:-1; if(fiiNet!=null)s+=fiiNet>500?1:fiiNet>-500?0:-1; if(pcr)s+=pcr>1.2?1:pcr>0.8?0:-1; if(niftyChg)s+=niftyChg>0.3?1:niftyChg>-0.3?0:-1;
-              const regime=s>=3?'BULL TREND':s>=1?'VOLATILE BULL':s>=-1?'BEAR PRESSURE':'CHAOS';
-              const regColor=regime==='BULL TREND'?'#4ade80':regime==='VOLATILE BULL'?'#fbbf24':regime==='BEAR PRESSURE'?'#fb923c':'#f87171';
-
-              const fetchBrief = async () => {
-                setBriefLoading(true);
-                try {
-                  const resp = await fetch(`${BACKEND_URL}/api/ai/morning-brief`, {
-                    method:'POST', headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({ regime, nifty:marketData.nifty?.value, niftyChg, vix, pcr, fiiNet:fiiNet?.toFixed(0), giftPct, yield10y:yieldIntel?.yields?.y10?.price, yieldChg:yieldIntel?.yields?.y10?.change, curveStatus:yieldIntel?.curveStatus, lang:briefLang, uid:currentUser?.uid||'anonymous' }),
-                  });
-                  const data = await resp.json();
-                  if (data.ok) { setMorningBrief({text:data.text,generatedAt:data.generatedAt}); setBriefFetched(true); }
-                  else setMorningBrief({text:data.error||'Brief generate karne mein error aaya.',generatedAt:new Date().toISOString()});
-                } catch(e) { setMorningBrief({text:'Network error. Retry karo.',generatedAt:new Date().toISOString()}); }
-                finally { setBriefLoading(false); }
-              };
-
-              return (
-                <div style={{background:'var(--bg-card)',border:'1px solid rgba(0,255,136,0.15)',borderRadius:'14px',padding:'1.25rem',marginBottom:'1.25rem',position:'relative',overflow:'hidden'}}>
-                  <div style={{position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,var(--accent),transparent)'}}/>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'0.85rem',flexWrap:'wrap',gap:'0.5rem'}}>
-                    <div>
-                      <div style={{display:'inline-flex',alignItems:'center',gap:'0.4rem',fontFamily:'monospace',fontSize:'0.62rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'var(--accent)',background:'rgba(0,255,136,0.08)',padding:'3px 10px',borderRadius:'99px',border:'1px solid rgba(0,255,136,0.2)'}}>
-                        <div style={{width:'5px',height:'5px',borderRadius:'50%',background:'var(--accent)',animation:'pulse 1.5s ease infinite'}}/>
-                        DeltaBuddy AI · Morning Brief
-                      </div>
-                      {morningBrief && <div style={{fontSize:'0.68rem',color:'var(--text-muted)',marginTop:'0.3rem'}}>Generated {new Date(morningBrief.generatedAt).toLocaleTimeString('en-IN')}</div>}
-                    </div>
-                    <div style={{display:'flex',gap:'0.5rem',alignItems:'center',flexWrap:'wrap'}}>
-                      <div style={{display:'flex',gap:'0.3rem'}}>
-                        {['english','hinglish','hindi'].map(lang=>(
-                          <button key={lang} onClick={()=>setBriefLang(lang)} style={{padding:'0.2rem 0.6rem',borderRadius:'99px',border:`1px solid ${briefLang===lang?'rgba(0,255,136,0.4)':'var(--border)'}`,background:briefLang===lang?'rgba(0,255,136,0.1)':'transparent',color:briefLang===lang?'var(--accent)':'var(--text-dim)',fontSize:'0.68rem',fontWeight:briefLang===lang?700:400,cursor:'pointer'}}>
-                            {lang==='english'?'EN':lang==='hinglish'?'HIN':'हि'}
-                          </button>
-                        ))}
-                      </div>
-                      <button onClick={fetchBrief} disabled={briefLoading} style={{background:morningBrief?'transparent':'var(--accent)',color:morningBrief?'var(--accent)':'#000',border:`1px solid ${morningBrief?'rgba(0,255,136,0.3)':'transparent'}`,borderRadius:'8px',padding:'0.28rem 0.85rem',fontWeight:700,cursor:'pointer',fontSize:'0.75rem',opacity:briefLoading?0.6:1}}>
-                        {briefLoading?'⏳...':morningBrief?'🔄 Refresh':'✨ Get Brief'}
-                      </button>
-                    </div>
-                  </div>
-                  <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.85rem',padding:'0.45rem 0.75rem',background:'var(--bg-dark)',borderRadius:'8px',border:'1px solid var(--border)',flexWrap:'wrap'}}>
-                    <span style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>Regime:</span>
-                    <span style={{fontSize:'0.78rem',fontWeight:800,color:regColor}}>{regime}</span>
-                    <span style={{fontSize:'0.72rem',color:'var(--text-muted)',marginLeft:'0.4rem'}}>Nifty {niftyChg>0?'+':''}{niftyChg.toFixed(2)}%</span>
-                    {vix>0&&<span style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>· VIX {vix.toFixed(1)}</span>}
-                    {pcr&&<span style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>· PCR {pcr}</span>}
-                  </div>
-                  {!morningBrief&&!briefLoading&&(
-                    <div style={{textAlign:'center',padding:'1.5rem 1rem'}}>
-                      <div style={{fontSize:'1.8rem',marginBottom:'0.5rem'}}>🌅</div>
-                      <div style={{fontSize:'0.82rem',color:'var(--text-main)',fontWeight:600,marginBottom:'0.35rem'}}>Aapka personal trading analyst ready hai</div>
-                      <div style={{fontSize:'0.75rem',color:'var(--text-dim)',marginBottom:'1rem',lineHeight:1.6}}>AI aaj ke market conditions padhega aur personalized brief dega</div>
-                      <button onClick={fetchBrief} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'9px',padding:'0.6rem 1.5rem',fontWeight:800,cursor:'pointer',fontSize:'0.85rem'}}>✨ Generate Morning Brief</button>
-                    </div>
-                  )}
-                  {briefLoading&&<div style={{padding:'1.25rem',textAlign:'center',color:regColor,fontSize:'0.82rem',fontWeight:600}}>🧠 Analysing market conditions...</div>}
-                  {morningBrief&&!briefLoading&&(
-                    <div>
-                      <div style={{fontSize:'0.87rem',lineHeight:1.85,color:'#cbd5e1',whiteSpace:'pre-wrap',borderLeft:'2px solid rgba(0,255,136,0.2)',paddingLeft:'0.85rem'}}>{morningBrief.text}</div>
-                      <div style={{marginTop:'0.75rem',paddingTop:'0.6rem',borderTop:'1px solid var(--border)',fontSize:'0.67rem',color:'var(--text-muted)'}}>⚡ Powered by Claude AI · Based on live data · Not financial advice</div>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* == SHOULD I TRADE TODAY? == */}
-            {(()=>{
-              const vix=parseFloat(marketData.vix?.value||0); const niftyChg=parseFloat(marketData.nifty?.change||0);
-              const fiiNet=institutionalActivity?.fii?.net??null; const giftPct=globalCues?.giftPct||0;
-              const ceOI=liveOptionChain.reduce((a,r)=>a+(r.ce?.oi||0),0); const peOI=liveOptionChain.reduce((a,r)=>a+(r.pe?.oi||0),0);
+            {/* ── GO / NO-GO ── */}
+            {(() => {
+              const vix=parseFloat(marketData.vix?.value||0), niftyChg=parseFloat(marketData.nifty?.change||0);
+              const fiiNet=institutionalActivity?.fii?.net??null, giftPct=globalCues?.giftPct||0;
+              const ceOI=liveOptionChain.reduce((a,r)=>a+(r.ce?.oi||0),0), peOI=liveOptionChain.reduce((a,r)=>a+(r.pe?.oi||0),0);
               const pcr=ceOI>0?peOI/ceOI:null;
               const factors=[
-                {icon:'😌',name:'India VIX',    ok:vix>0&&vix<20, warn:vix>=20, val:vix>0?`${vix.toFixed(1)} — ${vix<14?'Ideal':vix<20?'Elevated, tradeable':'Too High'}`:'-'},
-                {icon:'📈',name:'Nifty Trend',  ok:Math.abs(niftyChg)>=0.1&&Math.abs(niftyChg)<=1.5, warn:Math.abs(niftyChg)>1.5, val:niftyChg?(niftyChg>0?'+':'')+niftyChg.toFixed(2)+'% — '+(Math.abs(niftyChg)<0.1?'Too Flat':Math.abs(niftyChg)>1.5?'Too Volatile':'Good Range'):'-'},
-                {icon:'📊',name:'PCR Zone',     ok:pcr!=null&&pcr>0.8&&pcr<1.5, warn:pcr!=null&&(pcr<0.6||pcr>2), val:pcr!=null?pcr.toFixed(2)+' — '+(pcr>0.8&&pcr<1.5?'Balanced':'Extreme'):'-'},
-                {icon:'🏦',name:'FII Flow',      ok:fiiNet!=null&&fiiNet>0, warn:fiiNet!=null&&fiiNet<-1000, val:fiiNet!=null?(fiiNet>0?'+':'')+Math.round(fiiNet)+'Cr':'Loading...'},
-                {icon:'🌍',name:'Global Cues',   ok:giftPct>-0.5, warn:giftPct<-1, val:giftPct?(giftPct>0?'+':'')+giftPct.toFixed(2)+'% GIFT':'-'},
+                {name:'VIX',     ok:vix>0&&vix<20, warn:vix>=20, val:vix>0?vix.toFixed(1):'-'},
+                {name:'Nifty',   ok:Math.abs(niftyChg)<1.5, warn:Math.abs(niftyChg)>=1.5, val:niftyChg?(niftyChg>0?'+':'')+niftyChg.toFixed(2)+'%':'-'},
+                {name:'PCR',     ok:pcr>0.8&&pcr<1.8, warn:pcr<0.6||pcr>2, val:pcr?pcr.toFixed(2):'-'},
+                {name:'FII',     ok:fiiNet>0, warn:fiiNet<-1000, val:fiiNet!=null?(fiiNet>0?'+':'')+Math.round(fiiNet)+'Cr':'-'},
+                {name:'Global',  ok:giftPct>-0.5, warn:giftPct<-1, val:giftPct?(giftPct>0?'+':'')+giftPct.toFixed(2)+'%':'-'},
               ];
-              const score = factors.filter(f=>f.ok).length - factors.filter(f=>f.warn).length;
-              const verdict = score>=3?{t:'✅ GOOD TO TRADE',c:'#4ade80',bg:'rgba(74,222,128,0.06)',bc:'rgba(74,222,128,0.25)'}:score>=1?{t:'🟡 PROCEED WITH CAUTION',c:'#fbbf24',bg:'rgba(251,191,36,0.06)',bc:'rgba(251,191,36,0.25)'}:{t:'⛔ AVOID TRADING TODAY',c:'#f87171',bg:'rgba(248,113,113,0.08)',bc:'rgba(248,113,113,0.3)'};
+              const score=factors.filter(f=>f.ok).length - factors.filter(f=>f.warn).length;
+              const verdict=score>=3?{t:'Good to Trade',c:'var(--green)',bg:'rgba(22,163,74,0.06)',bc:'rgba(22,163,74,0.2)'}:score>=1?{t:'Proceed with Caution',c:'var(--amber)',bg:'rgba(217,119,6,0.06)',bc:'rgba(217,119,6,0.2)'}:{t:'Avoid Trading Today',c:'var(--red)',bg:'rgba(229,62,62,0.06)',bc:'rgba(229,62,62,0.2)'};
               return (
-                <div style={{marginBottom:'1.25rem'}}>
-                  <div style={{fontSize:'0.62rem',fontWeight:800,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)',marginBottom:'0.65rem',display:'flex',alignItems:'center',gap:'0.5rem'}}>Daily Go / No-Go<span style={{flex:1,height:'1px',background:'var(--border)',display:'block'}}/></div>
-                  <div style={{background:verdict.bg,border:`2px solid ${verdict.bc}`,borderRadius:'12px',padding:'0.9rem 1.25rem',display:'flex',alignItems:'center',gap:'1rem',flexWrap:'wrap',marginBottom:'0.6rem'}}>
-                    <div style={{flex:1}}>
-                      <div style={{fontFamily:'var(--font-head,sans-serif)',fontSize:'1rem',fontWeight:800,color:verdict.c}}>{verdict.t}</div>
-                      <div style={{fontSize:'0.77rem',color:'var(--text-dim)',marginTop:'0.2rem'}}>Based on {factors.length} live signals · {new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div>
+                <div style={{marginBottom:'1.5rem'}}>
+                  <div style={{fontFamily:'var(--font-mono)',fontSize:'0.62rem',textTransform:'uppercase',letterSpacing:'0.12em',color:'var(--muted)',marginBottom:'0.85rem',display:'flex',alignItems:'center',gap:'0.75rem'}}>Daily Go / No-Go<span style={{flex:1,height:'1px',background:'var(--line)',display:'block'}}/></div>
+                  <div style={{background:verdict.bg,border:`1px solid ${verdict.bc}`,borderRadius:'var(--radius)',padding:'1.25rem 1.5rem',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'1rem',marginBottom:'0.6rem'}}>
+                    <div>
+                      <div style={{fontFamily:'var(--font-serif)',fontSize:'1.4rem',fontStyle:'italic',letterSpacing:'-0.01em',color:verdict.c}}>{verdict.t}</div>
+                      <div style={{fontSize:'0.8rem',color:'var(--dim)',marginTop:'0.2rem'}}>Based on {factors.length} live signals · {new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div>
                     </div>
-                    <div style={{fontFamily:'monospace',fontSize:'1.6rem',fontWeight:800,color:verdict.c}}>{score>0?'+':''}{score}<span style={{fontSize:'0.8rem',color:'var(--text-muted)',fontWeight:400}}>/5</span></div>
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(168px,1fr))',gap:'0.4rem'}}>
-                    {factors.map((f,i)=>(
-                      <div key={i} style={{background:'var(--bg-card)',border:`1px solid ${f.warn?'rgba(248,113,113,0.2)':f.ok?'rgba(74,222,128,0.15)':'var(--border)'}`,borderRadius:'9px',padding:'0.55rem 0.7rem',display:'flex',gap:'0.45rem'}}>
-                        <span style={{fontSize:'0.85rem',flexShrink:0}}>{f.icon}</span>
-                        <div><div style={{fontSize:'0.58rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',color:'var(--text-muted)'}}>{f.name}</div>
-                        <div style={{fontSize:'0.7rem',fontWeight:600,marginTop:'2px',color:f.warn?'#f87171':f.ok?'#4ade80':'#94a3b8'}}>{f.val}</div></div>
-                      </div>
-                    ))}
+                    <div style={{display:'flex',gap:'0.35rem',flexWrap:'wrap'}}>
+                      {factors.map((f,i)=>(
+                        <span key={i} style={{fontFamily:'var(--font-mono)',fontSize:'0.68rem',padding:'0.25rem 0.6rem',borderRadius:'6px',border:'1px solid var(--line)',background:'var(--card)',color:f.warn?'var(--red)':f.ok?'var(--green)':'var(--dim)'}}>
+                          {f.warn?'✗':f.ok?'✓':'~'} {f.name} {f.val}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               );
             })()}
 
-            {/* == TRADE VALIDATOR == */}
+            {/* ── AI MORNING BRIEF ── */}
             {(() => {
-              const vix=parseFloat(marketData.vix?.value||0); const niftyChg=parseFloat(marketData.nifty?.change||0);
-              const ceOI=liveOptionChain.reduce((a,r)=>a+(r.ce?.oi||0),0); const peOI=liveOptionChain.reduce((a,r)=>a+(r.pe?.oi||0),0);
-              const pcr=ceOI>0?(peOI/ceOI).toFixed(2):null; const fiiNet=institutionalActivity?.fii?.net??null; const giftPct=globalCues?.giftPct||0;
+              const vix=parseFloat(marketData.vix?.value||0), niftyChg=parseFloat(marketData.nifty?.change||0);
+              const fiiNet=institutionalActivity?.fii?.net??null, giftPct=globalCues?.giftPct||0;
+              const ceOI=liveOptionChain.reduce((a,r)=>a+(r.ce?.oi||0),0), peOI=liveOptionChain.reduce((a,r)=>a+(r.pe?.oi||0),0);
+              const pcr=ceOI>0?(peOI/ceOI).toFixed(2):null;
               let s=0; if(vix>0)s+=vix<14?1:vix<20?0:-1; if(fiiNet!=null)s+=fiiNet>500?1:fiiNet>-500?0:-1; if(pcr)s+=pcr>1.2?1:pcr>0.8?0:-1; if(niftyChg)s+=niftyChg>0.3?1:niftyChg>-0.3?0:-1;
-              const regime=s>=3?'BULL TREND':s>=1?'VOLATILE BULL':s>=-1?'BEAR PRESSURE':'CHAOS';
-              const verdictColor=tradeResult?.verdict==='ALIGNED'?'#4ade80':tradeResult?.verdict==='AGAINST_REGIME'?'#f87171':'#fbbf24';
-              const validateTrade=async()=>{
-                if(!tradeInput.strike)return; setTradeLoading(true); setTradeResult(null);
+              const regime=s>=3?'Bull Trend':s>=1?'Volatile Bull':s>=-1?'Bear Pressure':'Chaos';
+              const fetchBrief=async()=>{
+                setBriefLoading(true);
                 try {
-                  const resp=await fetch(`${BACKEND_URL}/api/ai/validate-trade`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({strike:tradeInput.strike,optType:tradeInput.type,lots:parseInt(tradeInput.lots)||1,regime,vix,niftyChg,pcr,giftPct,fiiNet:fiiNet?.toFixed(0),uid:currentUser?.uid||'anonymous'})});
-                  const data=await resp.json(); setTradeResult(data);
-                } catch(e){setTradeResult({ok:false,verdict:'CAUTION',analysis:'Validation failed — retry.'});}
-                finally{setTradeLoading(false);}
+                  const resp=await fetch(`${BACKEND_URL}/api/ai/morning-brief`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({regime,nifty:marketData.nifty?.value,niftyChg,vix,pcr,fiiNet:fiiNet?.toFixed(0),giftPct,yield10y:yieldIntel?.yields?.y10?.price,yieldChg:yieldIntel?.yields?.y10?.change,curveStatus:yieldIntel?.curveStatus,lang:briefLang,uid:currentUser?.uid||'anonymous'})});
+                  const data=await resp.json();
+                  if(data.ok){setMorningBrief({text:data.text,generatedAt:data.generatedAt});setBriefFetched(true);}
+                  else setMorningBrief({text:data.error||'Error generating brief.',generatedAt:new Date().toISOString()});
+                } catch(e){setMorningBrief({text:'Network error. Please retry.',generatedAt:new Date().toISOString()});}
+                finally{setBriefLoading(false);}
               };
               return (
-                <div style={{background:'var(--bg-card)',border:'1px solid rgba(96,165,250,0.15)',borderRadius:'14px',padding:'1.25rem',marginBottom:'1.25rem',position:'relative',overflow:'hidden'}}>
-                  <div style={{position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,#60a5fa,transparent)'}}/>
-                  <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.85rem',flexWrap:'wrap',justifyContent:'space-between'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
-                      <span style={{fontWeight:800,fontSize:'0.9rem'}}>🎯 Trade Validator</span>
-                      <span style={{fontSize:'0.68rem',color:'var(--text-muted)'}}>AI checks your trade against regime</span>
-                    </div>
-                    <span style={{fontSize:'0.72rem',fontWeight:700,padding:'2px 8px',borderRadius:'99px',background:'rgba(96,165,250,0.1)',color:'#60a5fa',border:'1px solid rgba(96,165,250,0.2)'}}>{regime}</span>
-                  </div>
-                  <div style={{display:'flex',gap:'0.45rem',flexWrap:'wrap',marginBottom:'0.75rem'}}>
-                    <input value={tradeInput.strike} onChange={e=>setTradeInput(p=>({...p,strike:e.target.value}))} placeholder="Strike (e.g. 24400)" style={{flex:2,minWidth:'110px',background:'var(--bg-dark)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.5rem 0.8rem',color:'var(--text-main)',fontFamily:'monospace',fontSize:'0.82rem',outline:'none'}}/>
-                    <select value={tradeInput.type} onChange={e=>setTradeInput(p=>({...p,type:e.target.value}))} style={{flex:1,minWidth:'70px',background:'var(--bg-dark)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.5rem',color:'var(--text-main)',fontSize:'0.82rem',cursor:'pointer'}}>
-                      <option value="CE">CE</option><option value="PE">PE</option>
-                    </select>
-                    <input value={tradeInput.lots} onChange={e=>setTradeInput(p=>({...p,lots:e.target.value}))} placeholder="Lots" type="number" min="1" style={{flex:1,minWidth:'60px',maxWidth:'80px',background:'var(--bg-dark)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.5rem 0.6rem',color:'var(--text-main)',fontFamily:'monospace',fontSize:'0.82rem',outline:'none'}}/>
-                    <button onClick={validateTrade} disabled={tradeLoading||!tradeInput.strike} style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'8px',padding:'0.5rem 1.25rem',fontWeight:800,fontSize:'0.82rem',cursor:'pointer',opacity:(tradeLoading||!tradeInput.strike)?0.6:1,whiteSpace:'nowrap'}}>
-                      {tradeLoading?'⏳':'Validate ▶'}
-                    </button>
-                  </div>
-                  {tradeResult&&(
-                    <div style={{background:tradeResult.verdict==='ALIGNED'?'rgba(74,222,128,0.06)':tradeResult.verdict==='AGAINST_REGIME'?'rgba(248,113,113,0.08)':'rgba(251,191,36,0.06)',border:`1px solid ${verdictColor}33`,borderRadius:'10px',padding:'0.9rem 1rem'}}>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.5rem',flexWrap:'wrap',gap:'0.4rem'}}>
-                        <div style={{fontFamily:'var(--font-head,sans-serif)',fontSize:'0.9rem',fontWeight:800,color:verdictColor}}>{tradeResult.verdict==='ALIGNED'?'✅ TRADE ALIGNED':tradeResult.verdict==='AGAINST_REGIME'?'🚨 AGAINST REGIME':'⚠️ USE CAUTION'}</div>
-                        {tradeResult.risk_score&&<span style={{fontSize:'0.7rem',fontFamily:'monospace',color:'var(--text-muted)'}}>Risk: {tradeResult.risk_score}/10</span>}
+                <div style={{marginBottom:'1.5rem'}}>
+                  <div style={{fontFamily:'var(--font-mono)',fontSize:'0.62rem',textTransform:'uppercase',letterSpacing:'0.12em',color:'var(--muted)',marginBottom:'0.85rem',display:'flex',alignItems:'center',gap:'0.75rem'}}>AI Morning Brief<span style={{flex:1,height:'1px',background:'var(--line)',display:'block'}}/></div>
+                  <div style={{background:'var(--card)',border:'1px solid var(--line)',borderRadius:'var(--radius)',overflow:'hidden'}}>
+                    <div style={{padding:'1rem 1.5rem',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'0.5rem',borderBottom:'1px solid var(--line)'}}>
+                      <div>
+                        <div style={{fontWeight:700,fontSize:'0.88rem'}}>AI Morning Brief</div>
+                        {morningBrief&&<div style={{fontFamily:'var(--font-mono)',fontSize:'0.62rem',color:'var(--muted)',marginTop:'0.15rem'}}>Generated {new Date(morningBrief.generatedAt).toLocaleTimeString('en-IN')}</div>}
                       </div>
-                      <div style={{fontSize:'0.8rem',color:'#cbd5e1',lineHeight:1.7,marginBottom:tradeResult.suggestion?'0.65rem':0}}>{tradeResult.analysis}</div>
-                      {tradeResult.suggestion&&<div style={{background:'rgba(0,255,136,0.06)',border:'1px solid rgba(0,255,136,0.15)',borderRadius:'8px',padding:'0.65rem 0.8rem',fontSize:'0.76rem',color:'var(--accent)',lineHeight:1.6}}><div style={{fontSize:'0.62rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:'0.3rem'}}>💡 AI Suggestion</div>{tradeResult.suggestion}</div>}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* == POSITION SIZER == */}
-            {(()=>{
-              const vix=parseFloat(marketData.vix?.value||0); const niftyVal=marketData.nifty?.value||24000;
-              const capital=parseFloat(capitalInput)||100000; const riskPerc=parseFloat(riskPct)||1;
-              const LOT_SIZE=75; const vixFactor=vix>0?vix/15:1;
-              const stopPts=Math.round(niftyVal*(vix/100)*0.5);
-              const maxLoss=(capital*riskPerc)/100;
-              const lotsRaw=maxLoss/(stopPts*LOT_SIZE);
-              const lots=Math.max(1,Math.round(lotsRaw));
-              const ceOI=liveOptionChain.reduce((a,r)=>a+(r.ce?.oi||0),0); const peOI=liveOptionChain.reduce((a,r)=>a+(r.pe?.oi||0),0);
-              const pcr=ceOI>0?peOI/ceOI:1; const fiiNet=institutionalActivity?.fii?.net??0;
-              let rs=0; if(vix>0)rs+=vix<14?1:vix<20?0:-1; if(fiiNet)rs+=fiiNet>500?1:fiiNet>-500?0:-1; rs+=pcr>1.2?1:pcr>0.8?0:-1;
-              const regMult=rs>=2?1.0:rs>=0?0.5:0.25;
-              const finalLots=Math.max(1,Math.round(lots*regMult));
-              const regimeLabel=rs>=2?'Bull (100%)':rs>=0?'Volatile (50%)':'Bear (25%)';
-              const regimeColor=rs>=2?'#4ade80':rs>=0?'#fbbf24':'#f87171';
-              return (
-                <div style={{background:'var(--bg-card)',border:'1px solid rgba(167,139,250,0.15)',borderRadius:'14px',padding:'1.25rem',marginBottom:'1.25rem',position:'relative',overflow:'hidden'}}>
-                  <div style={{position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,#a78bfa,transparent)'}}/>
-                  <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.85rem'}}><span style={{fontWeight:800,fontSize:'0.9rem'}}>⚖️ Position Sizer</span><span style={{fontSize:'0.68rem',color:'var(--text-muted)'}}>Dalio Risk Parity</span></div>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.6rem',marginBottom:'0.85rem'}}>
-                    <div><div style={{fontSize:'0.68rem',color:'var(--text-muted)',marginBottom:'0.3rem',fontWeight:600}}>Capital (₹)</div>
-                    <input value={capitalInput} onChange={e=>setCapitalInput(e.target.value)} type="number" style={{width:'100%',background:'var(--bg-dark)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.5rem 0.75rem',color:'var(--text-main)',fontFamily:'monospace',fontSize:'0.85rem',outline:'none'}}/></div>
-                    <div><div style={{fontSize:'0.68rem',color:'var(--text-muted)',marginBottom:'0.3rem',fontWeight:600}}>Risk % per Trade</div>
-                    <select value={riskPct} onChange={e=>setRiskPct(e.target.value)} style={{width:'100%',background:'var(--bg-dark)',border:'1px solid var(--border)',borderRadius:'8px',padding:'0.5rem 0.75rem',color:'var(--text-main)',fontSize:'0.85rem',cursor:'pointer'}}>
-                      <option value="0.5">0.5% Conservative</option><option value="1">1% Standard</option><option value="1.5">1.5% Moderate</option><option value="2">2% Aggressive</option>
-                    </select></div>
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:'0.5rem'}}>
-                    {[{label:'Base Lots (VIX-adj)',val:lots,color:'#a78bfa',sub:`VIX ${vix.toFixed(1)} → ${stopPts}pt stop`},{label:'Regime Multiplier',val:regMult+'×',color:regimeColor,sub:regimeLabel},{label:'Final Lots',val:finalLots,color:'var(--accent)',big:true,sub:'After regime adj'},{label:'Max Loss if SL Hit',val:`₹${(finalLots*stopPts*LOT_SIZE).toLocaleString('en-IN')}`,color:'#f87171',sub:`${riskPerc}% of capital`}].map((item,i)=>(
-                      <div key={i} style={{background:'var(--bg-dark)',borderRadius:'10px',padding:'0.75rem',border:`1px solid ${item.color}22`}}>
-                        <div style={{fontSize:'0.6rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.07em',color:'var(--text-muted)',marginBottom:'0.3rem'}}>{item.label}</div>
-                        <div style={{fontSize:item.big?'1.6rem':'1.1rem',fontWeight:900,color:item.color,lineHeight:1}}>{item.val}</div>
-                        <div style={{fontSize:'0.65rem',color:'var(--text-muted)',marginTop:'0.25rem'}}>{item.sub}</div>
+                      <div style={{display:'flex',gap:'0.75rem',alignItems:'center',flexWrap:'wrap'}}>
+                        <div style={{display:'flex',gap:'0.25rem'}}>
+                          {['english','hinglish','hindi'].map(lang=>(
+                            <button key={lang} onClick={()=>setBriefLang(lang)} style={{padding:'0.2rem 0.55rem',borderRadius:'99px',border:'1px solid var(--line)',background:briefLang===lang?'var(--ink)':'transparent',color:briefLang===lang?'var(--paper)':'var(--muted)',fontFamily:'var(--font-mono)',fontSize:'0.65rem',cursor:'pointer'}}>
+                              {lang==='english'?'EN':lang==='hinglish'?'HIN':'हि'}
+                            </button>
+                          ))}
+                        </div>
+                        <button onClick={fetchBrief} disabled={briefLoading} style={{background:morningBrief?'transparent':'var(--ink)',color:morningBrief?'var(--ink)':'var(--paper)',border:`1px solid ${morningBrief?'var(--line)':'var(--ink)'}`,borderRadius:'8px',padding:'0.28rem 0.85rem',fontWeight:700,cursor:'pointer',fontSize:'0.75rem',opacity:briefLoading?0.6:1,fontFamily:'var(--sans)'}}>
+                          {briefLoading?'Generating...':morningBrief?'Refresh':'Get Brief'}
+                        </button>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* == YIELD INTEL MINI == */}
-            {yieldIntel && (()=>{
-              const yields=[{t:'3M',d:'y3m'},{t:'2Y',d:'y2y'},{t:'5Y',d:'y5y'},{t:'10Y',d:'y10'},{t:'30Y',d:'y30'}];
-              const curveColor=yieldIntel.curveStatus==='INVERTED'?'#f87171':yieldIntel.curveStatus==='FLAT'?'#fbbf24':'#4ade80';
-              return (
-                <div style={{background:'var(--bg-card)',border:'1px solid rgba(248,113,113,0.12)',borderRadius:'14px',padding:'1.25rem',marginBottom:'1.25rem'}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem',flexWrap:'wrap',gap:'0.5rem'}}>
-                    <span style={{fontSize:'0.85rem',fontWeight:700}}>🏦 US Yield Curve</span>
-                    <span style={{fontSize:'0.72rem',fontWeight:700,padding:'3px 10px',borderRadius:'99px',background:`rgba(${curveColor==='#f87171'?'248,113,113':curveColor==='#fbbf24'?'251,191,36':'74,222,128'},0.1)`,color:curveColor,border:`1px solid ${curveColor}33`}}>{yieldIntel.curveStatus}</span>
-                  </div>
-                  <div style={{display:'flex',gap:'0.4rem',flexWrap:'wrap',marginBottom:'0.5rem'}}>
-                    {yields.map(({t,d})=>{
-                      const y=yieldIntel.yields?.[d]; if(!y)return null;
-                      const chg=parseFloat(y.change||0);
-                      return <div key={t} style={{flex:1,minWidth:'55px',background:'var(--bg-dark)',borderRadius:'9px',padding:'0.5rem 0.6rem',textAlign:'center',border:'1px solid var(--border)'}}>
-                        <div style={{fontSize:'0.58rem',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',marginBottom:'0.2rem'}}>{t}</div>
-                        <div style={{fontFamily:'monospace',fontSize:'0.88rem',fontWeight:700}}>{y.price}%</div>
-                        <div style={{fontFamily:'monospace',fontSize:'0.62rem',marginTop:'0.1rem',color:chg>0?'#f87171':chg<0?'#4ade80':'#94a3b8'}}>{chg>0?'▲ +':'▼ '}{Math.abs(chg).toFixed(2)}</div>
-                      </div>;
-                    })}
-                  </div>
-                  {yieldIntel.signals?.map((sig,i)=>(
-                    <div key={i} style={{padding:'0.5rem 0.75rem',background:sig.type==='danger'?'rgba(248,113,113,0.06)':'rgba(251,191,36,0.06)',border:`1px solid ${sig.type==='danger'?'rgba(248,113,113,0.2)':'rgba(251,191,36,0.2)'}`,borderRadius:'8px',fontSize:'0.75rem',color:sig.type==='danger'?'#f87171':'#fbbf24',lineHeight:1.5,marginTop:'0.4rem'}}>
-                      {sig.type==='danger'?'⚡':'⚠️'} <strong style={{color:'var(--text-main)'}}>{sig.title}</strong> — {sig.message}
                     </div>
-                  ))}
-                </div>
-              );
-            })()}
-
-            {/* == GLOBAL CUES MINI == */}
-            {globalIndices && Object.keys(globalIndices).length > 0 && (()=>{
-              const markets=[
-                {n:'S&P 500',k:'^GSPC'},{n:'Nasdaq',k:'^IXIC'},{n:'US VIX',k:'^VIX'},{n:'Nikkei',k:'^N225'},
-                {n:'Crude Oil',k:'CL=F'},{n:'Gold',k:'GC=F'},{n:'USD/INR',k:'INR=X'},{n:'Bitcoin',k:'BTC-USD'},
-              ];
-              return (
-                <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'14px',padding:'1.25rem',marginBottom:'1.25rem'}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem',flexWrap:'wrap',gap:'0.4rem'}}>
-                    <span style={{fontSize:'0.85rem',fontWeight:700}}>🌍 Global Cues</span>
-                    <span style={{fontSize:'0.68rem',color:'var(--text-muted)',fontFamily:'monospace'}}>🕐 Auto-refresh 5min</span>
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(110px,1fr))',gap:'0.45rem'}}>
-                    {markets.map(({n,k})=>{
-                      const d=globalIndices[n]||globalIndices[k]; if(!d||!d.price)return null;
-                      const chg=parseFloat(d.change||0); const isUp=chg>=0;
-                      return <div key={k} style={{background:'var(--bg-dark)',borderRadius:'9px',padding:'0.55rem 0.7rem',border:'1px solid var(--border)'}}>
-                        <div style={{fontSize:'0.6rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:'var(--text-muted)',marginBottom:'0.2rem'}}>{n}</div>
-                        <div style={{fontFamily:'monospace',fontSize:'0.88rem',fontWeight:700}}>{typeof d.price==='number'?d.price.toLocaleString('en-IN',{maximumFractionDigits:2}):d.price}</div>
-                        <div style={{fontFamily:'monospace',fontSize:'0.64rem',marginTop:'0.1rem',color:isUp?'#4ade80':'#f87171'}}>{isUp?'▲ +':'▼ '}{Math.abs(chg).toFixed(2)}%</div>
-                      </div>;
-                    })}
+                    {!morningBrief&&!briefLoading&&(
+                      <div style={{textAlign:'center',padding:'2rem 1rem'}}>
+                        <div style={{fontSize:'1.8rem',marginBottom:'0.5rem'}}>🌅</div>
+                        <div style={{fontFamily:'var(--font-serif)',fontSize:'1.1rem',fontStyle:'italic',marginBottom:'0.35rem'}}>Your personal trading analyst</div>
+                        <div style={{fontSize:'0.8rem',color:'var(--muted)',marginBottom:'1.25rem'}}>AI reads today's regime, FII flow and yields — gives you a clear brief</div>
+                        <button onClick={fetchBrief} style={{background:'var(--ink)',color:'var(--paper)',border:'none',borderRadius:'10px',padding:'0.65rem 1.75rem',fontWeight:700,cursor:'pointer',fontSize:'0.88rem',fontFamily:'var(--sans)'}}>Generate Brief →</button>
+                      </div>
+                    )}
+                    {briefLoading&&<div style={{padding:'1.5rem',textAlign:'center',fontFamily:'var(--font-mono)',fontSize:'0.82rem',color:'var(--muted)'}}>Analysing market conditions...</div>}
+                    {morningBrief&&!briefLoading&&(
+                      <div style={{padding:'1.25rem 1.5rem'}}>
+                        <div style={{fontSize:'0.9rem',lineHeight:1.8,color:'var(--dim)',whiteSpace:'pre-wrap'}}>{morningBrief.text}</div>
+                        <div style={{marginTop:'0.75rem',paddingTop:'0.65rem',borderTop:'1px solid var(--line)',fontSize:'0.68rem',color:'var(--muted)',fontFamily:'var(--font-mono)'}}>Powered by Claude AI · Not financial advice</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
             })()}
 
-            </div>{/* end home content wrapper */}
+            </div>
           </>
         ) : !currentUser ? (
           /* Not logged in  -  prompt sign in */
@@ -8818,53 +8612,55 @@ Respond ONLY with valid JSON:
           /* Import premium fonts */
           @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600;700&display=swap');
 
-          /* CSS Variables - AI Engine aesthetic */
+          /* ── DeltaBuddy v2 Design System ── */
+          @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Familjen+Grotesk:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
+
           :root {
-            --bg:         #03070f;
-            --bg-card:    #080f1c;
-            --bg-dark:    #080f1c;
-            --bg-surface: #0c1628;
-            --border:     rgba(255,255,255,0.07);
-            --accent:     #00ff88;
-            --acc-dim:    rgba(0,255,136,0.08);
-            --red:        #f87171;
-            --amber:      #fbbf24;
-            --blue:       #60a5fa;
-            --purple:     #a78bfa;
-            --green:      #4ade80;
-            --orange:     #fb923c;
-            --text-main:  #e2e8f0;
-            --text-dim:   #94a3b8;
-            --text-muted: #475569;
-            --font-head:  'Syne', sans-serif;
-            --font-mono:  'JetBrains Mono', monospace;
-            --radius:     12px;
-            --radius-sm:  8px;
+            --ink:        #0a0c10;
+            --paper:      #f5f2ed;
+            --card:       #ffffff;
+            --line:       #e4e0d8;
+            --muted:      #9b9590;
+            --dim:        #6b6560;
+            --accent:     #00c97a;
+            --acc-dim:    rgba(0,201,122,0.1);
+            --red:        #e53e3e;
+            --amber:      #d97706;
+            --blue:       #2563eb;
+            --green:      #16a34a;
+            --orange:     #ea580c;
+            --text-main:  #0a0c10;
+            --text-dim:   #6b6560;
+            --text-muted: #9b9590;
+            --bg:         #f5f2ed;
+            --bg-card:    #ffffff;
+            --bg-dark:    #f5f2ed;
+            --bg-surface: #f0ece5;
+            --border:     #e4e0d8;
+            --font-head:  'Familjen Grotesk', sans-serif;
+            --font-mono:  'DM Mono', monospace;
+            --font-serif: 'Instrument Serif', serif;
+            --radius:     14px;
+            --radius-sm:  9px;
           }
 
           /* Base */
           body {
-            background: var(--bg) !important;
-            font-family: 'Inter', sans-serif !important;
-            color: var(--text-main) !important;
+            background: var(--paper) !important;
+            font-family: 'Familjen Grotesk', sans-serif !important;
+            color: var(--ink) !important;
           }
           .App {
-            background: var(--bg) !important;
+            background: var(--paper) !important;
             min-height: 100vh;
           }
-          body::before {
-            content: '';
-            position: fixed; inset: 0; pointer-events: none; z-index: 0;
-            background:
-              radial-gradient(ellipse 80% 50% at 10% -5%, rgba(0,255,136,0.04) 0%, transparent 65%),
-              radial-gradient(ellipse 60% 40% at 90% 105%, rgba(96,165,250,0.03) 0%, transparent 65%);
-          }
+          body::before { display: none; }
 
           /* Navbar */
           .navbar {
-            background: rgba(3,7,15,0.95) !important;
+            background: rgba(245,242,237,0.95) !important;
             backdrop-filter: blur(20px) !important;
-            border-bottom: 1px solid var(--border) !important;
+            border-bottom: 1px solid var(--line) !important;
             position: fixed !important;
             top: 0; left: 0; right: 0;
             z-index: 100 !important;
