@@ -3639,9 +3639,9 @@ Respond ONLY with valid JSON:
             {id:'desk',    label:'Desk',    tabs:['strategy','scanner','single','gex','paper','journal','portfolio','backtest','expiry'], def:'strategy'},
             ...(isAdmin ? [{id:'admin', label:'Admin', tabs:['admin'], def:'admin'}] : []),
           ].map(({id,label,tabs,def,badge})=>{
-            const isOn = tabs.includes(activeTab) || (id==='pulse'&&activeTab==='home') || (id==='chain'&&activeTab==='chain');
+            const isOn = tabs.includes(activeTab);
             return (
-              <button key={id} onClick={()=>{if(!tabs.includes(activeTab))setActiveTab(def);setShowMobileMenu(false);}}
+              <button key={id} onClick={()=>{setActiveTab(def);setShowMobileMenu(false);}}
                 style={{padding:'0.38rem 1rem',borderRadius:'99px',border:'none',background:isOn?'#0a0c10':'transparent',color:isOn?'#f5f2ed':'#6b6560',fontFamily:'"Familjen Grotesk",sans-serif',fontWeight:600,fontSize:'0.82rem',cursor:'pointer',display:'flex',alignItems:'center',gap:'0.35rem',transition:'all 0.15s',whiteSpace:'nowrap'}}>
                 {label}
                 {badge&&<span style={{fontFamily:'"DM Mono",monospace',fontSize:'0.55rem',padding:'1px 5px',borderRadius:'99px',background:'rgba(0,201,122,0.15)',color:'#00c97a',fontWeight:700}}>{badge}</span>}
