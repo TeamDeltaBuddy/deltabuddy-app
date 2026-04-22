@@ -3633,12 +3633,11 @@ Respond ONLY with valid JSON:
 
         {/* Main tabs */}
         <nav style={{display:'flex',gap:'0.15rem'}}>
-          {[
-            {id:'pulse', label:'Pulse', tabs:['home','markets','intelligence'], def:'home', badge:'LIVE'},
-            {id:'chain', label:'Chain', tabs:['chain'], def:'chain'},
-            {id:'desk',  label:'Desk',  tabs:['strategy','scanner','single','gex','paper','journal','portfolio'], def:'strategy'},
-            {id:'mkt',   label:'Markets', tabs:['mkts'], def:'mkts'},
-            ...(isAdmin ? [{id:'admin', label:'Admin', tabs:['admin'], def:'admin', badge:null}] : []),
+          [
+            {id:'pulse',   label:'Pulse',   tabs:['home','intelligence'],              def:'home',      badge:'LIVE'},
+            {id:'chain',   label:'Chain',   tabs:['markets'],                          def:'markets'},
+            {id:'desk',    label:'Desk',    tabs:['strategy','scanner','single','gex','paper','journal','portfolio','backtest','expiry'], def:'strategy'},
+            ...(isAdmin ? [{id:'admin', label:'Admin', tabs:['admin'], def:'admin'}] : []),
           ].map(({id,label,tabs,def,badge})=>{
             const isOn = tabs.includes(activeTab) || (id==='pulse'&&activeTab==='home') || (id==='chain'&&activeTab==='chain');
             return (
@@ -3678,7 +3677,8 @@ Respond ONLY with valid JSON:
       {/* ── SUB NAV ── */}
       {(() => {
         const subNavMap = [
-          {tabs:['home','markets','intelligence'], items:[['home','Home'],['markets','Markets'],['intelligence','AI Intel']]},
+          {tabs:['home','intelligence'], items:[['home','Home'],['intelligence','AI Intel']]},
+          {tabs:['markets'], items:[['markets','Option Chain']]},
           {tabs:['strategy','scanner','single','gex','paper','journal','portfolio','backtest','expiry'], items:[['strategy','Strategy'],['scanner','Scanner'],['single','Calc'],['gex','GEX'],['paper','Paper'],['journal','Journal'],['portfolio','Portfolio']]},
         ];
         const seg = subNavMap.find(s => s.tabs.includes(activeTab));
