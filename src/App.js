@@ -3623,133 +3623,78 @@ Respond ONLY with valid JSON:
 
   return (
     <div className="App">
-      <nav className="navbar">
-        <div className="container">
-          {/* Logo */}
-          <div className="logo" onClick={()=>{setActiveTab('home');setShowMobileMenu(false);}}
-            style={{cursor:'pointer',userSelect:'none',borderBottom:activeTab==='home'?'2px solid var(--accent)':'2px solid transparent',paddingBottom:'2px',transition:'border-color 0.2s'}}>
-            <span className="delta">Δ</span>
-            <span>DeltaBuddy</span>
-          </div>
-
-          {/* Nav links - 3 segments desktop */}
-          <div className="nav-links">
-            {[
-              {id:'pulse', label:'🔴 Pulse',  tabs:['home','markets','intelligence'], def:'markets'},
-              {id:'lab',   label:'🧪 Lab',    tabs:['strategy','scanner','single','gex','backtest','expiry'], def:'strategy'},
-              {id:'desk',  label:'📋 Desk',   tabs:['paper','journal','portfolio'], def:'paper'},
-              ...(isAdmin ? [{id:'admin', label:'🛡️ Admin', tabs:['admin'], def:'admin'}] : []),
-            ].map(({id, label, tabs, def}) => {
-              const isActive = tabs.includes(activeTab);
-              return (
-                <span key={id}
-                  className={isActive ? 'active' : ''}
-                  onClick={()=>{ if(!tabs.includes(activeTab)) setActiveTab(def); setShowMobileMenu(false); }}>
-                  {label}
-                </span>
-              );
-            })}
-          </div>
-
-          {/* Right controls */}
-          <div className="navbar-right">
-            {!authLoading && (currentUser ? (
-              <>
-                {subStatus === 'pro' ? (
-                  <span style={{fontSize:'0.7rem',fontWeight:700,padding:'2px 8px',borderRadius:'20px',background:'linear-gradient(135deg,#f97316,#fbbf24)',color:'#000',whiteSpace:'nowrap'}}>
-                    PRO
-                  </span>
-                ) : subStatus === 'expired' ? (
-                  <button onClick={()=>setShowPricing(true)}
-                    style={{fontSize:'0.72rem',fontWeight:700,padding:'3px 8px',borderRadius:'20px',background:'rgba(248,113,113,0.15)',border:'1px solid rgba(248,113,113,0.5)',color:'#f87171',cursor:'pointer',whiteSpace:'nowrap'}}>
-                    Expired
-                  </button>
-                ) : (
-                  null
-                )}
-                <button onClick={()=>setShowTgSetup(true)}
-                  title={tgChatId?'Telegram connected  -  click to update':'Connect Telegram for alerts'}
-                  style={{background:'none',border:'none',cursor:'pointer',padding:'4px',fontSize:'1.2rem',lineHeight:1,opacity:tgChatId?1:0.6}}>
-                  {tgChatId ? '🔔' : '🔕'}
-                </button>
-                <div style={{cursor:'pointer'}} onClick={handleSignOut} title="Click to sign out">
-                  {currentUser?.photoURL
-                    ? <img src={currentUser?.photoURL} alt="" style={{width:'30px',height:'30px',borderRadius:'50%',border:'2px solid var(--accent)',display:'block',objectFit:'cover'}}/>
-                    : <div style={{width:'30px',height:'30px',borderRadius:'50%',background:'var(--accent)',color:'#000',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:'0.85rem'}}>{(currentUser?.displayName||currentUser?.email||'U')[0].toUpperCase()}</div>
-                  }
-                </div>
-              </>
-            ) : (
-              <button onClick={()=>setShowAuthModal(true)}
-                style={{background:'var(--accent)',color:'#000',border:'none',borderRadius:'6px',padding:'0.35rem 0.85rem',fontWeight:700,cursor:'pointer',fontSize:'0.82rem',whiteSpace:'nowrap'}}>
-                Sign In
-              </button>
-            ))}
-            <button className="hamburger" onClick={()=>setShowMobileMenu(m=>!m)}
-              style={{background:'none',border:'none',cursor:'pointer',padding:'6px',lineHeight:1,color:'var(--text-main)'}}>
-              {showMobileMenu ? '✕' : '☰'}
-            </button>
-          </div>
+      {/* ── NEW NAVBAR ── */}
+      <header style={{position:'sticky',top:0,zIndex:100,background:'rgba(245,242,237,0.95)',backdropFilter:'blur(20px)',borderBottom:'1px solid #e4e0d8',height:'60px',padding:'0 1.5rem',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        {/* Logo */}
+        <div onClick={()=>setActiveTab('home')} style={{display:'flex',alignItems:'center',gap:'0.35rem',cursor:'pointer',userSelect:'none',fontFamily:'"Familjen Grotesk",sans-serif'}}>
+          <div style={{width:'28px',height:'28px',background:'#0a0c10',color:'#f5f2ed',borderRadius:'6px',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:'0.9rem',flexShrink:0}}>Δ</div>
+          <span style={{fontFamily:'"Instrument Serif",serif',fontSize:'1.35rem',fontStyle:'italic',letterSpacing:'-0.02em',color:'#0a0c10'}}>DeltaBuddy</span>
         </div>
-      </nav>
 
-      {/* -- SEGMENT SUB-NAV  -  tab pills for active segment -- */}
+        {/* Main tabs */}
+        <nav style={{display:'flex',gap:'0.15rem'}}>
+          {[
+            {id:'pulse', label:'Pulse', tabs:['home','markets','intelligence'], def:'home', badge:'LIVE'},
+            {id:'chain', label:'Chain', tabs:['chain'], def:'chain'},
+            {id:'desk',  label:'Desk',  tabs:['strategy','scanner','single','gex','paper','journal','portfolio'], def:'strategy'},
+            {id:'mkt',   label:'Markets', tabs:['mkts'], def:'mkts'},
+            ...(isAdmin ? [{id:'admin', label:'Admin', tabs:['admin'], def:'admin', badge:null}] : []),
+          ].map(({id,label,tabs,def,badge})=>{
+            const isOn = tabs.includes(activeTab) || (id==='pulse'&&activeTab==='home') || (id==='chain'&&activeTab==='chain');
+            return (
+              <button key={id} onClick={()=>{if(!tabs.includes(activeTab))setActiveTab(def);setShowMobileMenu(false);}}
+                style={{padding:'0.38rem 1rem',borderRadius:'99px',border:'none',background:isOn?'#0a0c10':'transparent',color:isOn?'#f5f2ed':'#6b6560',fontFamily:'"Familjen Grotesk",sans-serif',fontWeight:600,fontSize:'0.82rem',cursor:'pointer',display:'flex',alignItems:'center',gap:'0.35rem',transition:'all 0.15s',whiteSpace:'nowrap'}}>
+                {label}
+                {badge&&<span style={{fontFamily:'"DM Mono",monospace',fontSize:'0.55rem',padding:'1px 5px',borderRadius:'99px',background:'rgba(0,201,122,0.15)',color:'#00c97a',fontWeight:700}}>{badge}</span>}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Right */}
+        <div style={{display:'flex',alignItems:'center',gap:'0.65rem'}}>
+          <div style={{fontFamily:'"DM Mono",monospace',fontSize:'0.72rem',color:'#9b9590',display:'flex',alignItems:'center',gap:'0.4rem'}}>
+            <div style={{width:'7px',height:'7px',borderRadius:'50%',background:'#e53e3e',boxShadow:'0 0 0 3px rgba(229,62,62,0.2)'}}/>
+            Market Closed
+          </div>
+          {!authLoading && (currentUser ? (
+            <>
+              {subStatus==='pro'&&<span style={{fontFamily:'"DM Mono",monospace',fontSize:'0.65rem',fontWeight:700,padding:'2px 8px',borderRadius:'99px',background:'#0a0c10',color:'#f5f2ed'}}>PRO</span>}
+              <button onClick={()=>setShowTgSetup(true)} title={tgChatId?'Telegram connected':'Connect Telegram'} style={{background:'none',border:'none',cursor:'pointer',padding:'4px',fontSize:'1.1rem',lineHeight:1,opacity:tgChatId?1:0.5}}>{tgChatId?'🔔':'🔕'}</button>
+              <div style={{cursor:'pointer'}} onClick={handleSignOut} title="Sign out">
+                {currentUser?.photoURL
+                  ? <img src={currentUser.photoURL} alt="" style={{width:'30px',height:'30px',borderRadius:'50%',border:'2px solid #e4e0d8',display:'block',objectFit:'cover'}}/>
+                  : <div style={{width:'30px',height:'30px',borderRadius:'50%',background:'#0a0c10',color:'#f5f2ed',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:'0.82rem'}}>{(currentUser?.displayName||currentUser?.email||'U')[0].toUpperCase()}</div>
+                }
+              </div>
+            </>
+          ) : (
+            <button onClick={()=>setShowAuthModal(true)} style={{background:'#0a0c10',color:'#f5f2ed',border:'none',borderRadius:'8px',padding:'0.4rem 1rem',fontWeight:700,cursor:'pointer',fontSize:'0.8rem',fontFamily:'"Familjen Grotesk",sans-serif'}}>Sign In</button>
+          ))}
+          <button className="hamburger" onClick={()=>setShowMobileMenu(m=>!m)} style={{background:'none',border:'none',cursor:'pointer',padding:'6px',lineHeight:1,color:'#0a0c10'}}>{showMobileMenu?'✕':'☰'}</button>
+        </div>
+      </header>
+
+      {/* ── SUB NAV ── */}
       {(() => {
-        const segmentMap = [
-          {tabs:['home','markets','intelligence'], items:[
-            ['home','🏠 Home'],['markets','📊 Markets'],['intelligence','🧠 AI Intel'],
-          ]},
-          {tabs:['strategy','scanner','single','gex','backtest','expiry'], items:[
-            ['strategy','🎯 Strategy'],['scanner','🔍 Scanner'],['single','🧮 Calc'],
-            ['gex','⚡ GEX'],['backtest','📈 Backtest'],['expiry','⏰ Expiry'],
-          ]},
-          {tabs:['paper','journal','portfolio'], items:[
-            ['paper','📝 Paper'],['journal','📓 Journal'],['portfolio','💼 Portfolio'],
-          ]},
+        const subNavMap = [
+          {tabs:['home','markets','intelligence'], items:[['home','Home'],['markets','Markets'],['intelligence','AI Intel']]},
+          {tabs:['strategy','scanner','single','gex','paper','journal','portfolio','backtest','expiry'], items:[['strategy','Strategy'],['scanner','Scanner'],['single','Calc'],['gex','GEX'],['paper','Paper'],['journal','Journal'],['portfolio','Portfolio']]},
         ];
-        const seg = segmentMap.find(s => s.tabs.includes(activeTab));
+        const seg = subNavMap.find(s => s.tabs.includes(activeTab));
         if (!seg || showMobileMenu) return null;
         return (
-          <div style={{
-            background:'var(--bg-dark)',
-            borderBottom:'1px solid var(--border)',
-            padding:'0 1rem',
-            display:'flex',
-            gap:'0.25rem',
-            overflowX:'auto',
-            scrollbarWidth:'none',
-            position:'sticky',
-            top:'56px',
-            zIndex:98,
-            height:'42px',
-            alignItems:'center',
-            flexShrink:0,
-          }}>
-            {seg.items.map(([tab, label]) => (
-              <button key={tab}
-                onClick={()=>setActiveTab(tab)}
-                style={{
-                  padding:'0.5rem 0.85rem',
-                  background:'none',
-                  border:'none',
-                  borderBottom: activeTab===tab ? '2px solid var(--accent)' : '2px solid transparent',
-                  color: activeTab===tab ? 'var(--accent)' : 'var(--text-dim)',
-                  fontWeight: activeTab===tab ? 700 : 400,
-                  fontSize:'0.8rem',
-                  cursor:'pointer',
-                  whiteSpace:'nowrap',
-                  fontFamily:'inherit',
-                  transition:'all 0.15s',
-                  marginBottom:'-1px',
-                }}>
+          <nav style={{background:'#ffffff',borderBottom:'1px solid #e4e0d8',padding:'0 1.5rem',display:'flex',gap:0,overflowX:'auto',scrollbarWidth:'none',position:'sticky',top:'60px',zIndex:99}}>
+            {seg.items.map(([tab,label])=>(
+              <button key={tab} onClick={()=>setActiveTab(tab)} style={{padding:'0.6rem 1rem',background:'none',border:'none',borderBottom:activeTab===tab?'2px solid #0a0c10':'2px solid transparent',color:activeTab===tab?'#0a0c10':'#9b9590',fontFamily:'"Familjen Grotesk",sans-serif',fontWeight:activeTab===tab?700:500,fontSize:'0.8rem',cursor:'pointer',whiteSpace:'nowrap',marginBottom:'-1px',transition:'all 0.15s'}}>
                 {label}
               </button>
             ))}
-          </div>
+          </nav>
         );
       })()}
 
-      {/* -- MOBILE MENU  -  rendered outside navbar to avoid clipping -- */}
+            {/* -- MOBILE MENU  -  rendered outside navbar to avoid clipping -- */}
       {showMobileMenu && (
         <div style={{
           position:'fixed', top:'56px', left:0, right:0, bottom:0,
