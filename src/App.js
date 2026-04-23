@@ -3633,7 +3633,7 @@ Respond ONLY with valid JSON:
 
         {/* Main tabs */}
         <nav style={{display:'flex',gap:'0.15rem'}}>
-          [
+          {[
             {id:'pulse', label:'Pulse', tabs:['home'], def:'home', badge:'LIVE'},
             {id:'chain', label:'Chain', tabs:['markets'], def:'markets'},
             {id:'desk',  label:'Desk',  tabs:['strategy','scanner','single','gex','paper','journal','portfolio','backtest','expiry'], def:'strategy'},
