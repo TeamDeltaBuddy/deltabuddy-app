@@ -3634,7 +3634,7 @@ Respond ONLY with valid JSON:
         {/* Main tabs */}
         <nav style={{display:'flex',gap:'0.15rem'}}>
           {[
-            {id:'pulse', label:'Pulse', tabs:['home'], def:'home', badge:'LIVE'},
+            {id:'pulse', label:'Pulse', tabs:['home','intelligence'], def:'home', badge:'LIVE'},
             {id:'chain', label:'Chain', tabs:['markets'], def:'markets'},
             {id:'desk',  label:'Desk',  tabs:['strategy','scanner','single','gex','paper','journal','portfolio','backtest','expiry'], def:'strategy'},
             ...(isAdmin ? [{id:'admin', label:'Admin', tabs:['admin'], def:'admin'}] : []),
@@ -3652,10 +3652,19 @@ Respond ONLY with valid JSON:
 
         {/* Right */}
         <div style={{display:'flex',alignItems:'center',gap:'0.65rem'}}>
-          <div style={{fontFamily:'"DM Mono",monospace',fontSize:'0.72rem',color:'#9b9590',display:'flex',alignItems:'center',gap:'0.4rem'}}>
-            <div style={{width:'7px',height:'7px',borderRadius:'50%',background:'#e53e3e',boxShadow:'0 0 0 3px rgba(229,62,62,0.2)'}}/>
-            Market Closed
-          </div>
+          {(()=>{
+            const now = new Date();
+            const ist = new Date(now.getTime() + 5.5*3600000);
+            const h = ist.getUTCHours() + ist.getUTCMinutes()/60;
+            const day = ist.getUTCDay();
+            const isOpen = day>=1 && day<=5 && h>=9.25 && h<=15.5;
+            return (
+              <div style={{fontFamily:'"DM Mono",monospace',fontSize:'0.72rem',color:'#9b9590',display:'flex',alignItems:'center',gap:'0.4rem'}}>
+                <div style={{width:'7px',height:'7px',borderRadius:'50%',background:isOpen?'#00c97a':'#e53e3e',boxShadow:`0 0 0 3px ${isOpen?'rgba(0,201,122,0.2)':'rgba(229,62,62,0.2)'}`}}/>
+                {isOpen ? 'Market Open' : 'Market Closed'}
+              </div>
+            );
+          })()}
           {!authLoading && (currentUser ? (
             <>
               {subStatus==='pro'&&<span style={{fontFamily:'"DM Mono",monospace',fontSize:'0.65rem',fontWeight:700,padding:'2px 8px',borderRadius:'99px',background:'#0a0c10',color:'#f5f2ed'}}>PRO</span>}
@@ -3677,11 +3686,13 @@ Respond ONLY with valid JSON:
       {/* ── SUB NAV ── */}
       {(() => {
         const subNavMap = [
+          {tabs:['home','intelligence'], items:[
+            ['home','Home'],['intelligence','AI Intel'],
+          ]},
           {tabs:['strategy','scanner','single','gex','paper','journal','portfolio','backtest','expiry'], items:[
             ['strategy','Strategy'],['scanner','Scanner'],['single','Calc'],
             ['gex','GEX'],['paper','Paper'],['journal','Journal'],['portfolio','Portfolio'],
           ]},
-          {tabs:['strategy','scanner','single','gex','paper','journal','portfolio','backtest','expiry'], items:[['strategy','Strategy'],['scanner','Scanner'],['single','Calc'],['gex','GEX'],['paper','Paper'],['journal','Journal'],['portfolio','Portfolio']]},
         ];
         const seg = subNavMap.find(s => s.tabs.includes(activeTab));
         if (!seg || showMobileMenu) return null;
@@ -4117,6 +4128,56 @@ Respond ONLY with valid JSON:
                         <span key={i} style={{fontFamily:'var(--font-mono)',fontSize:'0.68rem',padding:'0.25rem 0.6rem',borderRadius:'6px',border:'1px solid var(--line)',background:'var(--card)',color:f.warn?'var(--red)':f.ok?'var(--green)':'var(--dim)'}}>
                           {f.warn?'✗':f.ok?'✓':'~'} {f.name} {f.val}
                         </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── PCR WIDGET ── */}
+            {(() => {
+              const ceOI = liveOptionChain.reduce((a,r)=>a+(r.ce?.oi||0),0);
+              const peOI = liveOptionChain.reduce((a,r)=>a+(r.pe?.oi||0),0);
+              const pcr  = ceOI > 0 ? peOI/ceOI : null;
+              if (!pcr) return null;
+              const maxCeStrike = liveOptionChain.reduce((max,r)=>(!max||r.ce?.oi>max.ce?.oi)?r:max, null);
+              const maxPeStrike = liveOptionChain.reduce((max,r)=>(!max||r.pe?.oi>max.pe?.oi)?r:max, null);
+              const resistance  = maxCeStrike?.strike;
+              const support     = maxPeStrike?.strike;
+              const zone = pcr>=1.6?{t:'Reversal Zone (Extreme Bullish)',c:'#7c3aed'}:pcr>=1.2?{t:'Bullish',c:'#16a34a'}:pcr>=0.8?{t:'Neutral',c:'#d97706'}:pcr>=0.4?{t:'Bearish',c:'#e53e3e'}:{t:'Reversal Zone (Extreme Bearish)',c:'#7c3aed'};
+              return (
+                <div style={{marginBottom:'1.5rem'}}>
+                  <div style={{fontFamily:'var(--font-mono)',fontSize:'0.62rem',textTransform:'uppercase',letterSpacing:'0.12em',color:'var(--muted)',marginBottom:'0.85rem',display:'flex',alignItems:'center',gap:'0.75rem'}}>PCR Intelligence<span style={{flex:1,height:'1px',background:'var(--line)',display:'block'}}/></div>
+                  <div style={{background:'var(--card)',border:'1px solid var(--line)',borderRadius:'var(--radius)',overflow:'hidden'}}>
+                    <div style={{display:'grid',gridTemplateColumns:'auto 1fr auto',gap:'1.25rem',alignItems:'center',padding:'1.25rem 1.5rem'}}>
+                      <div style={{textAlign:'center'}}>
+                        <div style={{fontFamily:'var(--font-mono)',fontSize:'2.5rem',fontWeight:500,color:zone.c,lineHeight:1}}>{pcr.toFixed(2)}</div>
+                        <div style={{fontFamily:'var(--font-mono)',fontSize:'0.6rem',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginTop:'0.2rem'}}>PCR</div>
+                      </div>
+                      <div>
+                        <div style={{fontFamily:'var(--font-serif)',fontSize:'1.1rem',fontStyle:'italic',color:zone.c,marginBottom:'0.3rem'}}>{zone.t}</div>
+                        <div style={{fontSize:'0.78rem',color:'var(--dim)',lineHeight:1.6}}>
+                          {pcr>=1.2?'Put writers dominating — institutions protecting downside, bullish bias.':pcr>=0.8?'Balanced market. No strong directional bias from options data.':'Call writers dominating — resistance building, bearish bias.'}
+                        </div>
+                      </div>
+                      <div style={{textAlign:'right',display:'flex',flexDirection:'column',gap:'0.5rem'}}>
+                        {resistance&&<div style={{background:'rgba(37,99,235,0.06)',border:'1px solid rgba(37,99,235,0.15)',borderRadius:'8px',padding:'0.4rem 0.75rem',textAlign:'center'}}>
+                          <div style={{fontFamily:'var(--font-mono)',fontSize:'0.58rem',color:'#2563eb',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'0.15rem'}}>Resistance</div>
+                          <div style={{fontFamily:'var(--font-mono)',fontSize:'0.95rem',fontWeight:600,color:'#2563eb'}}>{resistance.toLocaleString('en-IN')}</div>
+                        </div>}
+                        {support&&<div style={{background:'rgba(229,62,62,0.06)',border:'1px solid rgba(229,62,62,0.15)',borderRadius:'8px',padding:'0.4rem 0.75rem',textAlign:'center'}}>
+                          <div style={{fontFamily:'var(--font-mono)',fontSize:'0.58rem',color:'#e53e3e',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'0.15rem'}}>Support</div>
+                          <div style={{fontFamily:'var(--font-mono)',fontSize:'0.95rem',fontWeight:600,color:'#e53e3e'}}>{support.toLocaleString('en-IN')}</div>
+                        </div>}
+                      </div>
+                    </div>
+                    <div style={{display:'flex',gap:0,borderTop:'1px solid var(--line)'}}>
+                      {[{t:'PCR > 1.6',l:'Extreme Bullish → Reversal Risk',c:'#7c3aed'},{t:'1.2 – 1.6',l:'Bullish Zone',c:'#16a34a'},{t:'0.8 – 1.2',l:'Neutral Zone',c:'#d97706'},{t:'0.4 – 0.8',l:'Bearish Zone',c:'#e53e3e'},{t:'PCR < 0.4',l:'Extreme Bearish → Reversal Risk',c:'#7c3aed'}].map((z,i)=>(
+                        <div key={i} style={{flex:1,padding:'0.5rem 0.4rem',textAlign:'center',background:i>0&&i<4&&((i===1&&pcr>=1.2&&pcr<1.6)||(i===2&&pcr>=0.8&&pcr<1.2)||(i===3&&pcr>=0.4&&pcr<0.8)||(i===0&&pcr>=1.6)||(i===4&&pcr<0.4))?`${z.c}11`:'transparent',borderRight:i<4?'1px solid var(--line)':'none'}}>
+                          <div style={{fontFamily:'var(--font-mono)',fontSize:'0.6rem',fontWeight:700,color:z.c}}>{z.t}</div>
+                          <div style={{fontSize:'0.62rem',color:'var(--muted)',marginTop:'0.1rem',display:'none'}}>{z.l}</div>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -5091,9 +5152,9 @@ Respond ONLY with valid JSON:
         ) : activeTab === 'markets' ? (
           <div>
             {/* -- STOCK DEEP DIVE -- */}
-            <div style={{background:'linear-gradient(135deg,#0f172a,#1a2744)',border:'1px solid #1e3a5f',borderRadius:'12px',padding:'1.25rem',marginBottom:'1.5rem'}}>
+            <div style={{background:'var(--card)',border:'1px solid #1e3a5f',borderRadius:'12px',padding:'1.25rem',marginBottom:'1.5rem'}}>
               <div style={{fontWeight:700,fontSize:'1rem',marginBottom:'0.75rem',color:'#f0f9ff'}}>🔬 Stock Deep Dive</div>
-              <p style={{color:'#64748b',fontSize:'0.82rem',marginBottom:'0.75rem'}}>Search any FnO stock to get OI analysis, key levels, PCR and AI strategy in one shot.</p>
+              <p style={{color:'var(--text-muted)',fontSize:'0.82rem',marginBottom:'0.75rem'}}>Search any FnO stock to get OI analysis, key levels, PCR and AI strategy in one shot.</p>
               <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap'}}>
                 <input
                   type="text"
@@ -5136,27 +5197,27 @@ Respond ONLY with valid JSON:
                     <div>
                       <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'0.4rem'}}>
                         <h2 style={{margin:0,fontSize:'1.25rem'}}>{deepDiveData.symbol}</h2>
-                        <span style={{background:'#1e293b',color:'#94a3b8',padding:'2px 10px',borderRadius:'99px',fontSize:'0.75rem'}}>{deepDiveData.meta.sector}</span>
+                        <span style={{background:'#1e293b',color:'var(--text-dim)',padding:'2px 10px',borderRadius:'99px',fontSize:'0.75rem'}}>{deepDiveData.meta.sector}</span>
                       </div>
-                      <div style={{fontSize:'0.88rem',color:'#94a3b8',marginBottom:'0.5rem'}}>{deepDiveData.meta.name}</div>
+                      <div style={{fontSize:'0.88rem',color:'var(--text-dim)',marginBottom:'0.5rem'}}>{deepDiveData.meta.name}</div>
                       <p style={{color:'var(--text-dim)',fontSize:'0.82rem',maxWidth:'500px',lineHeight:1.5}}>{deepDiveData.meta.desc}</p>
                     </div>
                     <div style={{display:'flex',flexDirection:'column',gap:'0.35rem',minWidth:'140px'}}>
                       {deepDiveData.price>0 && (
-                        <div style={{background:'#0f172a',borderRadius:'8px',padding:'0.5rem 0.75rem',textAlign:'center'}}>
-                          <div style={{fontSize:'0.7rem',color:'#64748b'}}>LTP</div>
+                        <div style={{background:'var(--card)',borderRadius:'8px',padding:'0.5rem 0.75rem',textAlign:'center'}}>
+                          <div style={{fontSize:'0.7rem',color:'var(--text-muted)'}}>LTP</div>
                           <div style={{fontSize:'1.1rem',fontWeight:700,color:'var(--text-main)'}}>₹{deepDiveData.price?.toLocaleString('en-IN',{maximumFractionDigits:2})}</div>
                           <div style={{fontSize:'0.72rem',color:deepDiveData.change>=0?'#4ade80':'#f87171'}}>{deepDiveData.change>=0?'▲ +':'▼ '}{Math.abs(deepDiveData.change).toFixed(2)}%</div>
                         </div>
                       )}
-                      <div style={{background:'#0f172a',borderRadius:'8px',padding:'0.5rem 0.75rem',textAlign:'center'}}>
-                        <div style={{fontSize:'0.7rem',color:'#64748b'}}>LOT SIZE</div>
+                      <div style={{background:'var(--card)',borderRadius:'8px',padding:'0.5rem 0.75rem',textAlign:'center'}}>
+                        <div style={{fontSize:'0.7rem',color:'var(--text-muted)'}}>LOT SIZE</div>
                         <div style={{fontSize:'1.1rem',fontWeight:700,color:'var(--accent)'}}>{deepDiveData.meta.lot}</div>
                       </div>
-                      <div style={{background:'#0f172a',borderRadius:'8px',padding:'0.5rem 0.75rem',textAlign:'center'}}>
-                        <div style={{fontSize:'0.7rem',color:'#64748b'}}>PCR (Nifty Proxy)</div>
+                      <div style={{background:'var(--card)',borderRadius:'8px',padding:'0.5rem 0.75rem',textAlign:'center'}}>
+                        <div style={{fontSize:'0.7rem',color:'var(--text-muted)'}}>PCR (Nifty Proxy)</div>
                         <div style={{fontSize:'1.1rem',fontWeight:700,color:deepDiveData.pcrSentiment==='Bullish'?'#4ade80':deepDiveData.pcrSentiment==='Bearish'?'#f87171':'#fbbf24'}}>{deepDiveData.pcr}</div>
-                        <div style={{fontSize:'0.7rem',color:'#64748b'}}>{deepDiveData.pcrSentiment}</div>
+                        <div style={{fontSize:'0.7rem',color:'var(--text-muted)'}}>{deepDiveData.pcrSentiment}</div>
                       </div>
                     </div>
                   </div>
@@ -5174,7 +5235,7 @@ Respond ONLY with valid JSON:
                           <span style={{fontWeight:700}}>{row.strike?.toLocaleString()}</span>
                         </div>
                         <span style={{color:'#f87171'}}>{((row.ce?.oi||0)/100000).toFixed(2)} L OI</span>
-                        <span style={{color:'#64748b',fontSize:'0.75rem'}}>₹{row.ce?.ltp}</span>
+                        <span style={{color:'var(--text-muted)',fontSize:'0.75rem'}}>₹{row.ce?.ltp}</span>
                       </div>
                     ))}
                   </div>
@@ -5188,7 +5249,7 @@ Respond ONLY with valid JSON:
                           <span style={{fontWeight:700}}>{row.strike?.toLocaleString()}</span>
                         </div>
                         <span style={{color:'#4ade80'}}>{((row.pe?.oi||0)/100000).toFixed(2)} L OI</span>
-                        <span style={{color:'#64748b',fontSize:'0.75rem'}}>₹{row.pe?.ltp}</span>
+                        <span style={{color:'var(--text-muted)',fontSize:'0.75rem'}}>₹{row.pe?.ltp}</span>
                       </div>
                     ))}
                   </div>
@@ -5201,13 +5262,13 @@ Respond ONLY with valid JSON:
                       <div style={{fontWeight:700,color:'#4ade80',fontSize:'0.9rem'}}>🤖 AI Strategy Suggestion</div>
                       <div style={{display:'flex',gap:'0.4rem'}}>
                         <span style={{background:'#1e293b',color:deepDiveData.strategy.sentiment==='Bullish'?'#4ade80':deepDiveData.strategy.sentiment==='Bearish'?'#f87171':'#fbbf24',padding:'2px 8px',borderRadius:'99px',fontSize:'0.72rem',fontWeight:600}}>{deepDiveData.strategy.sentiment}</span>
-                        <span style={{background:'#1e293b',color:'#94a3b8',padding:'2px 8px',borderRadius:'99px',fontSize:'0.72rem'}}>Risk: {deepDiveData.strategy.risk}</span>
-                        <span style={{background:'#1e293b',color:'#94a3b8',padding:'2px 8px',borderRadius:'99px',fontSize:'0.72rem'}}>{deepDiveData.strategy.timeframe}</span>
+                        <span style={{background:'#1e293b',color:'var(--text-dim)',padding:'2px 8px',borderRadius:'99px',fontSize:'0.72rem'}}>Risk: {deepDiveData.strategy.risk}</span>
+                        <span style={{background:'#1e293b',color:'var(--text-dim)',padding:'2px 8px',borderRadius:'99px',fontSize:'0.72rem'}}>{deepDiveData.strategy.timeframe}</span>
                       </div>
                     </div>
                     <div style={{fontSize:'1rem',fontWeight:700,color:'#f0f9ff',marginBottom:'0.4rem'}}>{deepDiveData.strategy.strategy}</div>
                     <div style={{fontSize:'0.9rem',color:'var(--accent)',fontWeight:600,marginBottom:'0.4rem'}}>Trade: {deepDiveData.strategy.action}</div>
-                    <p style={{color:'#94a3b8',fontSize:'0.84rem',margin:0,lineHeight:1.5}}>{deepDiveData.strategy.reasoning}</p>
+                    <p style={{color:'var(--text-dim)',fontSize:'0.84rem',margin:0,lineHeight:1.5}}>{deepDiveData.strategy.reasoning}</p>
                   </div>
                 ) : !groqApiKey ? (
                   <div style={{background:'#1a1a00',border:'1px solid #f59e0b',borderRadius:'10px',padding:'1rem',marginBottom:'1rem',fontSize:'0.85rem',color:'#fbbf24'}}>
@@ -5225,11 +5286,11 @@ Respond ONLY with valid JSON:
                       NSE Block Deals →
                     </a>
                     <a href={`https://www.nseindia.com/market-data/bulk-deal`} target="_blank" rel="noreferrer"
-                      style={{background:'#1e293b',color:'#94a3b8',textDecoration:'none',borderRadius:'6px',padding:'0.4rem 0.9rem',fontWeight:600,fontSize:'0.82rem',border:'1px solid var(--border)'}}>
+                      style={{background:'#1e293b',color:'var(--text-dim)',textDecoration:'none',borderRadius:'6px',padding:'0.4rem 0.9rem',fontWeight:600,fontSize:'0.82rem',border:'1px solid var(--border)'}}>
                       NSE Bulk Deals →
                     </a>
                     <a href={`https://www.bseindia.com/markets/equity/EQReports/BulkDeal.aspx`} target="_blank" rel="noreferrer"
-                      style={{background:'#1e293b',color:'#94a3b8',textDecoration:'none',borderRadius:'6px',padding:'0.4rem 0.9rem',fontWeight:600,fontSize:'0.82rem',border:'1px solid var(--border)'}}>
+                      style={{background:'#1e293b',color:'var(--text-dim)',textDecoration:'none',borderRadius:'6px',padding:'0.4rem 0.9rem',fontWeight:600,fontSize:'0.82rem',border:'1px solid var(--border)'}}>
                     </a>
                   </div>
                 </div>
@@ -5358,7 +5419,7 @@ Respond ONLY with valid JSON:
                   <div style={{textAlign:'center',padding:'3rem',color:'var(--text-dim)'}}>
                     <div style={{fontSize:'2rem',marginBottom:'0.75rem'}}>📡</div>
                     <div style={{fontWeight:700,marginBottom:'0.5rem'}}>Loading Option Chain...</div>
-                    <div style={{fontSize:'0.82rem',color:'#64748b',marginBottom:'1.25rem'}}>
+                    <div style={{fontSize:'0.82rem',color:'var(--text-muted)',marginBottom:'1.25rem'}}>
                       Chain rows: {liveOptionChain.length} | Loading: {isLoadingChain?'yes':'no'}<br/>
                       Expiry: {selectedExpiry || nseExpiryDates[0] || 'none'}<br/>
                       Source: Dhan API | Spot: {marketData.nifty?.value}
@@ -5434,22 +5495,22 @@ Respond ONLY with valid JSON:
                                   <span style={{position:'relative',fontWeight:ceOI>500000?700:400,color:ceOI>500000?'#4ade80':'#94a3b8'}}>{fmt(ceOI)}</span>
                                 </td>
                                 <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:ceOIChg>0?'#4ade80':ceOIChg<0?'#f87171':'#64748b',fontSize:'0.7rem'}}>{ceOIChg>0?'+':''}{fmt(ceOIChg)}</td>
-                                <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:'#64748b',fontSize:'0.7rem'}}>{fmt(row.ce?.volume||0)}</td>
+                                <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:'var(--text-muted)',fontSize:'0.7rem'}}>{fmt(row.ce?.volume||0)}</td>
                                 <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:'#fbbf24'}}>{row.ce?.iv}</td>
                                 <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,fontWeight:700,color:'#4ade80',fontSize:'0.82rem'}}>&#8377;{row.ce?.ltp}</td>
                                 <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:ceChg>=0?'#4ade80':'#f87171',fontSize:'0.72rem'}}>{ceChg>=0?'+':''}{row.ce?.pChange}%</td>
-                                <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:'#64748b',fontSize:'0.72rem'}}>{row.ce?.bid}</td>
+                                <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:'var(--text-muted)',fontSize:'0.72rem'}}>{row.ce?.bid}</td>
                                 <td style={{padding:'5px 8px',textAlign:'center',background:'rgba(249,115,22,0.06)',borderLeft:'1px solid rgba(249,115,22,0.2)',borderRight:'1px solid rgba(249,115,22,0.2)'}}>
                                   {isATM
                                     ?<span style={{background:'#f97316',color:'white',borderRadius:'99px',padding:'2px 7px',fontWeight:800,fontSize:'0.78rem',whiteSpace:'nowrap'}}>{row.strike?.toLocaleString()} ATM</span>
                                     :<span style={{fontWeight:600,color:itmCE?'rgba(74,222,128,0.8)':itmPE?'rgba(248,113,113,0.8)':'var(--text-dim)',fontSize:'0.8rem'}}>{row.strike?.toLocaleString()}</span>
                                   }
                                 </td>
-                                <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'#64748b',fontSize:'0.72rem'}}>{row.pe?.ask}</td>
+                                <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'var(--text-muted)',fontSize:'0.72rem'}}>{row.pe?.ask}</td>
                                 <td style={{padding:'5px 6px',textAlign:'left',background:peBg,fontWeight:700,color:'#f87171',fontSize:'0.82rem'}}>&#8377;{row.pe?.ltp}</td>
                                 <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:peChg>=0?'#4ade80':'#f87171',fontSize:'0.72rem'}}>{peChg>=0?'+':''}{row.pe?.pChange}%</td>
                                 <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'#fbbf24'}}>{row.pe?.iv}</td>
-                                <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'#64748b',fontSize:'0.7rem'}}>{fmt(row.pe?.volume||0)}</td>
+                                <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'var(--text-muted)',fontSize:'0.7rem'}}>{fmt(row.pe?.volume||0)}</td>
                                 <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:peOIChg>0?'#4ade80':peOIChg<0?'#f87171':'#64748b',fontSize:'0.7rem'}}>{peOIChg>0?'+':''}{fmt(peOIChg)}</td>
                                 <td style={{padding:'5px 6px',textAlign:'left',background:peBg,position:'relative'}}>
                                   <div style={{position:'absolute',left:0,top:0,bottom:0,width:`${peBarW}%`,background:'rgba(248,113,113,0.08)',pointerEvents:'none'}}/>
@@ -6188,7 +6249,7 @@ Respond ONLY with valid JSON:
                         {label:'R3', val:R3, color:'rgba(248,113,113,0.5)',  note:'Strong resistance'},
                         {label:'R2', val:R2, color:'rgba(248,113,113,0.75)', note:'Resistance'},
                         {label:'R1', val:R1, color:'#f87171',                note:'Key resistance'},
-                        {label:'PP', val:P,  color:'#e2e8f0',                note:'Pivot point'},
+                        {label:'PP', val:P,  color:'var(--text-main)',                note:'Pivot point'},
                         {label:'S1', val:S1, color:'#4ade80',                note:'Key support'},
                         {label:'S2', val:S2, color:'rgba(74,222,128,0.75)',  note:'Support'},
                         {label:'S3', val:S3, color:'rgba(74,222,128,0.5)',   note:'Strong support'},
@@ -6475,7 +6536,7 @@ Respond ONLY with valid JSON:
                       style={{width:'100%',accentColor:'var(--accent)'}}/>
                     <div style={{fontSize:'0.7rem',color:'var(--text-dim)',marginTop:'2px'}}>NIFTY=75 | BANKNIFTY=15 | Stocks=varies</div>
                   </div>
-                  <div style={{marginTop:'0.5rem',background:'#0a1628',borderRadius:'6px',padding:'0.5rem',fontSize:'0.75rem',color:'#64748b'}}>
+                  <div style={{marginTop:'0.5rem',background:'var(--paper)',borderRadius:'6px',padding:'0.5rem',fontSize:'0.75rem',color:'#64748b'}}>
                     <div style={{color:'#fbbf24',fontWeight:600,marginBottom:'3px'}}>⚠️ Disclaimer</div>
                     Options P&L calculated using Black-Scholes with IV=16%. Actual premium history is not available in free APIs. Past results do not guarantee future performance.
                   </div>
@@ -6687,7 +6748,7 @@ Respond ONLY with valid JSON:
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:'1rem',marginBottom:'1rem'}}>
 
                 {/* PCR Card */}
-                <div style={{background:'#0f172a',borderRadius:'10px',padding:'1rem',border:'1px solid var(--border)'}}>
+                <div style={{background:'var(--card)',borderRadius:'10px',padding:'1rem',border:'1px solid var(--border)'}}>
                   <div style={{fontWeight:600,marginBottom:'0.5rem'}}>Put/Call Ratio by Index</div>
                   <p style={{color:'var(--text-dim)',fontSize:'0.78rem',marginBottom:'0.75rem'}}>PCR above 1.2 = bullish. Below 0.8 = bearish. Calculated from live chain.</p>
                   {[['NIFTY 50',liveOptionChain]].map(([name,chain])=>{
@@ -6710,7 +6771,7 @@ Respond ONLY with valid JSON:
                 </div>
 
                 {/* FII/DII Card */}
-                <div style={{background:'#0f172a',borderRadius:'10px',padding:'1rem',border:'1px solid var(--border)'}}>
+                <div style={{background:'var(--card)',borderRadius:'10px',padding:'1rem',border:'1px solid var(--border)'}}>
                   <div style={{fontWeight:600,marginBottom:'0.5rem'}}>FII / DII Activity</div>
                   <p style={{color:'var(--text-dim)',fontSize:'0.78rem',marginBottom:'0.75rem'}}>NSE publishes this end-of-day. Figures in crores (INR).</p>
                   {fiiDiiData.length>0 ? fiiDiiData.slice(0,5).map((row,i)=>(
@@ -6730,7 +6791,7 @@ Respond ONLY with valid JSON:
               </div>
 
               {/* OI Buildup */}
-              <div style={{background:'#0f172a',borderRadius:'10px',padding:'1rem',border:'1px solid var(--border)',marginBottom:'1rem'}}>
+              <div style={{background:'var(--card)',borderRadius:'10px',padding:'1rem',border:'1px solid var(--border)',marginBottom:'1rem'}}>
                 <div style={{fontWeight:600,marginBottom:'0.5rem'}}>Largest OI Buildup  -  NIFTY Strikes</div>
                 <p style={{color:'var(--text-dim)',fontSize:'0.78rem',marginBottom:'0.75rem'}}>Highest OI = where institutions are positioned. CE = resistance, PE = support.</p>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem'}}>
@@ -6758,7 +6819,7 @@ Respond ONLY with valid JSON:
               </div>
 
               {/* Block & Bulk Deals */}
-              <div style={{background:'#0f172a',borderRadius:'10px',padding:'1rem',border:'1px solid var(--border)'}}>
+              <div style={{background:'var(--card)',borderRadius:'10px',padding:'1rem',border:'1px solid var(--border)'}}>
                 <div style={{fontWeight:600,marginBottom:'0.5rem'}}>Block & Bulk Deals</div>
                 <p style={{color:'var(--text-dim)',fontSize:'0.78rem',marginBottom:'0.5rem'}}>
                   Large institutional trades executed on exchange.
@@ -6766,7 +6827,7 @@ Respond ONLY with valid JSON:
                   <span style={{marginLeft:'0.4rem'}}>|</span>
                   <a href="https://www.bseindia.com/markets/equity/EQReports/BulkDeal.aspx" target="_blank" rel="noreferrer" style={{color:'var(--accent)',marginLeft:'0.4rem'}}>View on BSE</a>
                 </p>
-                <div style={{background:'#0a1628',borderRadius:'8px',padding:'1rem',textAlign:'center',fontSize:'0.82rem',color:'#64748b'}}>
+                <div style={{background:'var(--paper)',borderRadius:'8px',padding:'1rem',textAlign:'center',fontSize:'0.82rem',color:'#64748b'}}>
                   Block/Bulk deal real-time integration is planned with the mstock API. Until then, use the NSE/BSE links above for live data  -  they update throughout the day.
                 </div>
               </div>
