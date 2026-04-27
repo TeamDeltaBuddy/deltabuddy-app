@@ -4020,11 +4020,15 @@ Respond ONLY with valid JSON:
 
             {/* ── LIVE TICKERS ── */}
             {(() => {
+              const ceOI_t=liveOptionChain.reduce((a,r)=>a+(r.ce?.oi||0),0);
+              const peOI_t=liveOptionChain.reduce((a,r)=>a+(r.pe?.oi||0),0);
+              const pcrVal=ceOI_t>0?(peOI_t/ceOI_t).toFixed(2):null;
+              const pcrZone=pcrVal?parseFloat(pcrVal)>=1.2?'Bullish':parseFloat(pcrVal)>=0.8?'Neutral':'Bearish':null;
               const items = [
                 {label:'Nifty 50',   val:marketData.nifty?.value,    chg:marketData.nifty?.change},
                 {label:'BankNifty',  val:marketData.bankNifty?.value, chg:marketData.bankNifty?.change},
                 {label:'India VIX',  val:marketData.vix?.value,       chg:marketData.vix?.change, warn:parseFloat(marketData.vix?.value)>18},
-                {label:'PCR',        val:(()=>{const c=liveOptionChain.reduce((a,r)=>a+(r.ce?.oi||0),0);const p=liveOptionChain.reduce((a,r)=>a+(r.pe?.oi||0),0);return c>0?(p/c).toFixed(2):null;})(), chg:null},
+                {label:'PCR '+( pcrZone||''), val:pcrVal, chg:null, raw:pcrVal?parseFloat(pcrVal)-1:null},
                 {label:'FII Net',    val:institutionalActivity?.fii?.net!=null?'₹'+Math.round(Math.abs(institutionalActivity.fii.net))+'Cr':null, chg:null, raw:institutionalActivity?.fii?.net},
                 {label:'GIFT Nifty', val:globalCues?.giftPct!=null?(globalCues.giftPct>0?'+':'')+globalCues.giftPct?.toFixed(2)+'%':null, chg:null, raw:globalCues?.giftPct},
               ];
@@ -6678,7 +6682,7 @@ Respond ONLY with valid JSON:
               <div>
                 <h2 style={{margin:0,fontSize:'1.35rem'}}>🧠 Market Intelligence</h2>
                 <p style={{color:groqApiKey?'#4ade80':'#f59e0b',fontSize:'0.8rem',margin:'0.2rem 0 0'}}>
-                  {groqApiKey?'AI-powered by Groq Llama 3.3':'Add Groq key in Settings for AI analysis'}
+                  {'AI-powered market intelligence'}
                 </p>
               </div>
               <button onClick={()=>{fetchIntelligentNews();fetchLivePrices();}} disabled={isLoadingNews}
@@ -6773,7 +6777,7 @@ Respond ONLY with valid JSON:
                 {/* FII/DII Card */}
                 <div style={{background:'var(--card)',borderRadius:'10px',padding:'1rem',border:'1px solid var(--border)'}}>
                   <div style={{fontWeight:600,marginBottom:'0.5rem'}}>FII / DII Activity</div>
-                  <p style={{color:'var(--text-dim)',fontSize:'0.78rem',marginBottom:'0.75rem'}}>NSE publishes this end-of-day. Figures in crores (INR).</p>
+                  <p style={{color:'var(--text-dim)',fontSize:'0.78rem',marginBottom:'0.75rem'}}>NSE publishes this end-of-day. Figures in crores (INR). <em style={{fontSize:'0.72rem',color:'var(--text-muted)'}}>If link shows error, open NSE directly in new tab.</em></p>
                   {fiiDiiData.length>0 ? fiiDiiData.slice(0,5).map((row,i)=>(
                     <div key={i} style={{display:'grid',gridTemplateColumns:'80px 1fr 1fr 1fr',gap:'0.25rem',padding:'0.35rem 0',borderBottom:'1px solid #1e293b',fontSize:'0.78rem'}}>
                       <span style={{color:'#64748b'}}>{row.date}</span>
@@ -6784,7 +6788,7 @@ Respond ONLY with valid JSON:
                   )) : (
                     <div style={{textAlign:'center',padding:'1rem',color:'var(--text-dim)',fontSize:'0.82rem'}}>
                       FII/DII data loads from NSE.
-                      <a href="https://www.nseindia.com/market-data/fii-dii-activity" target="_blank" rel="noreferrer" style={{color:'var(--accent)',marginLeft:'0.3rem'}}>View on NSE</a>
+                      <a href="https://www.nseindia.com/market-data/fii-dii-activity" target="_blank" rel="noopener noreferrer" style={{color:'var(--accent)',marginLeft:'0.3rem'}}>View on NSE</a>
                     </div>
                   )}
                 </div>
@@ -6823,9 +6827,9 @@ Respond ONLY with valid JSON:
                 <div style={{fontWeight:600,marginBottom:'0.5rem'}}>Block & Bulk Deals</div>
                 <p style={{color:'var(--text-dim)',fontSize:'0.78rem',marginBottom:'0.5rem'}}>
                   Large institutional trades executed on exchange.
-                  <a href="https://www.nseindia.com/market-data/block-deal" target="_blank" rel="noreferrer" style={{color:'var(--accent)',marginLeft:'0.4rem'}}>View live on NSE</a>
+                  <a href="https://www.nseindia.com/market-data/block-deal" target="_blank" rel="noopener noreferrer" style={{color:'var(--accent)',marginLeft:'0.4rem'}}>View live on NSE</a>
                   <span style={{marginLeft:'0.4rem'}}>|</span>
-                  <a href="https://www.bseindia.com/markets/equity/EQReports/BulkDeal.aspx" target="_blank" rel="noreferrer" style={{color:'var(--accent)',marginLeft:'0.4rem'}}>View on BSE</a>
+                  <a href="https://www.bseindia.com/markets/equity/EQReports/BulkDeal.aspx" target="_blank" rel="noopener noreferrer" style={{color:'var(--accent)',marginLeft:'0.4rem'}}>View on BSE</a>
                 </p>
                 <div style={{background:'var(--paper)',borderRadius:'8px',padding:'1rem',textAlign:'center',fontSize:'0.82rem',color:'#64748b'}}>
                   Block/Bulk deal real-time integration is planned with the mstock API. Until then, use the NSE/BSE links above for live data  -  they update throughout the day.
