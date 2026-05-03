@@ -3628,7 +3628,10 @@ Respond ONLY with valid JSON:
         {/* Logo */}
         <div onClick={()=>setActiveTab('home')} style={{display:'flex',alignItems:'center',gap:'0.35rem',cursor:'pointer',userSelect:'none',fontFamily:'"Familjen Grotesk",sans-serif'}}>
           <div style={{width:'28px',height:'28px',background:'#0a0c10',color:'#f5f2ed',borderRadius:'6px',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:'0.9rem',flexShrink:0}}>Δ</div>
-          <span style={{fontFamily:'"Instrument Serif",serif',fontSize:'1.35rem',fontStyle:'italic',letterSpacing:'-0.02em',color:'#0a0c10'}}>DeltaBuddy</span>
+          <div>
+            <span style={{fontFamily:'"Instrument Serif",serif',fontSize:'1.35rem',fontStyle:'italic',letterSpacing:'-0.02em',color:'#0a0c10',lineHeight:1.1,display:'block'}}>DeltaBuddy</span>
+            <span style={{fontFamily:'"Familjen Grotesk",sans-serif',fontSize:'0.6rem',fontWeight:600,letterSpacing:'0.08em',textTransform:'uppercase',color:'#9b9590',display:'block',marginTop:'1px'}}>India&#39;s smartest F&amp;O companion</span>
+          </div>
         </div>
 
         {/* Main tabs */}
@@ -4020,22 +4023,30 @@ Respond ONLY with valid JSON:
 
             {/* ── LIVE TICKERS ── */}
             {(() => {
+              const dataLoaded = marketData.nifty?.value !== 25500 || marketData.bankNifty?.value !== 54000;
               const ceOI_t=liveOptionChain.reduce((a,r)=>a+(r.ce?.oi||0),0);
               const peOI_t=liveOptionChain.reduce((a,r)=>a+(r.pe?.oi||0),0);
-              const pcrVal=ceOI_t>0?(peOI_t/ceOI_t).toFixed(2):null;
-              const pcrZone=pcrVal?parseFloat(pcrVal)>=1.2?'Bullish':parseFloat(pcrVal)>=0.8?'Neutral':'Bearish':null;
+              const pcrVal=ceOI_t>0?(peOI_t/ceOI_t):null;
+              const pcrZone=pcrVal?pcrVal>=1.2?'Bullish':pcrVal>=0.8?'Neutral':'Bearish':'—';
+              const fiiNet=institutionalActivity?.fii?.net;
+              const giftPct=globalCues?.giftPct;
               const items = [
-                {label:'Nifty 50',   val:marketData.nifty?.value,    chg:marketData.nifty?.change},
-                {label:'BankNifty',  val:marketData.bankNifty?.value, chg:marketData.bankNifty?.change},
-                {label:'India VIX',  val:marketData.vix?.value,       chg:marketData.vix?.change, warn:parseFloat(marketData.vix?.value)>18},
-                {label:'PCR '+( pcrZone||''), val:pcrVal, chg:null, raw:pcrVal?parseFloat(pcrVal)-1:null},
-                {label:'FII Net',    val:institutionalActivity?.fii?.net!=null?'₹'+Math.round(Math.abs(institutionalActivity.fii.net))+'Cr':null, chg:null, raw:institutionalActivity?.fii?.net},
-                {label:'GIFT Nifty', val:globalCues?.giftPct!=null?(globalCues.giftPct>0?'+':'')+globalCues.giftPct?.toFixed(2)+'%':null, chg:null, raw:globalCues?.giftPct},
+                {label:'Nifty 50',  val:marketData.nifty?.value??25500,    chg:marketData.nifty?.change??0},
+                {label:'BankNifty', val:marketData.bankNifty?.value??54000, chg:marketData.bankNifty?.change??0},
+                {label:'India VIX', val:marketData.vix?.value??14.2,        chg:marketData.vix?.change??0, warn:parseFloat(marketData.vix?.value||0)>18},
+                {label:'PCR · '+(pcrZone), val:pcrVal?pcrVal.toFixed(2):'—', chg:null, raw:pcrVal?pcrVal-1:null},
+                ...(fiiNet!=null?[{label:'FII Net', val:'₹'+Math.round(Math.abs(fiiNet))+'Cr', chg:null, raw:fiiNet}]:[]),
+                ...(giftPct!=null?[{label:'GIFT Nifty', val:(giftPct>0?'+':'')+giftPct.toFixed(2)+'%', chg:null, raw:giftPct}]:[]),
               ];
               return (
-                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:'1px',background:'var(--line)',borderRadius:'var(--radius)',overflow:'hidden',marginBottom:'1.5rem'}}>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:'1px',background:'var(--line)',borderRadius:'var(--radius)',overflow:'hidden',marginBottom:'1.5rem'}}>
+                  {!dataLoaded && (
+                    <div style={{gridColumn:'1/-1',padding:'0.75rem 1rem',display:'flex',alignItems:'center',gap:'0.5rem',background:'var(--card)',borderBottom:'1px solid var(--line)'}}>
+                      <div style={{width:'8px',height:'8px',borderRadius:'50%',background:'var(--accent)',animation:'pulse 1.2s ease infinite'}}/>
+                      <span style={{fontFamily:'var(--font-mono)',fontSize:'0.68rem',color:'var(--muted)'}}>Fetching live data... update Dhan token if this persists</span>
+                    </div>
+                  )}
                   {items.map((t,i)=>{
-                    if(!t.val && t.val!==0) return null;
                     const chg=parseFloat(t.chg);
                     const raw=t.raw;
                     const isUp=t.chg!=null?chg>0:raw!=null?raw>0:null;
@@ -5156,7 +5167,7 @@ Respond ONLY with valid JSON:
         ) : activeTab === 'markets' ? (
           <div>
             {/* -- STOCK DEEP DIVE -- */}
-            <div style={{background:'var(--card)',border:'1px solid #1e3a5f',borderRadius:'12px',padding:'1.25rem',marginBottom:'1.5rem'}}>
+            <div style={{background:'var(--card)',border:'1px solid var(--line)',borderRadius:'12px',padding:'1.25rem',marginBottom:'1.5rem'}}>
               <div style={{fontWeight:700,fontSize:'1rem',marginBottom:'0.75rem',color:'#f0f9ff'}}>🔬 Stock Deep Dive</div>
               <p style={{color:'var(--text-muted)',fontSize:'0.82rem',marginBottom:'0.75rem'}}>Search any FnO stock to get OI analysis, key levels, PCR and AI strategy in one shot.</p>
               <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap'}}>
@@ -5201,7 +5212,7 @@ Respond ONLY with valid JSON:
                     <div>
                       <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'0.4rem'}}>
                         <h2 style={{margin:0,fontSize:'1.25rem'}}>{deepDiveData.symbol}</h2>
-                        <span style={{background:'#1e293b',color:'var(--text-dim)',padding:'2px 10px',borderRadius:'99px',fontSize:'0.75rem'}}>{deepDiveData.meta.sector}</span>
+                        <span style={{background:'var(--line)',color:'var(--text-dim)',padding:'2px 10px',borderRadius:'99px',fontSize:'0.75rem'}}>{deepDiveData.meta.sector}</span>
                       </div>
                       <div style={{fontSize:'0.88rem',color:'var(--text-dim)',marginBottom:'0.5rem'}}>{deepDiveData.meta.name}</div>
                       <p style={{color:'var(--text-dim)',fontSize:'0.82rem',maxWidth:'500px',lineHeight:1.5}}>{deepDiveData.meta.desc}</p>
@@ -5233,7 +5244,7 @@ Respond ONLY with valid JSON:
                   <div style={{background:'var(--bg-card)',border:'1px solid #991b1b',borderRadius:'10px',padding:'1rem'}}>
                     <div style={{fontWeight:700,color:'#f87171',marginBottom:'0.6rem',fontSize:'0.88rem'}}>🔴 Resistance (Top CE OI)</div>
                     {deepDiveData.ceTop.map((row,i)=>(
-                      <div key={row.strike} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.35rem 0',borderBottom:'1px solid #1e293b',fontSize:'0.85rem'}}>
+                      <div key={row.strike} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.35rem 0',borderBottom:'1px solid var(--line)',fontSize:'0.85rem'}}>
                         <div style={{display:'flex',alignItems:'center',gap:'0.4rem'}}>
                           {i===0&&<span style={{background:'#991b1b',color:'white',borderRadius:'99px',padding:'0px 6px',fontSize:'0.68rem',fontWeight:700}}>MAX</span>}
                           <span style={{fontWeight:700}}>{row.strike?.toLocaleString()}</span>
@@ -5247,7 +5258,7 @@ Respond ONLY with valid JSON:
                   <div style={{background:'var(--bg-card)',border:'1px solid #166534',borderRadius:'10px',padding:'1rem'}}>
                     <div style={{fontWeight:700,color:'#4ade80',marginBottom:'0.6rem',fontSize:'0.88rem'}}>🟢 Support (Top PE OI)</div>
                     {deepDiveData.peTop.map((row,i)=>(
-                      <div key={row.strike} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.35rem 0',borderBottom:'1px solid #1e293b',fontSize:'0.85rem'}}>
+                      <div key={row.strike} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.35rem 0',borderBottom:'1px solid var(--line)',fontSize:'0.85rem'}}>
                         <div style={{display:'flex',alignItems:'center',gap:'0.4rem'}}>
                           {i===0&&<span style={{background:'#166534',color:'white',borderRadius:'99px',padding:'0px 6px',fontSize:'0.68rem',fontWeight:700}}>MAX</span>}
                           <span style={{fontWeight:700}}>{row.strike?.toLocaleString()}</span>
@@ -5265,9 +5276,9 @@ Respond ONLY with valid JSON:
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem',flexWrap:'wrap',gap:'0.5rem'}}>
                       <div style={{fontWeight:700,color:'#4ade80',fontSize:'0.9rem'}}>🤖 AI Strategy Suggestion</div>
                       <div style={{display:'flex',gap:'0.4rem'}}>
-                        <span style={{background:'#1e293b',color:deepDiveData.strategy.sentiment==='Bullish'?'#4ade80':deepDiveData.strategy.sentiment==='Bearish'?'#f87171':'#fbbf24',padding:'2px 8px',borderRadius:'99px',fontSize:'0.72rem',fontWeight:600}}>{deepDiveData.strategy.sentiment}</span>
-                        <span style={{background:'#1e293b',color:'var(--text-dim)',padding:'2px 8px',borderRadius:'99px',fontSize:'0.72rem'}}>Risk: {deepDiveData.strategy.risk}</span>
-                        <span style={{background:'#1e293b',color:'var(--text-dim)',padding:'2px 8px',borderRadius:'99px',fontSize:'0.72rem'}}>{deepDiveData.strategy.timeframe}</span>
+                        <span style={{background:'var(--line)',color:deepDiveData.strategy.sentiment==='Bullish'?'#4ade80':deepDiveData.strategy.sentiment==='Bearish'?'#f87171':'#fbbf24',padding:'2px 8px',borderRadius:'99px',fontSize:'0.72rem',fontWeight:600}}>{deepDiveData.strategy.sentiment}</span>
+                        <span style={{background:'var(--line)',color:'var(--text-dim)',padding:'2px 8px',borderRadius:'99px',fontSize:'0.72rem'}}>Risk: {deepDiveData.strategy.risk}</span>
+                        <span style={{background:'var(--line)',color:'var(--text-dim)',padding:'2px 8px',borderRadius:'99px',fontSize:'0.72rem'}}>{deepDiveData.strategy.timeframe}</span>
                       </div>
                     </div>
                     <div style={{fontSize:'1rem',fontWeight:700,color:'#f0f9ff',marginBottom:'0.4rem'}}>{deepDiveData.strategy.strategy}</div>
@@ -5290,11 +5301,11 @@ Respond ONLY with valid JSON:
                       NSE Block Deals →
                     </a>
                     <a href={`https://www.nseindia.com/market-data/bulk-deal`} target="_blank" rel="noreferrer"
-                      style={{background:'#1e293b',color:'var(--text-dim)',textDecoration:'none',borderRadius:'6px',padding:'0.4rem 0.9rem',fontWeight:600,fontSize:'0.82rem',border:'1px solid var(--border)'}}>
+                      style={{background:'var(--line)',color:'var(--text-dim)',textDecoration:'none',borderRadius:'6px',padding:'0.4rem 0.9rem',fontWeight:600,fontSize:'0.82rem',border:'1px solid var(--border)'}}>
                       NSE Bulk Deals →
                     </a>
                     <a href={`https://www.bseindia.com/markets/equity/EQReports/BulkDeal.aspx`} target="_blank" rel="noreferrer"
-                      style={{background:'#1e293b',color:'var(--text-dim)',textDecoration:'none',borderRadius:'6px',padding:'0.4rem 0.9rem',fontWeight:600,fontSize:'0.82rem',border:'1px solid var(--border)'}}>
+                      style={{background:'var(--line)',color:'var(--text-dim)',textDecoration:'none',borderRadius:'6px',padding:'0.4rem 0.9rem',fontWeight:600,fontSize:'0.82rem',border:'1px solid var(--border)'}}>
                     </a>
                   </div>
                 </div>
@@ -5312,7 +5323,7 @@ Respond ONLY with valid JSON:
                 {label:'Nifty IT',        keys:['NIFTY IT'],                         col:'#34d399'},
                 {label:'Nifty Auto',      keys:['NIFTY AUTO'],                       col:'#f472b6'},
                 {label:'Nifty Pharma',    keys:['NIFTY PHARMA'],                     col:'#fbbf24'},
-                {label:'Nifty Metal',     keys:['NIFTY METAL'],                      col:'#94a3b8'},
+                {label:'Nifty Metal',     keys:['NIFTY METAL'],                      col:'var(--dim)'},
                 {label:'PSU Bank',        keys:['NIFTY PSU BANK'],                   col:'#38bdf8'},
                 {label:'Nifty FMCG',      keys:['NIFTY FMCG'],                       col:'#86efac'},
                 {label:'India VIX',       keys:['INDIA VIX'],                        col:'#f87171', isVix:true},
@@ -5411,7 +5422,7 @@ Respond ONLY with valid JSON:
                         <button key={exp} onClick={()=>{setSelectedExpiry(exp);if(rawNseData){parseChainForExpiry(rawNseData,exp,selectedUnderlying==='NIFTY'?marketData.nifty.value:marketData.bankNifty.value);}else{generateLiveOptionChain(selectedUnderlying,exp);}}}
                           style={{background:'none',border:'none',borderBottom:isSelected?'2px solid var(--accent)':'2px solid transparent',marginBottom:'-2px',padding:'0.5rem 1rem',cursor:'pointer',whiteSpace:'nowrap',color:isSelected?'var(--accent)':'var(--text-dim)',fontWeight:isSelected?700:400,fontSize:'0.85rem'}}>
                           {exp}
-                          <div style={{fontSize:'0.68rem',color:isSelected?'var(--accent)':'#64748b',marginTop:'2px'}}>{daysLeft<=0?'Today':`${daysLeft}D`}</div>
+                          <div style={{fontSize:'0.68rem',color:isSelected?'var(--accent)':'var(--muted)',marginTop:'2px'}}>{daysLeft<=0?'Today':`${daysLeft}D`}</div>
                         </button>
                       );
                     })}
@@ -5496,9 +5507,9 @@ Respond ONLY with valid JSON:
                               <tr key={idx} ref={isATM ? atmRowRef : null} style={{borderBottom:'1px solid rgba(255,255,255,0.03)',background:rowBg}}>
                                 <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,position:'relative'}}>
                                   <div style={{position:'absolute',right:0,top:0,bottom:0,width:`${ceBarW}%`,background:'rgba(74,222,128,0.08)',pointerEvents:'none'}}/>
-                                  <span style={{position:'relative',fontWeight:ceOI>500000?700:400,color:ceOI>500000?'#4ade80':'#94a3b8'}}>{fmt(ceOI)}</span>
+                                  <span style={{position:'relative',fontWeight:ceOI>500000?700:400,color:ceOI>500000?'#4ade80':'var(--dim)'}}>{fmt(ceOI)}</span>
                                 </td>
-                                <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:ceOIChg>0?'#4ade80':ceOIChg<0?'#f87171':'#64748b',fontSize:'0.7rem'}}>{ceOIChg>0?'+':''}{fmt(ceOIChg)}</td>
+                                <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:ceOIChg>0?'#4ade80':ceOIChg<0?'#f87171':'var(--muted)',fontSize:'0.7rem'}}>{ceOIChg>0?'+':''}{fmt(ceOIChg)}</td>
                                 <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:'var(--text-muted)',fontSize:'0.7rem'}}>{fmt(row.ce?.volume||0)}</td>
                                 <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,color:'#fbbf24'}}>{row.ce?.iv}</td>
                                 <td style={{padding:'5px 6px',textAlign:'right',background:ceBg,fontWeight:700,color:'#4ade80',fontSize:'0.82rem'}}>&#8377;{row.ce?.ltp}</td>
@@ -5515,10 +5526,10 @@ Respond ONLY with valid JSON:
                                 <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:peChg>=0?'#4ade80':'#f87171',fontSize:'0.72rem'}}>{peChg>=0?'+':''}{row.pe?.pChange}%</td>
                                 <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'#fbbf24'}}>{row.pe?.iv}</td>
                                 <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:'var(--text-muted)',fontSize:'0.7rem'}}>{fmt(row.pe?.volume||0)}</td>
-                                <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:peOIChg>0?'#4ade80':peOIChg<0?'#f87171':'#64748b',fontSize:'0.7rem'}}>{peOIChg>0?'+':''}{fmt(peOIChg)}</td>
+                                <td style={{padding:'5px 6px',textAlign:'left',background:peBg,color:peOIChg>0?'#4ade80':peOIChg<0?'#f87171':'var(--muted)',fontSize:'0.7rem'}}>{peOIChg>0?'+':''}{fmt(peOIChg)}</td>
                                 <td style={{padding:'5px 6px',textAlign:'left',background:peBg,position:'relative'}}>
                                   <div style={{position:'absolute',left:0,top:0,bottom:0,width:`${peBarW}%`,background:'rgba(248,113,113,0.08)',pointerEvents:'none'}}/>
-                                  <span style={{position:'relative',fontWeight:peOI>500000?700:400,color:peOI>500000?'#f87171':'#94a3b8'}}>{fmt(peOI)}</span>
+                                  <span style={{position:'relative',fontWeight:peOI>500000?700:400,color:peOI>500000?'#f87171':'var(--dim)'}}>{fmt(peOI)}</span>
                                 </td>
                               </tr>
                             );
@@ -5768,7 +5779,7 @@ Respond ONLY with valid JSON:
                     prediction='BOTTOM OUT'; predIcon='🔄'; predColor='#a78bfa'; predBg='rgba(167,139,250,0.08)';
                     predDesc='FII selling equity but buying futures — possible bottoming out. Watch for reversal signal.';
                   } else {
-                    prediction='MIXED'; predIcon='⚖️'; predColor='#94a3b8'; predBg='rgba(148,163,184,0.06)';
+                    prediction='MIXED'; predIcon='⚖️'; predColor='var(--dim)'; predBg='rgba(148,163,184,0.06)';
                     predDesc='Mixed FII signals across segments. Wait for clarity before taking directional trades.';
                   }
 
@@ -5804,7 +5815,7 @@ Respond ONLY with valid JSON:
                             <span style={{color:'var(--text-dim)'}}>FII are {fiiLong?'Bullish':'Bearish'} in Current Equity Segment</span>
                           </div>
                           <div style={{display:'flex',alignItems:'center',gap:'0.5rem',fontSize:'0.82rem'}}>
-                            <span style={{color:callLong?'#4ade80':'#94a3b8',fontWeight:700,minWidth:'70px'}}>{callLong?'CALL LONG':'—'}</span>
+                            <span style={{color:callLong?'#4ade80':'var(--dim)',fontWeight:700,minWidth:'70px'}}>{callLong?'CALL LONG':'—'}</span>
                             {callLong && <span style={{color:'var(--text-dim)'}}>Call Buying & Put Selling → Bullish Options Positioning</span>}
                             {!callLong && putLong && <span style={{color:'#f87171',fontWeight:700,minWidth:'70px'}}>PUT LONG</span>}
                             {putLong && <span style={{color:'var(--text-dim)'}}>Put Buying & Call Selling → Bearish Options Positioning</span>}
@@ -5997,8 +6008,8 @@ Respond ONLY with valid JSON:
 
                 {yieldIntel && (() => {
                   const { yields, spread_10_2, curveStatus, curveDesc, curveColor, signals, overallBias, biasColor, related } = yieldIntel;
-                  const biasClr = biasColor==='bullish'?'#4ade80':biasColor==='bearish'?'#f87171':biasColor==='warning'?'#fbbf24':'#94a3b8';
-                  const curveClr = curveColor==='bullish'?'#4ade80':curveColor==='danger'?'#f87171':curveColor==='warning'?'#fbbf24':'#94a3b8';
+                  const biasClr = biasColor==='bullish'?'#4ade80':biasColor==='bearish'?'#f87171':biasColor==='warning'?'#fbbf24':'var(--dim)';
+                  const curveClr = curveColor==='bullish'?'#4ade80':curveColor==='danger'?'#f87171':curveColor==='warning'?'#fbbf24':'var(--dim)';
 
                   return (
                     <>
@@ -6027,7 +6038,7 @@ Respond ONLY with valid JSON:
                         {/* Yield bars */}
                         <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'0.5rem',marginBottom:'0.75rem'}}>
                           {Object.values(yields).map((y, i) => {
-                            const chgClr = y.change > 0 ? '#f87171' : y.change < 0 ? '#4ade80' : '#94a3b8';
+                            const chgClr = y.change > 0 ? '#f87171' : y.change < 0 ? '#4ade80' : 'var(--dim)';
                             const barH = Math.min(80, Math.max(20, (y.price / 6) * 80));
                             return (
                               <div key={i} style={{textAlign:'center'}}>
@@ -8622,11 +8633,9 @@ Respond ONLY with valid JSON:
         {/* -- STYLES -- */}
         <style>{`
           /* Import premium fonts */
-          @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600;700&display=swap');
+          600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600;700&display=swap');
 
           /* ── DeltaBuddy v2 Design System ── */
-          @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Familjen+Grotesk:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
-
           :root {
             --ink:        #0a0c10;
             --paper:      #f5f2ed;
